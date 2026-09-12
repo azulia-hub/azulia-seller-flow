@@ -107,7 +107,7 @@ test('explains report snapshot differences with metric deltas', async ({ page })
 test('expanded order audit fits a mobile viewport without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await uploadReport(page)
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: /Dashboard/ }).click()
   await page.getByRole('button', { name: /Gross sales/ }).first().click()
   await page.locator('.metric-ranking tbody .clickable-order').first().click()
   const order = page.locator('.sku-workspace > .sku-orders tbody tr.clickable-order').first()
@@ -124,7 +124,7 @@ test('expanded order audit fits a mobile viewport without horizontal overflow', 
 test('fee audit workspace scrolls independently on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 640 })
   await uploadReport(page)
-  await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
+  await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: /Dashboard/ }).click()
   await page.getByText('More financial details').click()
   await page.getByRole('button', { name: /Fee audit/ }).click()
   const body = page.locator('.fee-audit-body')

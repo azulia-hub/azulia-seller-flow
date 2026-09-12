@@ -1,5 +1,5 @@
 date/time,settlement id,type,order id,sku,description,quantity,order city,order state,product sales,product sales tax,shipping credits,shipping credits tax,gift wrap credits,giftwrap credits tax,promotional rebates,promotional rebates tax,marketplace withheld tax,selling fees,fba fees,other transaction fees,other,total,custom audit field
-Aug 1 2026 10:00:00 UTC,1001,Order,A-001,SKU-RED,Red shelf,1,Pune,MH,1000,180,50,9,0,0,-100,-18,-189,-120,-80,0,0,732,keep-me
-Aug 4 2026 12:00:00 UTC,1001,Refund,A-001,SKU-RED,Red shelf,-1,Pune,MH,-1000,-180,-50,-9,0,0,100,18,189,120,80,0,0,-732,refund-raw
-Aug 7 2026 08:00:00 UTC,1001,Experimental Seller Credit,A-002,SKU-BLUE,New source event,1,Delhi,DL,200,0,0,0,0,0,0,0,0,0,0,0,25,225,unknown-raw
-Aug 9 2026 08:00:00 UTC,1001,Transfer,,,Transfer to bank,,,,,,,,,,,,,,,,225,225,settlement-raw
+1 Aug 2026 10:00:00 UTC,1001,Order,A-001,SKU-RED,Red shelf,1,Pune,MH,1000,180,50,9,0,0,-100,-18,-189,-120,-80,0,0,732,keep-me
+4 Aug 2026 12:00:00 UTC,1001,Refund,A-001,SKU-RED,Red shelf,-1,Pune,MH,-1000,-180,-50,-9,0,0,100,18,189,120,80,0,0,-732,refund-raw
+7 Aug 2026 08:00:00 UTC,1001,Experimental Seller Credit,A-002,SKU-BLUE,New source event,1,Delhi,DL,200,0,0,0,0,0,0,0,0,0,0,0,25,225,unknown-raw
+9 Aug 2026 08:00:00 UTC,1001,Transfer,,,Transfer to bank,,,,,,,,,,,,,,,,225,225,settlement-raw

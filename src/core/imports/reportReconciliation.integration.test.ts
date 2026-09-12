@@ -11,9 +11,8 @@ function imported(id: string, fileName: string, source: string): StoredImport {
 }
 
 describe('report financial reconciliation integration', () => {
-  const datedReport = sanitizedReport.replace(/Aug (\d+) 2026/g, '$1 Aug 2026')
-  const august = imported('august-only', 'sanitized-august.csv', datedReport)
-  const revisedSource = datedReport.replace('New source event,1,Delhi,DL,200', 'New source event,1,Delhi,DL,225').replace(',25,225,unknown-raw', ',25,250,unknown-raw')
+  const august = imported('august-only', 'sanitized-august.csv', sanitizedReport)
+  const revisedSource = sanitizedReport.replace('New source event,1,Delhi,DL,200', 'New source event,1,Delhi,DL,225').replace(',25,225,unknown-raw', ',25,250,unknown-raw')
   const yearToAugust = imported('year-to-august', 'sanitized-revision.csv', revisedSource)
   const costs = [{ sku: 'SKU-RED', unitCost: 300, updatedAt: '2026-09-11' }, { sku: 'SKU-BLUE', unitCost: 80, updatedAt: '2026-09-11' }]
   const comparison = compareImports(yearToAugust, august, costs, 'ASSUME_ZERO', (_source, sku) => normalizeAmazonSku(sku))
