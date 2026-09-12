@@ -1,5 +1,7 @@
 # Azulia Seller Flow — MVP
 
+For the consolidated product status, completed work, formulas, deployment state, and continuation instructions, see [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md).
+
 A local-first, responsive React + TypeScript analytics workbench inspired by the generic AWK pipeline philosophy:
 
 `source -> normalize -> enrich -> filter -> aggregate -> calculate -> visualize -> insight`
