@@ -31,6 +31,7 @@ test('uploads a report and follows Dashboard → metric → SKU → order', asyn
   await uploadReport(page)
   await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
   await expect(page.getByText('Business snapshot')).toBeVisible()
+  await expect(page.getByLabel('Time period')).toHaveValue('ALL')
   await page.getByText('More financial details').click()
   await expect(page.getByRole('button', { name: /Profit per delivered unit/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Break-even TACOS/ })).toBeVisible()

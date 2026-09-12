@@ -45,7 +45,7 @@ import { buildAuditWorkbook } from '../core/export/auditWorkbook'
 import { downloadWorkbook } from '../adapters/browser/downloadWorkbook'
 import { downloadBackup, restoreBackup } from '../adapters/browser/backupStore'
 
-type PeriodChoice = TimePeriodPreset | 'CUSTOM'
+type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
 
 function money(n: number) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(n)
@@ -111,6 +111,17 @@ export function App() {
   useEffect(() => {
     if (!dateExtent.min || !dateExtent.max) return
     if (periodChoice === 'CUSTOM') return
+    if (periodChoice === 'ALL') {
+      setFromDate(dateExtent.min)
+      setToDate(dateExtent.max)
+      return
+    }
+    if (!periodChoice) {
+      setPeriodChoice('ALL')
+      setFromDate(dateExtent.min)
+      setToDate(dateExtent.max)
+      return
+    }
     const recommended = recommendTimePeriod(dateExtent.min, dateExtent.max)
     const next = comparisonPeriods.some(option => option.id === periodChoice)
       ? periodChoice as TimePeriodPreset
@@ -129,7 +140,10 @@ export function App() {
 
   function applyPeriod(next: PeriodChoice) {
     setPeriodChoice(next)
-    if (next !== 'CUSTOM' && dateExtent.max) {
+    if (next === 'ALL' && dateExtent.min && dateExtent.max) {
+      setFromDate(dateExtent.min)
+      setToDate(dateExtent.max)
+    } else if (next !== 'CUSTOM' && next !== 'ALL' && dateExtent.max) {
       const current = resolveTimePeriod(next, dateExtent.max).current
       setFromDate(current.from)
       setToDate(current.to)
@@ -147,15 +161,15 @@ export function App() {
   const productProfitability = useMemo(() => summarizeProductProfitability(filteredEvents, costs, missingCostPolicy, skuNormalizer), [filteredEvents, costs, missingCostPolicy, skuNormalizer])
   const comparisonProductProfitability = useMemo(() => summarizeProductProfitability(periodScopeEvents, costs, missingCostPolicy, skuNormalizer), [periodScopeEvents, costs, missingCostPolicy, skuNormalizer])
   const previousRange = useMemo(() => {
-    if (periodChoice === 'CUSTOM' && fromDate && toDate) return previousEqualRange({ from: fromDate, to: toDate })
-    return periodChoice && periodChoice !== 'CUSTOM' && dateExtent.max ? resolveTimePeriod(periodChoice, dateExtent.max).previous : undefined
+    if ((periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate) return previousEqualRange({ from: fromDate, to: toDate })
+    return periodChoice && periodChoice !== 'CUSTOM' && periodChoice !== 'ALL' && dateExtent.max ? resolveTimePeriod(periodChoice, dateExtent.max).previous : undefined
   }, [periodChoice, fromDate, toDate, dateExtent.max])
   const previousEvents = useMemo(() => previousRange ? filterEvents(periodScopeEvents, { fromDate: previousRange.from, toDate: previousRange.to }) : [], [periodScopeEvents, previousRange])
   const previousProductProfitability = useMemo(() => summarizeProductProfitability(previousEvents, costs, missingCostPolicy, skuNormalizer), [previousEvents, costs, missingCostPolicy, skuNormalizer])
   const previousOrders = useMemo(() => summarizeOrders(previousEvents, costs, missingCostPolicy, skuNormalizer), [previousEvents, costs, missingCostPolicy, skuNormalizer])
   const feeAudit = useMemo(() => buildFeeAudit(orders, previousOrders), [orders, previousOrders])
   const productPortfolio = useMemo(() => summarizeProductPortfolio(productProfitability, filteredEvents), [productProfitability, filteredEvents])
-  const customComparisonRange = useMemo(() => periodChoice === 'CUSTOM' && fromDate && toDate ? { current: { from: fromDate, to: toDate }, previous: previousEqualRange({ from: fromDate, to: toDate }) } : undefined, [periodChoice, fromDate, toDate])
+  const customComparisonRange = useMemo(() => (periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate ? { current: { from: fromDate, to: toDate }, previous: previousEqualRange({ from: fromDate, to: toDate }) } : undefined, [periodChoice, fromDate, toDate])
   const homeMetricResult = useMemo(() => homeMetric ? buildMetricSkuDrilldown(homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange) : null, [homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange])
   const advertisingEvents = useMemo(() => filterAdvertisingScope(filteredEvents, { accountType: adAccountType || undefined, fulfillmentType: adFulfillmentType || undefined }), [filteredEvents, adAccountType, adFulfillmentType])
   const advertisingSummary = useMemo(() => summarizeAdvertising(advertisingEvents), [advertisingEvents])

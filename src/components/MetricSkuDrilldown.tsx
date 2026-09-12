@@ -10,7 +10,7 @@ import { SkuOrderInvestigation } from './SkuOrderInvestigation'
 import { SkuCommercialOverview } from './SkuCommercialOverview'
 import '../styles/actionBoard.css'
 
-type Props = { result: MetricDrilldownResult; products: readonly SkuProfitSummary[]; previousProducts: readonly SkuProfitSummary[]; advertisingSkus: readonly SkuAdvertisingSummary[]; comparisonPeriod: TimePeriodPreset | 'CUSTOM' | ''; initialSku?: string; formatMoney: (value: number) => string; onClose: () => void }
+type Props = { result: MetricDrilldownResult; products: readonly SkuProfitSummary[]; previousProducts: readonly SkuProfitSummary[]; advertisingSkus: readonly SkuAdvertisingSummary[]; comparisonPeriod: TimePeriodPreset | 'ALL' | 'CUSTOM' | ''; initialSku?: string; formatMoney: (value: number) => string; onClose: () => void }
 const percent = (value: number) => `${value.toFixed(2)}%`
 
 export function MetricSkuDrilldown({ result, products, previousProducts, advertisingSkus, comparisonPeriod, initialSku, formatMoney, onClose }: Props) {
