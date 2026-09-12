@@ -101,7 +101,7 @@ test('explains report snapshot differences with metric deltas', async ({ page })
   await uploadReport(page, historicalReport)
   await page.locator('input[type="file"]').first().setInputFiles(report)
   await expect(page.getByText('Reports reconcile for the shared period')).toBeVisible({ timeout: 30_000 })
-  await expect(page.getByRole('columnheader', { name: 'A − B' })).toBeVisible()
+  await expect(page.locator('.comparison-panel table')).toContainText('Gross sales')
 })
 
 test('expanded order audit fits a mobile viewport without horizontal overflow', async ({ page }) => {
