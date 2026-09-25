@@ -107,6 +107,7 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 - [x] Return analysis
 - [x] Return trends, financial impact, SKU ranking, and CSV export
 - [x] Ads analysis: overall TACOS, ROAS, daily trends, direct SKU attribution, and explicit unassigned spend
+- [x] Optional Sponsored Products XLSX enrichment with SKU-to-ASIN identity, strict period coverage, GST-loaded spend reconciliation, attributed-sales and estimated-organic views
 - [x] SKU advertising drilldown with direct-source attribution, pre-ad profit, break-even TACOS, trends, and operational order filters
 - [x] SKU geographical analysis by state/city for sales, profit, Easy Ship, RTO and customer returns
 - [x] Profitability summary

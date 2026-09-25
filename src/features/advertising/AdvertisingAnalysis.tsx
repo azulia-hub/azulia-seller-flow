@@ -3,9 +3,11 @@ import { downloadCsv } from '../../adapters/browser/downloadCsv'
 import { KpiCard } from '../../components/KpiCard'
 import { PageHeader } from '../../components/PageHeader'
 import { filterAdvertisingSkus, type AdvertisingSummary, type AdvertisingSkuFilterSpec, type AdvertisingTrendPoint } from '../../core/analytics/advertisingSummary'
+import type { SponsoredProductsAttribution } from '../../core/advertising/sponsoredProducts'
 
 type Props = {
   readonly summary: AdvertisingSummary
+  readonly sponsored: SponsoredProductsAttribution
   readonly formatMoney: (value: number) => string
   readonly fileName: string
   readonly accountTypes: readonly string[]
@@ -37,7 +39,7 @@ function AdvertisingTrend({ data, formatMoney }: { readonly data: readonly Adver
   </section>
 }
 
-export function AdvertisingAnalysis({ summary, formatMoney, fileName, accountTypes, fulfillmentTypes, accountType, fulfillmentType, onAccountTypeChange, onFulfillmentTypeChange, onSelectSku }: Props) {
+export function AdvertisingAnalysis({ summary, sponsored, formatMoney, fileName, accountTypes, fulfillmentTypes, accountType, fulfillmentType, onAccountTypeChange, onFulfillmentTypeChange, onSelectSku }: Props) {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<NonNullable<AdvertisingSkuFilterSpec['sort']>>('ADS_SPEND')
   const [direction, setDirection] = useState<NonNullable<AdvertisingSkuFilterSpec['direction']>>('DESC')
@@ -61,7 +63,24 @@ export function AdvertisingAnalysis({ summary, formatMoney, fileName, accountTyp
         <KpiCard label="Direct attribution" value={`${summary.attributionCoverage.toFixed(1)}%`} tone={summary.attributionCoverage ? 'positive' : 'neutral'} hint={`${formatMoney(summary.directAdsSpend)} carries a SKU`} />
         <KpiCard label="Unassigned spend" value={formatMoney(summary.unassignedAdsSpend)} tone={summary.unassignedAdsSpend ? 'neutral' : 'positive'} hint="Not distributed across products" />
       </section>
-      <aside className="ad-attribution-note"><span>i</span><div><strong>SKU advertising requires source evidence</strong><p>Only advertising transactions that explicitly carry a SKU are attributed to that product. All other spend remains unassigned. Upload an Amazon Ads report in a future connected workflow to calculate reliable SKU TACOS and ROAS.</p></div></aside>
+      {sponsored.status === 'AVAILABLE' ? <>
+        <aside className="ad-attribution-note good"><span>✓</span><div><strong>Sponsored Products enrichment active for {sponsored.selectedFrom} → {sponsored.selectedTo}</strong><p>Total sales and total ad cost still come from Unified Transactions. Product ad cost is report spend plus {(sponsored.gstRate * 100).toFixed(0)}% GST; {formatMoney(sponsored.unassignedAdsCost)} remains unassigned. Seven-day attributed sales are not added to total sales.</p></div></aside>
+        <section className="kpi-grid advertising-kpis sponsored-kpis">
+          <KpiCard label="Total sales" value={formatMoney(summary.grossSales)} tone="positive" hint="Unified organic + ad-driven sales" />
+          <KpiCard label="Ad-attributed sales" value={formatMoney(sponsored.advertisedSkuSales)} tone="accent" hint="7-day advertised-SKU attribution" />
+          <KpiCard label="Estimated organic" value={formatMoney(sponsored.estimatedOrganicSales)} tone="neutral" hint="Total sales less attributed SKU sales" />
+          <KpiCard label="Cross-sell attribution" value={formatMoney(sponsored.otherSkuSales)} tone="neutral" hint="Purchased SKU/ASIN unavailable in this report" />
+          <KpiCard label="Ads cost with GST" value={formatMoney(sponsored.reportSpendIncludingTax)} tone="accent" hint={`${formatMoney(sponsored.reportSpendExcludingTax)} before GST`} />
+          <KpiCard label="Cost difference" value={formatMoney(sponsored.reconciliationDifference)} tone={Math.abs(sponsored.reconciliationDifference) <= 1 ? 'positive' : 'neutral'} hint="Unified ads less loaded report cost" />
+        </section>
+        <section className="panel ad-sku-panel sponsored-product-panel">
+          <div className="panel-head"><div><small>ASIN-linked product performance</small><h3>Total, attributed and estimated organic sales</h3><p>ASIN comes from the ads report; SKU connects it to Unified Transactions. Organic sales are an estimate because Amazon uses a 7-day attribution window.</p></div><span className="status good">{sponsored.matchedSkuCount} matched</span></div>
+          <div className="table-scroll"><table className="ad-sku-table"><thead><tr><th>ASIN / SKU</th><th>Total sales</th><th>Ad-attributed</th><th>Organic estimate</th><th>Ads + GST</th><th>TACOS</th><th>Ad ROAS</th></tr></thead><tbody>
+            {sponsored.skus.map(item => <tr key={item.sku} onClick={() => onSelectSku(item.sku)}><td><button className="sku-link">{item.asin || 'No ASIN'}</button><small className="table-subline">{item.sku}</small></td><td>{formatMoney(item.grossSales)}</td><td>{formatMoney(item.attributedSales)}</td><td>{formatMoney(item.estimatedOrganicSales)}</td><td>{formatMoney(item.allocatedAdsCost)}</td><td>{item.tacos.toFixed(2)}%</td><td>{item.attributedRoas.toFixed(2)}×</td></tr>)}
+          </tbody></table></div>
+          {sponsored.unmatchedSkuCount ? <p className="table-note">{sponsored.unmatchedSkuCount} advertised SKUs did not match a Unified Transaction SKU. Their spend remains unassigned rather than being silently distributed.</p> : null}
+        </section>
+      </> : <aside className="ad-attribution-note"><span>i</span><div><strong>{sponsored.status === 'OUTSIDE_COVERAGE' ? 'Ads report does not cover the selected dates' : 'SKU advertising requires the Sponsored Products report'}</strong><p>{sponsored.status === 'OUTSIDE_COVERAGE' ? `The selected period is ${sponsored.selectedFrom} → ${sponsored.selectedTo}, while the ads report covers ${sponsored.reportFrom} → ${sponsored.reportTo}. Unified-only results are shown.` : 'Upload an Amazon Sponsored Products Advertised product XLSX under Reports. Until then, unassigned advertising is not spread across products.'}</p></div></aside>}
       <AdvertisingTrend data={summary.trend} formatMoney={formatMoney} />
       <section className="panel ad-sku-panel">
         <div className="panel-head"><div><small>SKU attribution</small><h3>Advertising performance by product</h3><p>Click a SKU to inspect its underlying orders.</p></div><span className="status warning">{items.length.toLocaleString('en-IN')} SKUs</span></div>

@@ -46,6 +46,9 @@ import { downloadWorkbook } from '../adapters/browser/downloadWorkbook'
 import { downloadBackup, restoreBackup } from '../adapters/browser/backupStore'
 import { buildCompletedOrderCohort } from '../core/analytics/orderLifecycle'
 import { OrderLifecycleSnapshot } from '../components/OrderLifecycleSnapshot'
+import type { SponsoredProductsReport } from '../core/advertising/types'
+import { buildSponsoredProductsAttribution } from '../core/advertising/sponsoredProducts'
+import { loadSponsoredProductsReport, saveSponsoredProductsReport } from '../adapters/browser/sponsoredProductsStore'
 
 type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
 
@@ -81,6 +84,9 @@ export function App() {
   const [feeAuditOpen, setFeeAuditOpen] = useState(false)
   const [calculationBasis, setCalculationBasis] = useState<CalculationBasis>('COMPLETED_ORDERS')
   const [cohortSnapshotOpen, setCohortSnapshotOpen] = useState(false)
+  const [sponsoredReport, setSponsoredReport] = useState<SponsoredProductsReport | null>(null)
+  const [sponsoredImporting, setSponsoredImporting] = useState(false)
+  const [sponsoredError, setSponsoredError] = useState<string | null>(null)
 
   useEffect(() => {
     loadImports().then((saved) => {
@@ -88,6 +94,10 @@ export function App() {
       setComparisonLeftId(saved[0]?.id ?? '')
       setComparisonRightId(saved[1]?.id ?? saved[0]?.id ?? '')
     }).catch((error) => setImportError(error instanceof Error ? error.message : 'Could not load import history.'))
+  }, [])
+
+  useEffect(() => {
+    loadSponsoredProductsReport().then(setSponsoredReport).catch(error => setSponsoredError(error instanceof Error ? error.message : 'Could not load the saved advertising report.'))
   }, [])
 
   const effectiveDataset = useMemo(() => dataset ? applyClassificationRules(dataset, classificationRules) : null, [dataset, classificationRules])
@@ -181,7 +191,25 @@ export function App() {
   const customComparisonRange = useMemo(() => (periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate ? { current: { from: fromDate, to: toDate }, previous: previousEqualRange({ from: fromDate, to: toDate }) } : undefined, [periodChoice, fromDate, toDate])
   const homeMetricResult = useMemo(() => homeMetric ? buildMetricSkuDrilldown(homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange) : null, [homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange])
   const advertisingEvents = useMemo(() => filterAdvertisingScope(filteredEvents, { accountType: adAccountType || undefined, fulfillmentType: adFulfillmentType || undefined }), [filteredEvents, adAccountType, adFulfillmentType])
-  const advertisingSummary = useMemo(() => summarizeAdvertising(advertisingEvents), [advertisingEvents])
+  const baseAdvertisingSummary = useMemo(() => summarizeAdvertising(advertisingEvents), [advertisingEvents])
+  const sponsoredAttribution = useMemo(() => buildSponsoredProductsAttribution(
+    advertisingEvents,
+    adAccountType || adFulfillmentType ? null : sponsoredReport,
+    { from: fromDate || dateExtent.min || '', to: toDate || dateExtent.max || '' },
+    0.18,
+    allEvents,
+  ), [advertisingEvents, sponsoredReport, fromDate, toDate, dateExtent.min, dateExtent.max, adAccountType, adFulfillmentType, allEvents])
+  const advertisingSummary = useMemo(() => {
+    if (sponsoredAttribution.status !== 'AVAILABLE') return baseAdvertisingSummary
+    const enriched = new Map(sponsoredAttribution.skus.map(item => [item.sku, item]))
+    const skuNames = [...new Set([...baseAdvertisingSummary.skus.map(item => item.sku), ...enriched.keys()])]
+    const skus = skuNames.map(sku => {
+      const existing = baseAdvertisingSummary.skus.find(item => item.sku === sku)
+      const ads = enriched.get(sku)
+      return ads ? { sku, grossSales: ads.grossSales, directAdsSpend: ads.allocatedAdsCost, tacos: ads.tacos, roas: ads.attributedRoas, attribution: 'DIRECT' as const } : existing!
+    }).filter(Boolean).sort((left, right) => right.directAdsSpend - left.directAdsSpend)
+    return { ...baseAdvertisingSummary, directAdsSpend: sponsoredAttribution.allocatedAdsCost, unassignedAdsSpend: sponsoredAttribution.unassignedAdsCost, attributionCoverage: baseAdvertisingSummary.adsSpend ? sponsoredAttribution.allocatedAdsCost / baseAdvertisingSummary.adsSpend * 100 : 100, skus }
+  }, [baseAdvertisingSummary, sponsoredAttribution])
   const advertisingSkuProfit = useMemo(() => drilldownSku ? summarizeSkuProfit(advertisingEvents, drilldownSku, costs, missingCostPolicy, skuNormalizer) : undefined, [advertisingEvents, drilldownSku, costs, missingCostPolicy, skuNormalizer])
   const advertisingSkuInsight = useMemo(() => {
     const advertising = advertisingSummary.skus.find((item) => item.sku === drilldownSku)
@@ -248,6 +276,21 @@ export function App() {
     }
   }
 
+  async function onSponsoredFile(file: File) {
+    setSponsoredImporting(true)
+    setSponsoredError(null)
+    try {
+      const { parseSponsoredProductsWorkbook } = await import('../adapters/amazon/sponsoredProductsAdapter')
+      const report = await parseSponsoredProductsWorkbook(await file.arrayBuffer(), file.name, crypto.randomUUID())
+      await saveSponsoredProductsReport(report)
+      setSponsoredReport(report)
+    } catch (error) {
+      setSponsoredError(error instanceof Error ? error.message : 'The advertising workbook could not be imported.')
+    } finally {
+      setSponsoredImporting(false)
+    }
+  }
+
   async function applyMapping(spec: MappingSpec) {
     if (!rawDataset) return
     const normalized = normalizeDataset(rawDataset, spec)
@@ -297,7 +340,7 @@ export function App() {
   return (
     <><AppShell active={active} mobileNavOpen={mobileNav} reportName={fileName} reportLoaded={Boolean(effectiveDataset)} onToggleMobileNav={() => setMobileNav((value) => !value)} onNavigate={(page) => { setActive(page); setMobileNav(false) }}>
       {active !== 'Reports' && active !== 'Data & Settings' && dataset ? <GlobalFilters source={dataset.source} fulfillmentTypes={fulfillmentTypes} fulfillmentType={fulfillmentFilter} fromDate={fromDate} toDate={toDate} minDate={dateExtent.min} maxDate={dateExtent.max} period={periodChoice} periods={comparisonPeriods} calculationBasis={calculationBasis} onFulfillmentTypeChange={setFulfillmentFilter} onFromDateChange={setFromDate} onToDateChange={setToDate} onPeriodChange={applyPeriod} onCalculationBasisChange={setCalculationBasis} onClear={() => { setFulfillmentFilter(''); setPeriodChoice('') }} /> : null}
-      {active === 'Products' ? dataset ? <ProductProfitability items={productProfitability} portfolio={productPortfolio} formatMoney={money} fileName={fileName} onManageCosts={() => setActive('Data & Settings')} onSelectSku={openOrders} /> : <ReportRequired area="Products" onOpenReports={() => setActive('Reports')}>Upload a sales report to understand the profit, costs, fees, and returns for each product.</ReportRequired> : active === 'Returns' ? dataset ? <ReturnAnalysis summary={returnSummary} formatMoney={money} onSelectSku={openOrders} fileName={fileName} /> : <ReportRequired area="Returns" onOpenReports={() => setActive('Reports')}>Upload a report to separate RTO from customer returns and find products or locations with return problems.</ReportRequired> : active === 'Advertising' ? dataset ? <AdvertisingAnalysis summary={advertisingSummary} formatMoney={money} fileName={fileName} accountTypes={accountTypes} fulfillmentTypes={fulfillmentTypes} accountType={adAccountType} fulfillmentType={adFulfillmentType} onAccountTypeChange={setAdAccountType} onFulfillmentTypeChange={setAdFulfillmentType} onSelectSku={openAdvertisingSku} /> : <ReportRequired area="Advertising" onOpenReports={() => setActive('Reports')}>Upload a report containing advertising charges to analyze TACOS, ROAS, trends, and SKU attribution.</ReportRequired> : active === 'Reports' ? <ReportsPage dataset={effectiveDataset} rawDataset={rawDataset} needsMapping={needsMapping} importing={importing} importError={importError} fileName={fileName} imports={imports} currentImportId={currentImportId} leftId={comparisonLeftId} rightId={comparisonRightId} comparison={importComparison} qualityCenter={qualityCenter} cohort={orderCohort} reportMinDate={dateExtent.min} reportMaxDate={dateExtent.max} formatMoney={money} classificationRules={classificationRules} onFile={onFile} onApplyMapping={applyMapping} onLeftChange={setComparisonLeftId} onRightChange={setComparisonRightId} onOpen={openImport} onSaveClassificationRule={saveRule} onDeleteClassificationRule={deleteRule} onQualityAction={handleQualityAction} /> : active === 'Data & Settings' ? <DataSettingsPage events={allEvents} costs={costs} missingCostPolicy={missingCostPolicy} normalizeSku={skuNormalizer} importCount={imports.length} ruleCount={classificationRules.length} onSaveCosts={updateCosts} onMissingCostPolicyChange={setMissingCostPolicy} onExportBackup={() => downloadBackup({ imports, costs, classificationRules })} onRestoreBackup={importBackup} /> : <>
+      {active === 'Products' ? dataset ? <ProductProfitability items={productProfitability} portfolio={productPortfolio} formatMoney={money} fileName={fileName} onManageCosts={() => setActive('Data & Settings')} onSelectSku={openOrders} /> : <ReportRequired area="Products" onOpenReports={() => setActive('Reports')}>Upload a sales report to understand the profit, costs, fees, and returns for each product.</ReportRequired> : active === 'Returns' ? dataset ? <ReturnAnalysis summary={returnSummary} formatMoney={money} onSelectSku={openOrders} fileName={fileName} /> : <ReportRequired area="Returns" onOpenReports={() => setActive('Reports')}>Upload a report to separate RTO from customer returns and find products or locations with return problems.</ReportRequired> : active === 'Advertising' ? dataset ? <AdvertisingAnalysis summary={advertisingSummary} sponsored={sponsoredAttribution} formatMoney={money} fileName={fileName} accountTypes={accountTypes} fulfillmentTypes={fulfillmentTypes} accountType={adAccountType} fulfillmentType={adFulfillmentType} onAccountTypeChange={setAdAccountType} onFulfillmentTypeChange={setAdFulfillmentType} onSelectSku={openAdvertisingSku} /> : <ReportRequired area="Advertising" onOpenReports={() => setActive('Reports')}>Upload a report containing advertising charges to analyze TACOS, ROAS, trends, and SKU attribution.</ReportRequired> : active === 'Reports' ? <ReportsPage dataset={effectiveDataset} rawDataset={rawDataset} needsMapping={needsMapping} importing={importing} importError={importError} fileName={fileName} imports={imports} currentImportId={currentImportId} leftId={comparisonLeftId} rightId={comparisonRightId} comparison={importComparison} qualityCenter={qualityCenter} cohort={orderCohort} reportMinDate={dateExtent.min} reportMaxDate={dateExtent.max} formatMoney={money} classificationRules={classificationRules} sponsoredReport={sponsoredReport} sponsoredImporting={sponsoredImporting} sponsoredError={sponsoredError} onSponsoredFile={onSponsoredFile} onFile={onFile} onApplyMapping={applyMapping} onLeftChange={setComparisonLeftId} onRightChange={setComparisonRightId} onOpen={openImport} onSaveClassificationRule={saveRule} onDeleteClassificationRule={deleteRule} onQualityAction={handleQualityAction} /> : active === 'Data & Settings' ? <DataSettingsPage events={allEvents} costs={costs} missingCostPolicy={missingCostPolicy} normalizeSku={skuNormalizer} importCount={imports.length} ruleCount={classificationRules.length} onSaveCosts={updateCosts} onMissingCostPolicyChange={setMissingCostPolicy} onExportBackup={() => downloadBackup({ imports, costs, classificationRules })} onRestoreBackup={importBackup} /> : <>
           <PageHeader eyebrow="Business overview" title="Here’s how your business is performing" description="See sales, real profit, returns, and the biggest issues affecting this report." action={<>{dataset ? <button className="secondary" onClick={exportAuditWorkbook}>Export audit workbook</button> : null}<button className="secondary" onClick={() => setActive('Reports')}>{dataset ? 'Change report' : 'Upload report'}</button></>} />
           {!dataset ? <section className="welcome-empty"><div className="welcome-illustration">↗</div><h2>Get your first trustworthy profit view</h2><ol className="welcome-steps"><li><b>Upload</b><span>Choose your marketplace CSV or TSV report.</span></li><li><b>Review</b><span>Confirm reconciliation and unfamiliar transactions.</span></li><li><b>Add costs</b><span>Complete or explicitly estimate product costs.</span></li><li><b>Analyze</b><span>Trace Dashboard → SKU → order evidence.</span></li></ol><button className="primary" onClick={() => setActive('Reports')}>Upload your first report</button><small>Your data stays in this browser. Profit remains an estimate until cost coverage is complete.</small></section> : null}
           {dataset ? <>

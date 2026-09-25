@@ -46,6 +46,7 @@ npm run test:e2e
 - Core CSV + metric logic separated from React UI
 - Versioned local backup and restore for reports, costs, and classification rules
 - Audit workbook export and explicit financial reconciliation
+- Optional Sponsored Products XLSX enrichment for ASIN-linked advertising analysis; Unified Transactions remains the financial source of truth
 
 ## Deployment
 

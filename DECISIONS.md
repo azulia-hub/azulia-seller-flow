@@ -388,3 +388,13 @@ User classification rules match the normalized source identifier and exact norma
 
 Reason:
 Marketplaces introduce new transaction labels over time. Source-scoped rules let sellers resolve those labels once without placing marketplace terminology in the generic core. Preserving known money types and reconciliation totals prevents a broad raw-label rule from damaging already-understood financial components.
+
+## ADR-045 — Sponsored-product reports enrich but never replace financial truth
+
+Decision:
+Amazon Sponsored Products Advertised product workbooks are optional advertising enrichment. Unified Transactions remains the sole source for gross sales, booked advertising expense, operating profit, refunds, and reimbursements. Enrichment is enabled only when the advertising workbook completely covers the selected analysis range; otherwise the application shows Unified-only results. The workbook's advertised SKU connects a Unified SKU to its advertised child ASIN. ASIN is the displayed marketplace product identity, while SKU remains the join key until the financial source supplies ASIN directly.
+
+The report's pre-tax spend is loaded with a configurable 18% GST assumption for product attribution and reconciled to the Unified advertising charge. Matched cost is assigned only to directly matched SKUs; unmatched spend and any reconciliation residual remain explicitly unassigned. If loaded report cost exceeds the Unified financial charge, allocations are proportionally capped at the Unified total. Seven-day attributed sales are an analytical subset of Unified gross sales and are never added to it. Estimated organic sales equal Unified sales less advertised-SKU attributed sales, floored at zero and labelled as an estimate. “Other SKU” attributed sales remain cross-sell/unassigned because the Advertised product report does not identify the purchased SKU or ASIN.
+
+Reason:
+Adding attributed sales to Unified sales would double-count revenue, while replacing Unified advertising charges with campaign spend would break financial reconciliation and omit tax or timing adjustments. Strict coverage, direct identity evidence, and explicit residuals provide useful SKU/ASIN advertising analysis without presenting attribution-window estimates as accounting facts.

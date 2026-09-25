@@ -10,6 +10,7 @@ import { TransactionReviewManager } from '../data-quality/TransactionReviewManag
 import type { DataQualityCenterResult, QualityAction } from '../../core/validation/dataQualityCenter'
 import { DataQualityCenter } from '../data-quality/DataQualityCenter'
 import type { CompletedOrderCohort } from '../../core/analytics/orderLifecycle'
+import type { SponsoredProductsReport } from '../../core/advertising/types'
 
 type Props = {
   readonly dataset: CanonicalDataset | null; readonly rawDataset: RawDataset | null; readonly needsMapping: boolean
@@ -18,6 +19,8 @@ type Props = {
   readonly comparison: ImportComparison | null; readonly formatMoney: (value: number) => string; readonly classificationRules: readonly ClassificationRule[]
   readonly qualityCenter: DataQualityCenterResult | null; readonly onQualityAction: (action: Exclude<QualityAction, null>) => void
   readonly cohort: CompletedOrderCohort | null; readonly reportMinDate?: string; readonly reportMaxDate?: string
+  readonly sponsoredReport: SponsoredProductsReport | null; readonly sponsoredImporting: boolean; readonly sponsoredError: string | null
+  readonly onSponsoredFile: (file: File) => void | Promise<void>
   readonly onFile: (file: File) => void | Promise<void>; readonly onApplyMapping: (spec: MappingSpec) => void | Promise<void>
   readonly onLeftChange: (id: string) => void; readonly onRightChange: (id: string) => void; readonly onOpen: (item: StoredImport) => void
   readonly onSaveClassificationRule: (rule: ClassificationRule) => void; readonly onDeleteClassificationRule: (id: string) => void
@@ -34,6 +37,12 @@ export function ReportsPage(props: Props) {
     <section className="report-guide" aria-label="Report import steps"><div className="done"><b>1</b><span><strong>Choose report</strong><small>CSV or TSV file</small></span></div><i /><div className={props.dataset || props.rawDataset ? 'done' : ''}><b>2</b><span><strong>Check data</strong><small>Columns and money</small></span></div><i /><div className={props.dataset ? 'done' : ''}><b>3</b><span><strong>Ready</strong><small>Explore results</small></span></div></section>
     {props.importError ? <section className="notice-card danger" role="alert"><span>!</span><div><strong>We could not import that file</strong><p>{props.importError}</p></div></section> : null}
     <section className="panel report-status-card"><div className="report-status-main"><span className="file-badge">CSV</span><div><small>Current report</small><h3>{props.dataset || props.rawDataset ? props.fileName : 'No report selected'}</h3><p>{quality ? `${quality.sourceRowCount.toLocaleString('en-IN')} rows processed into ${quality.normalizedEventCount.toLocaleString('en-IN')} transactions` : 'Choose a marketplace CSV or TSV report to begin.'}</p></div></div>{quality ? <div className="report-checks"><span className={quality.reconciliation.reconciled ? 'good' : 'warning'}><b>{quality.reconciliation.reconciled ? '✓' : '!'}</b>{quality.reconciliation.reconciled ? 'Report accuracy check passed' : 'Review report accuracy'}</span><span className={quality.unclassifiedEventCount ? 'warning' : 'good'}><b>{quality.unclassifiedEventCount ? '!' : '✓'}</b>{quality.unclassifiedEventCount ? `${quality.unclassifiedEventCount} transactions need review` : 'All transactions classified'}</span></div> : null}</section>
+    <section className="panel sponsored-upload-card">
+      <div><small>Optional advertising enrichment</small><h3>Sponsored Products report</h3><p>Upload the Advertised product XLSX for SKU and ASIN attribution. Unified Transactions remains the source for total sales, advertising cost and profit.</p></div>
+      <label className="upload-mini"><span className="upload-icon">↑</span><span><strong>{props.sponsoredImporting ? 'Importing…' : props.sponsoredReport ? 'Replace ads report' : 'Import ads report'}</strong><small>Amazon Advertised product · XLSX</small></span><input hidden type="file" accept=".xlsx,.xls" disabled={props.sponsoredImporting} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void props.onSponsoredFile(file) }} /></label>
+      {props.sponsoredReport ? <div className="sponsored-file-status"><span className="status good">Matched by SKU → ASIN</span><strong>{props.sponsoredReport.fileName}</strong><small>{props.sponsoredReport.minDate} → {props.sponsoredReport.maxDate} · {props.sponsoredReport.rows.length.toLocaleString('en-IN')} daily rows</small></div> : null}
+      {props.sponsoredError ? <div className="notice-card danger" role="alert"><span>!</span><div><strong>Ads report was not imported</strong><p>{props.sponsoredError}</p></div></div> : null}
+    </section>
     {props.dataset && props.cohort ? <section className={`lifecycle-coverage-card ${props.cohort.missingSaleOrderCount || props.cohort.incompleteOrderCount ? 'warning' : 'good'}`}>
       <header><div><small>Order lifecycle coverage</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orderCoveragePercent.toFixed(1)}% complete</span></header>
       <div className="lifecycle-coverage-grid"><div><b>{props.cohort.candidateOrderCount.toLocaleString('en-IN')}</b><small>candidate orders</small></div><div><b>{props.cohort.completedOrderCount.toLocaleString('en-IN')}</b><small>completed orders</small></div><div><b>{props.cohort.incompleteOrderCount.toLocaleString('en-IN')}</b><small>awaiting coverage</small></div><div><b>{props.cohort.missingSaleOrderCount.toLocaleString('en-IN')}</b><small>missing original sale</small></div></div>
