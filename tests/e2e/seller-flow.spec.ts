@@ -23,7 +23,7 @@ async function uploadReport(page: Page, file = report) {
   await page.getByRole('button', { name: /upload your first report/i }).click()
   await expect(page.getByText('Include extra transaction history')).toBeVisible()
   await page.locator('input[type="file"]').first().setInputFiles(file)
-  await expect(page.getByText(path.basename(file), { exact: true }).first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('.report-status-card h3').filter({ hasText: path.basename(file) })).toBeVisible({ timeout: 30_000 })
 }
 
 test.beforeEach(async ({ page }) => resetBrowserData(page))
