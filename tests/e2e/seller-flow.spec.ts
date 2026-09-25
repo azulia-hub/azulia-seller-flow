@@ -136,7 +136,7 @@ test('fee audit workspace scrolls independently on mobile', async ({ page }) => 
   await uploadReport(page)
   await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: /Dashboard/ }).click()
   await page.getByLabel('Calculation view').selectOption('POSTED_ACTIVITY')
-  await page.getByText('More financial details').click()
+  await page.locator('details.more-metrics > summary').click({ force: true })
   await page.getByRole('button', { name: /Fee audit/ }).click()
   const body = page.locator('.fee-audit-body')
   await expect(body).toBeVisible()
