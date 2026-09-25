@@ -121,6 +121,9 @@ Returned goods are assumed resellable, so their COGS is reversed. Return profita
 - Secondary analysis reached through metric and SKU drilldowns rather than a large sidebar.
 - Global fulfilment and time-period filters.
 - Default period is now **Entire report**. An August report shows August; a January–August report shows January–August.
+- Dashboard calculations can switch between **Completed orders** and **Posted activity**. Completed orders are selected by original sale date, collect later linked refunds/reimbursements from imported history, and exclude deferred, immature, or missing-origin cycles with visible coverage counts. Posted activity retains every event on its marketplace posting date for reconciliation.
+- The completed-order banner opens an excluded-orders snapshot with sales, net order charges, refunds, and reimbursements not included yet, plus a searchable/status-filtered evidence row for every immature, deferred, or missing-origin order.
+- Report upload guidance recommends at least 20 days before and after the intended analysis period. This is a minimum observation window, not a promise that every marketplace lifecycle has finalized.
 - Available preset periods are restricted by report date coverage.
 - Presets include last 3/7/30 days, week/month choices, 3/6 months, and year choices where supportable.
 - Custom date range and automatic equal-length previous-period comparison.
@@ -229,4 +232,3 @@ After pushing, confirm both the `CI` and `Deploy GitHub Pages` workflows are gre
 - Add or update core tests for the changed invariant.
 - Run typecheck, all unit/integration tests, production build, and relevant browser tests.
 - Update `DECISIONS.md`, `ROADMAP.md`, and this handoff when behavior or architecture changes.
-

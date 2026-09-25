@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { OrderProfitSummary, SkuProfitSummary } from '../core/analytics/orderProfit'
 import { SkuTrendChart } from './SkuTrendChart'
+import { useScrollSelectedDetail } from './useScrollDetailIntoView'
 
 type Props = { orders: readonly OrderProfitSummary[]; skuSummary?: SkuProfitSummary; formatMoney: (value: number) => string; onClose: () => void }
 
@@ -16,6 +17,7 @@ function OrderDetail({ order, formatMoney }: { order: OrderProfitSummary; format
 export function OrderProfitDrilldown({ orders, skuSummary, formatMoney, onClose }: Props) {
   const visibleOrders = skuSummary?.orders ?? orders
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  useScrollSelectedDetail(selectedId, skuSummary ? '.order-drilldown .inline-order-audit' : '.order-drilldown .order-detail')
   const selected = visibleOrders.find((order) => order.orderId === selectedId) ?? null
   const metrics = skuSummary ? [['Gross sales', formatMoney(skuSummary.grossSales), 'positive'], ['Profit', formatMoney(skuSummary.profit), skuSummary.profit >= 0 ? 'positive' : 'negative'], ['Profit margin', `${skuSummary.profitMargin.toFixed(2)}%`, skuSummary.profitMargin >= 0 ? 'positive' : 'negative'], ['Net delivered', skuSummary.netDeliveredQuantity.toLocaleString('en-IN'), 'accent'], ['RTO units', skuSummary.rtoQuantity.toLocaleString('en-IN'), 'negative'], ['Customer returns', skuSummary.customerReturnQuantity.toLocaleString('en-IN'), 'negative'], ['ASP', formatMoney(skuSummary.averageSellingPrice), 'neutral'], ['Net COGS', formatMoney(skuSummary.netCogs), 'negative'], ['Profit / unit', formatMoney(skuSummary.profitPerDeliveredUnit), skuSummary.profitPerDeliveredUnit >= 0 ? 'positive' : 'negative']] as const : []
   const costRows = skuSummary ? [['Marketplace charges', skuSummary.marketplaceCharges, 'fee'], ['Net shipping', skuSummary.shippingFees, 'shipping'], ['Net COGS', skuSummary.netCogs, 'cogs'], ['Reimbursements', skuSummary.reimbursements, 'income']] as const : []

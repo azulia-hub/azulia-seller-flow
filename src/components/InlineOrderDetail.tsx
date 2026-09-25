@@ -3,14 +3,16 @@ import type { OrderProfitSummary } from '../core/analytics/orderProfit'
 import { buildOrderAudit } from '../core/analytics/orderAudit'
 import { orderTimeDimensions } from '../core/analytics/timeAnalysis'
 import '../styles/inlineOrderDetail.css'
+import { useScrollDetailIntoView } from './useScrollDetailIntoView'
 
 type Props = { readonly order: OrderProfitSummary; readonly formatMoney: (value: number) => string; readonly onCollapse: () => void }
 
 export function InlineOrderDetail({ order, formatMoney, onCollapse }: Props) {
+  const detailRef = useScrollDetailIntoView<HTMLDivElement>(order.orderId)
   const audit = useMemo(() => buildOrderAudit(order), [order])
   const timing = useMemo(() => orderTimeDimensions(order), [order])
   const bridgeMax = Math.max(1, ...audit.bridge.map(item => Math.abs(item.value)))
-  return <div className="inline-order-detail" onClick={event => event.stopPropagation()}>
+  return <div className="inline-order-detail" ref={detailRef} onClick={event => event.stopPropagation()}>
     <header><div><span>Order explanation</span><strong>{order.orderId}</strong><small>{timing ? `${timing.date} · ${timing.time} · ${timing.weekday} · ${timing.week}` : order.date ?? 'Date unavailable'}</small></div><button onClick={onCollapse}>Collapse ↑</button></header>
     <div className="inline-order-summary"><div><span>SKU</span><strong>{order.skus.join(', ') || '—'}</strong></div><div><span>Location</span><strong>{[order.city, order.state].filter(Boolean).join(', ') || '—'}</strong></div><div><span>Payment</span><strong>{order.accountType ?? '—'}</strong></div><div><span>Fulfilment</span><strong>{order.fulfillmentType ?? '—'}</strong></div><div><span>Sold / returned</span><strong>{order.soldQuantity} / {order.returnQuantity}</strong></div><div><span>Return type</span><strong>{order.returnType === 'CUSTOMER_RETURN' ? 'Customer return' : order.returnType ?? 'Not returned'}</strong></div><div><span>Profit / delivered unit</span><strong>{order.profitPerDeliveredUnit === null ? 'Unavailable' : formatMoney(order.profitPerDeliveredUnit)}</strong></div><div><span>Break-even TACOS</span><strong>{order.breakEvenTacos === null ? 'Unavailable' : `${order.breakEvenTacos.toFixed(2)}%`}</strong></div></div>
     {order.returnQuantity > 0 ? <section className="inline-return-explanation"><div><span>Return classification</span><strong>{order.returnType === 'CUSTOMER_RETURN' ? 'Customer return' : order.returnType ?? 'Unknown'}</strong></div><p>{order.returnEvidence ?? 'No classification evidence is available.'}</p><small>Returned goods are treated as resellable; COGS is recovered according to the configured return policy.</small></section> : null}

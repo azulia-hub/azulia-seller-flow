@@ -265,6 +265,42 @@ Replace relative performance quartiles with business-concentration indicators an
 Reason:
 Quartile counts do not identify products or suggest an action. Concentration reveals dependency risk, while named profit leaders and laggards give sellers a direct investigation path without an opaque composite score.
 
+## ADR-041 — Declarative chart interaction
+
+Decision:
+Reusable charts receive precomputed labels, series, value formatters, and optional selection callbacks. Hover, pointer, keyboard focus, and click/tap all expose the same point evidence. A chart may request navigation or filtering through its callback, but it does not calculate business metrics or directly own application state.
+
+Reason:
+Consistent interaction makes charts understandable and accessible without coupling visualization code to marketplace rules or duplicating analytics logic. It also lets future charts participate in the Dashboard → Metric → SKU → Order investigation flow through a small, replaceable contract.
+
+## ADR-042 — Reduced-motion-safe interface animation
+
+Decision:
+Interface motion uses shared CSS timing tokens and short entrance, state-change, chart, and drilldown transitions. Motion remains presentational, introduces no runtime dependency, must not delay user actions, and is disabled to effectively zero duration when the operating system requests reduced motion.
+
+Reason:
+Subtle motion improves hierarchy and continuity during the investigation flow, while centralized timings prevent inconsistent effects. Respecting reduced-motion preferences keeps the application accessible and avoids making animation a prerequisite for understanding state.
+
+## ADR-043 — Persistent accessible color theme
+
+Decision:
+The shared application shell owns an explicit dark/light preference, persists it locally, and applies it at the document root before React starts. Theme differences are presentation tokens and CSS overrides only; analytics and feature components remain theme-independent.
+
+Reason:
+A global root theme prevents feature-specific styling logic and reduces reload flashes. An explicit, persistent choice is predictable for non-technical users, while native `color-scheme` keeps browser controls consistent with the selected appearance.
+
+## ADR-044 — Completed-order cohort performance
+
+Decision:
+The selected performance period identifies orders by their original positive product-sale date. A pure lifecycle selector gathers every order-linked event available in imported history, including later refunds, fee reversals, and reimbursements. Orders with deferred activity or insufficient follow-up coverage are excluded from completed-order metrics, as are in-period refunds and charges whose original sale is absent. Exclusion never deletes canonical events: posted-date activity remains available as the reconciliation view. Account-level events without an order ID remain in the selected posted period and are disclosed separately from order lifecycle evidence.
+
+The initial configurable observation window is 20 days after the original sale, or 20 days after the latest refund when a return exists. Upload guidance asks for at least 20 days of history before and after the intended analysis period. The UI must disclose completed-order count, incomplete cycles, missing-original-sale cycles, and sales-value coverage.
+
+The completed-order summary opens an auditable excluded-orders snapshot. It lists only immature, deferred, or missing-origin cycles. Excluded sale, net charge, refund, reimbursement, deadline, status, and reason values are calculated by the core selector; React only filters and renders those results. Refunds on incomplete or missing-origin cycles are explicitly reported as not yet included.
+
+Reason:
+Posted-date reports can place a prior month's refund into the current month and a current month's return or reimbursement into a later month. Selecting the sales cohort first prevents those timing differences from distorting order performance, while retaining a parallel posted-activity view preserves complete financial reconciliation and auditability.
+
 ## ADR-032 — Inline order investigation
 
 Decision:

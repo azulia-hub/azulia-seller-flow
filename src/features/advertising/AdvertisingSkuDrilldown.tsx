@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { SkuTrendChart } from '../../components/SkuTrendChart'
 import { filterSkuOrders, summarizeOrderGeography, type GeographyLevel, type OrderGeographySummary, type OrderProfitSummary, type SkuOrderFilterSpec, type SkuProfitSummary } from '../../core/analytics/orderProfit'
 import type { AdvertisingSkuInsight } from '../../core/analytics/advertisingSummary'
+import { useScrollSelectedDetail } from '../../components/useScrollDetailIntoView'
 
 type Props = { readonly insight: AdvertisingSkuInsight; readonly product: SkuProfitSummary; readonly formatMoney: (value: number) => string; readonly onClose: () => void }
 type GeographyMetric = 'SALES' | 'PROFIT' | 'EASY_SHIP' | 'RETURNS'
@@ -31,6 +32,7 @@ export function AdvertisingSkuDrilldown({ insight, product, formatMoney, onClose
   const [transactionCategory, setTransactionCategory] = useState<NonNullable<SkuOrderFilterSpec['transactionCategory']>>('ALL')
   const [geographyLevel, setGeographyLevel] = useState<GeographyLevel>('STATE'), [geographyMetric, setGeographyMetric] = useState<GeographyMetric>('SALES')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  useScrollSelectedDetail(selectedId, '.ad-sku-drilldown .inline-order-audit')
   const orders = useMemo(() => filterSkuOrders(product.orders, { status: status || undefined, returnType, accountType: accountType || undefined, fulfillmentType: fulfillmentType || undefined, transactionCategory }), [product.orders, status, returnType, accountType, fulfillmentType, transactionCategory])
   const geography = useMemo(() => summarizeOrderGeography(product.orders, geographyLevel), [product.orders, geographyLevel])
   const selected = orders.find((order) => order.orderId === selectedId) ?? null

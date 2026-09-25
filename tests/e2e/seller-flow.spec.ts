@@ -21,6 +21,7 @@ async function resetBrowserData(page: Page) {
 
 async function uploadReport(page: Page, file = report) {
   await page.getByRole('button', { name: /upload your first report/i }).click()
+  await expect(page.getByText('Include extra transaction history')).toBeVisible()
   await page.locator('input[type="file"]').first().setInputFiles(file)
   await expect(page.getByText(path.basename(file), { exact: true }).first()).toBeVisible({ timeout: 30_000 })
 }
@@ -32,6 +33,13 @@ test('uploads a report and follows Dashboard → metric → SKU → order', asyn
   await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
   await expect(page.getByText('Business snapshot')).toBeVisible()
   await expect(page.getByLabel('Time period')).toHaveValue('ALL')
+  await expect(page.getByLabel('Calculation view')).toHaveValue('COMPLETED_ORDERS')
+  await expect(page.getByText(/orders included/)).toBeVisible()
+  await page.getByRole('button', { name: 'View excluded orders' }).click()
+  await expect(page.getByRole('dialog')).toContainText('Refunds not included yet')
+  await expect(page.getByRole('dialog')).toContainText('Original sale missing')
+  await page.getByRole('button', { name: 'Close excluded orders snapshot' }).click()
+  await page.getByLabel('Calculation view').selectOption('POSTED_ACTIVITY')
   await page.getByText('More financial details').click()
   await expect(page.getByRole('button', { name: /Profit per delivered unit/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Break-even TACOS/ })).toBeVisible()
@@ -109,6 +117,7 @@ test('expanded order audit fits a mobile viewport without horizontal overflow', 
   await page.setViewportSize({ width: 375, height: 812 })
   await uploadReport(page)
   await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: /Dashboard/ }).click()
+  await page.getByLabel('Calculation view').selectOption('POSTED_ACTIVITY')
   await page.getByRole('button', { name: /Gross sales/ }).first().click()
   await page.locator('.metric-ranking tbody .clickable-order').first().click()
   const order = page.locator('.sku-workspace > .sku-orders tbody tr.clickable-order').first()
@@ -126,6 +135,7 @@ test('fee audit workspace scrolls independently on mobile', async ({ page }) => 
   await page.setViewportSize({ width: 375, height: 640 })
   await uploadReport(page)
   await page.getByRole('navigation', { name: 'Mobile navigation' }).getByRole('button', { name: /Dashboard/ }).click()
+  await page.getByLabel('Calculation view').selectOption('POSTED_ACTIVITY')
   await page.getByText('More financial details').click()
   await page.getByRole('button', { name: /Fee audit/ }).click()
   const body = page.locator('.fee-audit-body')

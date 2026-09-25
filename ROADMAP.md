@@ -97,6 +97,9 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 - [x] Guided Reports workspace for upload, validation, history, and comparison
 - [x] Dedicated Data & Settings workspace for product costs and calculation preferences
 - [x] Shared analytics filters and progressive metric disclosure
+- [x] Reusable interactive chart tooltips with pointer, touch, keyboard, and drilldown support
+- [x] Subtle responsive motion system with reduced-motion accessibility
+- [x] Persistent light and dark appearance themes
 - [x] Responsive overview dashboard
 - [x] KPI cards
 - [x] Sales trend
@@ -161,6 +164,7 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 
 - [x] Previous period comparison with report-anchored presets and coverage status
 - [x] SKU and filtered-order posted-time analysis by day, weekday, hour, and relative week
+- [x] Completed-order cohort view with lifecycle maturity, missing-origin detection, coverage disclosure, and posted-activity fallback
 - [ ] MoM
 - [ ] QoQ
 - [ ] YoY

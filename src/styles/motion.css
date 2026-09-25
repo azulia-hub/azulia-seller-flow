@@ -1,0 +1,141 @@
+:root {
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 360ms;
+  --motion-ease: cubic-bezier(.2,.75,.25,1);
+}
+
+@keyframes ui-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes overlay-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes workspace-enter {
+  from { opacity: .7; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes inline-enter {
+  from { opacity: 0; transform: translateY(-5px) scale(.995); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chart-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes shimmer {
+  from { transform: translateX(-150%); }
+  to { transform: translateX(250%); }
+}
+
+.content > :where(.hero-row,.dataset-strip,.global-filter-shell,.section-label,.kpi-grid,.more-metrics,.content-grid,.panel,.welcome-empty) {
+  animation: ui-enter var(--motion-slow) var(--motion-ease) both;
+}
+
+.primary-kpis > .kpi-card { animation: ui-enter var(--motion-slow) var(--motion-ease) both; }
+.primary-kpis > .kpi-card:nth-child(2) { animation-delay: 35ms; }
+.primary-kpis > .kpi-card:nth-child(3) { animation-delay: 70ms; }
+.primary-kpis > .kpi-card:nth-child(4) { animation-delay: 105ms; }
+.primary-kpis > .kpi-card:nth-child(5) { animation-delay: 140ms; }
+.primary-kpis > .kpi-card:nth-child(6) { animation-delay: 175ms; }
+
+:where(.kpi-card,.panel,.metric-sku-chart,.sku-analysis-card,.sku-cost-card,.import-card,.settings-intro-grid > article) {
+  transition: transform var(--motion-base) var(--motion-ease), border-color var(--motion-base) ease, box-shadow var(--motion-base) ease, background-color var(--motion-base) ease;
+}
+
+.kpi-card.clickable:hover,
+.kpi-card.clickable:focus-visible,
+.import-card:hover {
+  transform: translateY(-2px);
+  border-color: #3c5072;
+  box-shadow: 0 12px 28px rgba(0,0,0,.18);
+}
+
+button,
+.clickable-order,
+.clickable-bar {
+  transition: transform var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) ease, border-color var(--motion-fast) ease, color var(--motion-fast) ease, opacity var(--motion-fast) ease;
+}
+
+button:active { transform: scale(.98); }
+.clickable-order:active,
+.clickable-bar:active { transform: scale(.995); }
+
+.bar-track i,
+.impact-bars i,
+.location-ranking i b,
+.weekly-time-bars i b,
+.time-bars i b,
+.waterfall-list i b,
+.inline-profit-bridge i b,
+.profit-bridge i b {
+  transform-origin: left center;
+  animation: bar-grow var(--motion-slow) var(--motion-ease) both;
+}
+
+@keyframes bar-grow {
+  from { transform: scaleX(0); opacity: .45; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+.interactive-series {
+  stroke-dasharray: 1;
+  animation: chart-draw 650ms var(--motion-ease) both;
+}
+
+.interactive-tooltip {
+  animation: tooltip-enter var(--motion-fast) var(--motion-ease) both;
+}
+
+@keyframes tooltip-enter {
+  from { opacity: 0; margin-top: 4px; }
+  to { opacity: 1; margin-top: 0; }
+}
+
+.drilldown-backdrop,
+.modal-backdrop { animation: overlay-enter var(--motion-base) ease both; }
+.metric-sku-drilldown { animation: workspace-enter var(--motion-slow) var(--motion-ease) both; }
+.metric-ranking,
+.sku-workspace,
+.fee-audit-body { animation: ui-enter var(--motion-base) var(--motion-ease) both; }
+.inline-detail-row,
+.inline-order-audit,
+.inline-order-detail { animation: inline-enter var(--motion-base) var(--motion-ease) both; transform-origin: top center; }
+
+:where(.import-message,.backup-message,.quality-error,.drilldown-warning,.return-quality,.status) {
+  animation: ui-enter var(--motion-base) var(--motion-ease) both;
+}
+
+.upload-mini[disabled],
+button[disabled] { position: relative; overflow: hidden; }
+.upload-mini[disabled]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  background: linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+details > :not(summary) { animation: ui-enter var(--motion-base) var(--motion-ease) both; }
+
+@media (max-width: 760px) {
+  .metric-sku-drilldown { animation-name: ui-enter; }
+  .primary-kpis > .kpi-card { animation-delay: 0ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
