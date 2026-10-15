@@ -3,7 +3,7 @@ import type { OrderProfitSummary } from './orderProfit'
 import { parseReportTimestamp } from './timeAnalysis'
 
 export interface OrderAuditBridgeItem { readonly id: string; readonly label: string; readonly value: number; readonly kind: 'INCOME' | 'COST' | 'RESULT' }
-export interface OrderAuditTimelineItem { readonly id: string; readonly date: string | null; readonly event: string; readonly amountType: AmountType; readonly rawLabel: string; readonly amount: number; readonly runningBalance: number; readonly classified: boolean }
+export interface OrderAuditTimelineItem { readonly id: string; readonly date: string | null; readonly event: string; readonly amountType: AmountType; readonly status: string | null; readonly rawLabel: string; readonly amount: number; readonly runningBalance: number; readonly classified: boolean }
 export interface OrderFeeGroup { readonly label: string; readonly value: number }
 export interface OrderAuditResult { readonly bridge: readonly OrderAuditBridgeItem[]; readonly timeline: readonly OrderAuditTimelineItem[]; readonly feeGroups: readonly OrderFeeGroup[]; readonly warnings: readonly string[] }
 
@@ -31,7 +31,7 @@ export function buildOrderAudit(order: OrderProfitSummary): OrderAuditResult {
     return (leftTime ?? Number.MAX_SAFE_INTEGER) - (rightTime ?? Number.MAX_SAFE_INTEGER) || left.sourceRow - right.sourceRow
   }).map(event => {
     if (event.amountClass === 'OPERATING') runningBalance = round(runningBalance + event.amount)
-    return { id: event.id, date: event.date, event: event.event, amountType: event.amountType, rawLabel: event.rawType || event.rawDescription || '—', amount: event.amount, runningBalance, classified: event.classified }
+    return { id: event.id, status: event.status, date: event.date, event: event.event, amountType: event.amountType, rawLabel: event.rawType || event.rawDescription || '—', amount: event.amount, runningBalance, classified: event.classified }
   })
 
   const eventTotal = (predicate: (event: CanonicalFinancialEvent) => boolean) => round(-order.events.filter(event => event.amountClass === 'OPERATING' && predicate(event)).reduce((sum, event) => sum + event.amount, 0))

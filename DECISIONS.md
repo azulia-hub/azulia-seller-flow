@@ -289,7 +289,7 @@ The shared application shell owns an explicit dark/light preference, persists it
 Reason:
 A global root theme prevents feature-specific styling logic and reduces reload flashes. An explicit, persistent choice is predictable for non-technical users, while native `color-scheme` keeps browser controls consistent with the selected appearance.
 
-## ADR-044 — Completed-order cohort performance
+## ADR-044 — Completed-order cohort performance (superseded by ADR-045)
 
 Decision:
 The selected performance period identifies orders by their original positive product-sale date. A pure lifecycle selector gathers every order-linked event available in imported history, including later refunds, fee reversals, and reimbursements. Orders with deferred activity or insufficient follow-up coverage are excluded from completed-order metrics, as are in-period refunds and charges whose original sale is absent. Exclusion never deletes canonical events: posted-date activity remains available as the reconciliation view. Account-level events without an order ID remain in the selected posted period and are disclosed separately from order lifecycle evidence.
@@ -388,3 +388,20 @@ User classification rules match the normalized source identifier and exact norma
 
 Reason:
 Marketplaces introduce new transaction labels over time. Source-scoped rules let sellers resolve those labels once without placing marketplace terminology in the generic core. Preserving known money types and reconciliation totals prevents a broad raw-label rule from damaging already-understood financial components.
+
+
+## ADR-045 — Sale-period orders with released and pending activity
+
+Decision (15 October 2026, explicitly requested by the seller):
+Replace the completed-order waiting gate with **Orders sold in selected period**. Original positive product-sale dates select the orders, including deferred sales for pending disclosure. Search the entire active report for their linked activity, independent of the selected end date. Include available/released activity immediately; never remove a released sale because a later refund resets a deadline or another transaction is deferred. Less than 20 days of follow-up is informational only and never proves completion.
+
+Explicit Deferred transactions are separated from main metrics as pending sales, refunds, fees, reimbursements, operating net, and settlement transfers. An explicitly labelled estimate combines available and pending events once and recalculates COGS under the same historical cost and missing-cost policy. Unknown/missing release statuses stay included with a visible disclosure; they are not silently discarded or claimed as verified Released transactions.
+
+Resolve matching deferred/released records conservatively at the whole source-row level. Only otherwise identical rows, including raw references and evidence except status, can match. Preserve repeated-row multiplicity; each Released row replaces at most one matching Deferred row. Date-shifted, changed, and ambiguous rows remain separate for review. Canonical imports, raw data, reconciliation, and Posted activity are unchanged.
+
+Missing-original-sale activity is shown separately and never assigned an invented sales month. Account-level events without an order ID use posting dates in the selected period; their pending amounts are separated too. Settlement transfers remain outside operating profit. Only the active report is searched; saved report snapshots are not silently merged.
+
+UI shows the original sale range, observation-through date, selected-order count, pending activity, unmatched evidence, and inline release statuses. Audit workbooks disclose the calculation basis and provide pending, missing-origin, and superseded-deferred evidence sheets. Desktop and mobile share this flow.
+
+Reason:
+The 20-day gate excluded known sales and adjustments without establishing actual lifecycle completion. An observed-to-date order cohort answers how a sales period performed using all imported evidence, while explicit pending values and a separate Posted activity view preserve status transparency and financial auditability.

@@ -1,6 +1,6 @@
 # Azulia Seller Flow — Project Handoff
 
-Last updated: 12 September 2026  
+Last updated: 15 October 2026
 Current production version: `v1.0.2`  
 Repository: https://github.com/azulia-hub/azulia-seller-flow  
 Live application: https://azulia-hub.github.io/azulia-seller-flow/
@@ -121,9 +121,11 @@ Returned goods are assumed resellable, so their COGS is reversed. Return profita
 - Secondary analysis reached through metric and SKU drilldowns rather than a large sidebar.
 - Global fulfilment and time-period filters.
 - Default period is now **Entire report**. An August report shows August; a January–August report shows January–August.
-- Dashboard calculations can switch between **Completed orders** and **Posted activity**. Completed orders are selected by original sale date, collect later linked refunds/reimbursements from imported history, and exclude deferred, immature, or missing-origin cycles with visible coverage counts. Posted activity retains every event on its marketplace posting date for reconciliation.
-- The completed-order banner opens an excluded-orders snapshot with sales, net order charges, refunds, and reimbursements not included yet, plus a searchable/status-filtered evidence row for every immature, deferred, or missing-origin order.
-- Report upload guidance recommends at least 20 days before and after the intended analysis period. This is a minimum observation window, not a promise that every marketplace lifecycle has finalized.
+- Dashboard calculations switch between **Orders sold in selected period** and **Posted activity**. Sale-period analysis selects original sales in the chosen dates and gathers all later linked activity from the entire active report. There is no 20-day exclusion.
+- Main results exclude explicit Deferred components. Pending sales, refunds, fees, reimbursements, operating net, and settlements are disclosed separately, with an estimate including pending activity and historical COGS. A deferred fee/refund never hides a released sale. Missing/unknown release statuses remain included with a visible warning.
+- The summary opens searchable Pending transactions and Original sale missing tabs with order-level financial results and full source/status evidence. Inline order details also show pending components and release status. Missing-origin activity is never assigned a guessed sales month.
+- Upload guidance requests the widest available history. Follow-up under 20 days is informational only. Exact whole-row Deferred/Released matches are counted once in order analysis, preserving raw references and multiplicity; all source events remain in Posted activity and reconciliation.
+- Account-level activity uses posting dates in the chosen period. Saved reports remain separate snapshots rather than automatically merged history. Audit exports disclose basis and observation date, with separate pending, unmatched, and superseded evidence sheets.
 - Available preset periods are restricted by report date coverage.
 - Presets include last 3/7/30 days, week/month choices, 3/6 months, and year choices where supportable.
 - Custom date range and automatic equal-length previous-period comparison.
@@ -159,7 +161,15 @@ Returned goods are assumed resellable, so their COGS is reversed. Return profita
 
 ## Quality and deployment state
 
-Current verified state at `v1.0.2`:
+Working-tree verification on 15 October 2026 (ADR-045; not yet deployed):
+
+- Typecheck and production build pass.
+- 25 Vitest files / 91 tests pass, including embedded-fee and later-refund profit regressions.
+- All 10 Playwright desktop/mobile journeys pass, including sale-period pending totals, later evidence, unmatched review, and mobile overflow checks.
+- A private local report review confirmed that August/September sale-period orders are retained, deferred amounts are separated, and complete-import reconciliation remains unchanged at zero difference. Private financial values and source records are not included in repository artifacts.
+- `report/` is ignored alongside the legacy `reprot/` path. Regression fixtures are synthetic.
+
+Historical production verification at `v1.0.2`:
 
 - TypeScript build passes.
 - 24 Vitest files and 77 tests pass.

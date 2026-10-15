@@ -3,6 +3,7 @@ import { parseCsvDataset } from '../../core/csv/parseCsv'
 import { autoDetectSource } from '../sourceDetection'
 import fixture from './__fixtures__/unified-transactions.csv?raw'
 import { amazonUnifiedTransactionAdapter } from './unifiedTransactionAdapter'
+import { buildOrderCohort, buildCohortFinancials } from '../../core/analytics/orderLifecycle'
 
 const raw = parseCsvDataset(fixture, 'amazon-aug-2026', 'Amazon August 2026.csv')
 
@@ -158,4 +159,34 @@ describe('Amazon Unified Transaction adapter', () => {
     expect(result.quality).toMatchObject({ unknownTransactionTypes: [], unclassifiedEventCount: 0 })
     expect(result.quality.reconciliation).toMatchObject({ difference: 0, reconciled: true })
   })
+
+  it('counts fees embedded in source totals once through order selection and final profit', () => {
+    const source = `date/time,settlement id,type,order id,sku,description,quantity,product sales,promotional rebates,Total sales tax liable(GST before adjusting TCS),TCS-IGST,TDS (Section 194-O),other transaction fees,other,total,Transaction Status
+3 Sept 2026,TEST,Order,TEST-FEE-ONCE,TEST-SKU,Test product,2,1000,-50,180,-5,-1,-160,0,964,Released
+3 Sept 2026,TEST,Shipping Services,TEST-FEE-ONCE,,Easy Ship weight handling fees,,0,0,0,0,0,-120,0,-120,Released
+3 Sept 2026,TEST,Transfer,,,Test bank transfer,,0,0,0,0,0,0,-844,-844,Released`
+    const normalized = amazonUnifiedTransactionAdapter.normalize(parseCsvDataset(source, 'fee-once', 'synthetic.csv'))
+    const cohort = buildOrderCohort(normalized.events, { from: '2026-09-01', to: '2026-09-30' })
+    const costs = [{ sku: 'TEST-SKU', unitCost: 200, updatedAt: '' }]
+    const result = buildCohortFinancials(cohort, costs, 'BLOCK')
+    // Direct source-row totals: 964 - 120 = 844. The bank transfer is not an expense.
+    expect(normalized.quality.reconciliation).toMatchObject({ sourceTotal: 0, normalizedTotal: 0, difference: 0 })
+    expect(result.released).toMatchObject({ grossSales: 1000, marketplaceCharges: 160, netEasyShipFee: 120, operatingNet: 844, netCogs: 400, profit: 444 })
+    expect(result.orders[0].released.profit).toBe(444)
+    expect(result.released.profit).not.toBe(284) // Would incorrectly deduct the embedded 160 fee twice.
+  })
+
+  it('counts a later refund total once and reverses the original resellable inventory cost', () => {
+    const source = `date/time,settlement id,type,order id,sku,description,quantity,product sales,promotional rebates,Total sales tax liable(GST before adjusting TCS),TCS-IGST,TDS (Section 194-O),other transaction fees,total,Transaction Status
+3 Sept 2026,TEST,Order,TEST-RETURN-ONCE,TEST-SKU,Test product,2,1000,-50,180,-5,-1,-160,964,Released
+3 Sept 2026,TEST,Shipping Services,TEST-RETURN-ONCE,,Easy Ship weight handling fees,,0,0,0,0,0,-120,-120,Released
+5 Oct 2026,TEST,Refund,TEST-RETURN-ONCE,TEST-SKU,Test product,2,-1000,50,-180,5,1,80,-1044,Released`
+    const normalized = amazonUnifiedTransactionAdapter.normalize(parseCsvDataset(source, 'refund-once', 'synthetic-return.csv'))
+    const cohort = buildOrderCohort(normalized.events, { from: '2026-09-01', to: '2026-09-30' })
+    const result = buildCohortFinancials(cohort, [{ sku: 'TEST-SKU', unitCost: 200, updatedAt: '' }], 'BLOCK')
+    // 964 - 120 - 1044 = -200; recovered stock cancels the original 400 COGS.
+    expect(normalized.quality.reconciliation).toMatchObject({ sourceTotal: -200, normalizedTotal: -200, difference: 0 })
+    expect(result.released).toMatchObject({ grossSales: 1000, refundValue: 1000, marketplaceCharges: 80, operatingNet: -200, netCogs: 0, profit: -200 })
+  })
+
 })

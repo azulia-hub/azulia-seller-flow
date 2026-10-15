@@ -44,7 +44,8 @@ import { FeeAuditPanel } from '../features/fees/FeeAuditPanel'
 import { buildAuditWorkbook } from '../core/export/auditWorkbook'
 import { downloadWorkbook } from '../adapters/browser/downloadWorkbook'
 import { downloadBackup, restoreBackup } from '../adapters/browser/backupStore'
-import { buildCompletedOrderCohort } from '../core/analytics/orderLifecycle'
+import { buildOrderCohort, buildCohortFinancials } from '../core/analytics/orderLifecycle'
+import { OrderCohortSummary } from '../components/OrderCohortSummary'
 import { OrderLifecycleSnapshot } from '../components/OrderLifecycleSnapshot'
 
 type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
@@ -79,7 +80,7 @@ export function App() {
   const [adAccountType, setAdAccountType] = useState('')
   const [adFulfillmentType, setAdFulfillmentType] = useState('')
   const [feeAuditOpen, setFeeAuditOpen] = useState(false)
-  const [calculationBasis, setCalculationBasis] = useState<CalculationBasis>('COMPLETED_ORDERS')
+  const [calculationBasis, setCalculationBasis] = useState<CalculationBasis>('SALE_PERIOD_ORDERS')
   const [cohortSnapshotOpen, setCohortSnapshotOpen] = useState(false)
 
   useEffect(() => {
@@ -94,12 +95,13 @@ export function App() {
   const allEvents = effectiveDataset?.events ?? []
   const periodScopeEvents = useMemo(() => filterEvents(allEvents, { fulfillmentType: fulfillmentFilter || undefined }), [allEvents, fulfillmentFilter])
   const postedEvents = useMemo(() => filterEvents(periodScopeEvents, { fromDate: fromDate || undefined, toDate: toDate || undefined }), [periodScopeEvents, fromDate, toDate])
-  const orderCohort = useMemo(() => fromDate && toDate ? buildCompletedOrderCohort(periodScopeEvents, { from: fromDate, to: toDate }, 20) : null, [periodScopeEvents, fromDate, toDate])
-  const filteredEvents = calculationBasis === 'COMPLETED_ORDERS' && orderCohort ? orderCohort.events : postedEvents
+  const orderCohort = useMemo(() => fromDate && toDate ? buildOrderCohort(periodScopeEvents, { from: fromDate, to: toDate }) : null, [periodScopeEvents, fromDate, toDate])
+  const filteredEvents = calculationBasis === 'SALE_PERIOD_ORDERS' && orderCohort ? orderCohort.events : postedEvents
   const summary = useMemo(() => summarizeDashboard(filteredEvents), [filteredEvents])
   const products = useMemo(() => summarizeProducts(filteredEvents), [filteredEvents])
   const skuNormalizer = dataset?.source === 'amazon' ? normalizeAmazonSku : undefined
   const costStatus = useMemo(() => calculateCosts(filteredEvents, costs, missingCostPolicy, skuNormalizer), [filteredEvents, costs, missingCostPolicy, skuNormalizer])
+  const cohortFinancials = useMemo(() => orderCohort ? buildCohortFinancials(orderCohort, costs, missingCostPolicy, skuNormalizer) : null, [orderCohort, costs, missingCostPolicy, skuNormalizer])
   const trend = useMemo(() => dailySales(filteredEvents), [filteredEvents])
   const accountTypes = useMemo(() => [...new Set(allEvents.flatMap((event) => event.accountType ? [event.accountType] : []))].sort(), [allEvents])
   const fulfillmentTypes = useMemo(() => [...new Set(allEvents.flatMap((event) => event.fulfillmentType ? [event.fulfillmentType] : []))].sort(), [allEvents])
@@ -165,14 +167,14 @@ export function App() {
   const orders = useMemo(() => summarizeOrders(filteredEvents, costs, missingCostPolicy, skuNormalizer), [filteredEvents, costs, missingCostPolicy, skuNormalizer])
   const returnSummary = useMemo(() => summarizeReturns(filteredEvents, costs, skuNormalizer), [filteredEvents, costs, skuNormalizer])
   const productProfitability = useMemo(() => summarizeProductProfitability(filteredEvents, costs, missingCostPolicy, skuNormalizer), [filteredEvents, costs, missingCostPolicy, skuNormalizer])
-  const comparisonProductProfitability = useMemo(() => summarizeProductProfitability(periodScopeEvents, costs, missingCostPolicy, skuNormalizer), [periodScopeEvents, costs, missingCostPolicy, skuNormalizer])
+  const comparisonProductProfitability = useMemo(() => summarizeProductProfitability(calculationBasis === 'SALE_PERIOD_ORDERS' && dateExtent.min && dateExtent.max ? buildOrderCohort(periodScopeEvents, { from: dateExtent.min, to: dateExtent.max }).events : periodScopeEvents, costs, missingCostPolicy, skuNormalizer), [periodScopeEvents, costs, missingCostPolicy, skuNormalizer, calculationBasis, dateExtent.min, dateExtent.max])
   const previousRange = useMemo(() => {
     if ((periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate) return previousEqualRange({ from: fromDate, to: toDate })
     return periodChoice && periodChoice !== 'CUSTOM' && periodChoice !== 'ALL' && dateExtent.max ? resolveTimePeriod(periodChoice, dateExtent.max).previous : undefined
   }, [periodChoice, fromDate, toDate, dateExtent.max])
   const previousEvents = useMemo(() => {
     if (!previousRange) return []
-    return calculationBasis === 'COMPLETED_ORDERS' ? buildCompletedOrderCohort(periodScopeEvents, previousRange, 20).events : filterEvents(periodScopeEvents, { fromDate: previousRange.from, toDate: previousRange.to })
+    return calculationBasis === 'SALE_PERIOD_ORDERS' ? buildOrderCohort(periodScopeEvents, previousRange).events : filterEvents(periodScopeEvents, { fromDate: previousRange.from, toDate: previousRange.to })
   }, [periodScopeEvents, previousRange, calculationBasis])
   const previousProductProfitability = useMemo(() => summarizeProductProfitability(previousEvents, costs, missingCostPolicy, skuNormalizer), [previousEvents, costs, missingCostPolicy, skuNormalizer])
   const previousOrders = useMemo(() => summarizeOrders(previousEvents, costs, missingCostPolicy, skuNormalizer), [previousEvents, costs, missingCostPolicy, skuNormalizer])
@@ -212,7 +214,7 @@ export function App() {
     setNeedsMapping(false)
     setFileName(item.fileName)
     setCurrentImportId(item.id)
-    setFulfillmentFilter(''); setFromDate(''); setToDate(''); setPeriodChoice(''); setAdAccountType(''); setAdFulfillmentType(''); setCalculationBasis('COMPLETED_ORDERS')
+    setFulfillmentFilter(''); setFromDate(''); setToDate(''); setPeriodChoice(''); setAdAccountType(''); setAdFulfillmentType(''); setCalculationBasis('SALE_PERIOD_ORDERS')
     setActive('Home')
   }
 
@@ -231,7 +233,7 @@ export function App() {
       setPeriodChoice('')
       setAdAccountType('')
       setAdFulfillmentType('')
-      setCalculationBasis('COMPLETED_ORDERS')
+      setCalculationBasis('SALE_PERIOD_ORDERS')
       if (detected) {
         const normalized = detected.adapter.normalize(raw)
         setDataset(normalized)
@@ -282,7 +284,7 @@ export function App() {
 
   function exportAuditWorkbook() {
     if (!effectiveDataset) return
-    downloadWorkbook(buildAuditWorkbook({ dataset: effectiveDataset, events: filteredEvents, costs, missingCostPolicy, fileName, fromDate: fromDate || undefined, toDate: toDate || undefined, fulfillmentType: fulfillmentFilter || undefined, normalizeSku: skuNormalizer }))
+    downloadWorkbook(buildAuditWorkbook({ cohort: calculationBasis === 'SALE_PERIOD_ORDERS' ? orderCohort ?? undefined : undefined, dataset: effectiveDataset, events: filteredEvents, costs, missingCostPolicy, fileName, fromDate: fromDate || undefined, toDate: toDate || undefined, fulfillmentType: fulfillmentFilter || undefined, normalizeSku: skuNormalizer }))
   }
 
   async function importBackup(file: File) {
@@ -301,10 +303,10 @@ export function App() {
           <PageHeader eyebrow="Business overview" title="Here’s how your business is performing" description="See sales, real profit, returns, and the biggest issues affecting this report." action={<>{dataset ? <button className="secondary" onClick={exportAuditWorkbook}>Export audit workbook</button> : null}<button className="secondary" onClick={() => setActive('Reports')}>{dataset ? 'Change report' : 'Upload report'}</button></>} />
           {!dataset ? <section className="welcome-empty"><div className="welcome-illustration">↗</div><h2>Get your first trustworthy profit view</h2><ol className="welcome-steps"><li><b>Upload</b><span>Choose your marketplace CSV or TSV report.</span></li><li><b>Review</b><span>Confirm reconciliation and unfamiliar transactions.</span></li><li><b>Add costs</b><span>Complete or explicitly estimate product costs.</span></li><li><b>Analyze</b><span>Trace Dashboard → SKU → order evidence.</span></li></ol><button className="primary" onClick={() => setActive('Reports')}>Upload your first report</button><small>Your data stays in this browser. Profit remains an estimate until cost coverage is complete.</small></section> : null}
           {dataset ? <>
-          {orderCohort ? <section className={`cohort-summary ${calculationBasis === 'COMPLETED_ORDERS' ? 'active' : ''}`}><div><small>{calculationBasis === 'COMPLETED_ORDERS' ? 'Completed-order performance' : 'Amazon posted activity'}</small><strong>{calculationBasis === 'COMPLETED_ORDERS' ? `${orderCohort.completedOrderCount.toLocaleString('en-IN')} of ${orderCohort.candidateOrderCount.toLocaleString('en-IN')} orders included` : `${postedEvents.length.toLocaleString('en-IN')} posted transactions included`}</strong><p>{calculationBasis === 'COMPLETED_ORDERS' ? `${orderCohort.incompleteOrderCount} immature and ${orderCohort.missingSaleOrderCount} missing-origin order cycles are excluded. Account-level activity posted in the period remains included.` : 'Every event posted in the selected dates is included and reconciles to the marketplace report.'}</p></div><div className="cohort-summary-actions"><span>{calculationBasis === 'COMPLETED_ORDERS' ? `${orderCohort.salesCoveragePercent.toFixed(1)}% sales coverage` : 'Reconciliation view'}</span><button className="secondary" onClick={() => setCohortSnapshotOpen(true)}>View excluded orders</button></div></section> : null}
+          {orderCohort && cohortFinancials ? <OrderCohortSummary cohort={orderCohort} financials={cohortFinancials} salePeriodView={calculationBasis === 'SALE_PERIOD_ORDERS'} postedCount={postedEvents.length} formatMoney={money} onReview={() => setCohortSnapshotOpen(true)} /> : null}
           <div className="section-label"><span>Business snapshot</span><small>Primary metrics</small></div>
           <section className="kpi-grid primary-kpis">
-            <KpiCard label="Gross sales" value={dataset ? money(summary.grossSales) : '—'} tone="positive" hint="Positive product-sale events" onClick={() => setHomeMetric('GROSS_SALES')} />
+            <KpiCard pendingNote={calculationBasis === 'SALE_PERIOD_ORDERS' && cohortFinancials?.pending.grossSales ? `Pending sales: ${money(cohortFinancials.pending.grossSales)}` : undefined} label="Gross sales" value={dataset ? money(summary.grossSales) : '—'} tone="positive" hint="Positive product-sale events" onClick={() => setHomeMetric('GROSS_SALES')} />
             <KpiCard label="Profit after ads" value={dataset && costStatus.profitReady ? money(profitAfterAds) : '—'} tone={profitAfterAds >= 0 ? 'positive' : 'negative'} hint={costStatus.complete ? 'Tax-inclusive operating net less COGS' : 'Estimated · missing costs assumed ₹0'} onClick={() => setHomeMetric('PROFIT')} />
             <KpiCard label="Profit margin" value={dataset && costStatus.profitReady ? `${profitMargin.toFixed(2)}%` : '—'} tone={profitMargin >= 0 ? 'positive' : 'negative'} hint="Profit after ads ÷ gross sales" onClick={() => setHomeMetric('PROFIT_MARGIN')} />
             <KpiCard label="Orders" value={orders.length.toLocaleString('en-IN')} tone="accent" hint="Click to compare orders by SKU" onClick={() => setHomeMetric('ORDERS')} />
@@ -365,10 +367,10 @@ export function App() {
           </> : null}
           </>}
       </AppShell>
-      {homeMetricResult ? <MetricSkuDrilldown result={homeMetricResult} products={productProfitability} previousProducts={previousProductProfitability} advertisingSkus={advertisingSummary.skus} comparisonPeriod={periodChoice} initialSku={drilldownSku} formatMoney={money} onClose={() => { setHomeMetric(null); setDrilldownSku(undefined) }} /> : null}
+      {homeMetricResult ? <MetricSkuDrilldown orderActivities={calculationBasis === 'SALE_PERIOD_ORDERS' ? cohortFinancials?.orders : undefined} result={homeMetricResult} products={productProfitability} previousProducts={previousProductProfitability} advertisingSkus={advertisingSummary.skus} comparisonPeriod={periodChoice} initialSku={drilldownSku} formatMoney={money} onClose={() => { setHomeMetric(null); setDrilldownSku(undefined) }} /> : null}
       {advertisingDrilldownOpen && advertisingSkuInsight && advertisingSkuProfit ? <AdvertisingSkuDrilldown insight={advertisingSkuInsight} product={advertisingSkuProfit} formatMoney={money} onClose={() => setAdvertisingDrilldownOpen(false)} /> : null}
       {feeAuditOpen ? <FeeAuditPanel result={feeAudit} orders={orders} formatMoney={money} onClose={() => setFeeAuditOpen(false)} /> : null}
-      {cohortSnapshotOpen && orderCohort ? <OrderLifecycleSnapshot cohort={orderCohort} formatMoney={money} onClose={() => setCohortSnapshotOpen(false)} /> : null}
+      {cohortSnapshotOpen && orderCohort && cohortFinancials ? <OrderLifecycleSnapshot cohort={orderCohort} financials={cohortFinancials} formatMoney={money} onClose={() => setCohortSnapshotOpen(false)} /> : null}
     </>
   )
 }

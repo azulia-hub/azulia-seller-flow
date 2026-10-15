@@ -416,3 +416,10 @@ src/
   persistence/
   workers/
 ```
+
+
+## Sale-period analysis and release status
+
+`buildOrderCohort` in `core/analytics/orderLifecycle.ts` selects orders by original positive sale date and gathers their complete linked history from the active report. It returns available, pending, unmatched, and superseded evidence streams without modifying canonical events. No maturity deadline gates inclusion. Account-level activity uses the selected posting period.
+
+`buildCohortFinancials` produces available totals, pending components, an estimate including pending activity, and order-level evidence using the shared dashboard and historical-cost engines. React only renders these results. An entire identical Deferred source row may be superseded by one Released counterpart; raw references and multiplicity must be preserved. Posted activity remains the source reconciliation view. See ADR-045.

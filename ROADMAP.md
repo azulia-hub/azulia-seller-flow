@@ -164,7 +164,8 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 
 - [x] Previous period comparison with report-anchored presets and coverage status
 - [x] SKU and filtered-order posted-time analysis by day, weekday, hour, and relative week
-- [x] Completed-order cohort view with lifecycle maturity, missing-origin detection, coverage disclosure, and posted-activity fallback
+- [x] Sale-period order view searches full active-report history, includes released activity without a maturity gate, separates pending transactions and estimates, and retains unmatched evidence and Posted activity
+- [x] Pending/unmatched review, inline release-status evidence, and calculation-basis-aware audit workbook sheets
 - [ ] MoM
 - [ ] QoQ
 - [ ] YoY

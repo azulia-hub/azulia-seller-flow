@@ -301,3 +301,10 @@ Initial product should be local-first and deployable to GitHub Pages.
 Business data should remain in the browser for core analytics.
 
 Future connected/live mode may require a backend for authenticated APIs, secrets, scheduled ingestion, and cloud sync, but core analytics must remain independent of backend infrastructure.
+
+
+## Sales-period performance (current policy)
+
+Select orders by original sale date and include all linked activity available in the active uploaded report, even when posted later. Main totals exclude explicit deferred transactions; pending sales, refunds, fees, reimbursements, and an estimate including pending activity are shown separately. Never exclude an entire order because it has pending activity or insufficient follow-up days. Unknown release statuses remain visible and included with disclosure.
+
+Label this view “Orders sold in selected period” with an observation-through date; do not claim an order is finally completed after an arbitrary waiting period. Keep Posted activity for reconciliation, missing-origin activity separate, and unassigned account expenses on their selected posting dates. See ADR-045.

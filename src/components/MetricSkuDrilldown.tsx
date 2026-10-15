@@ -1,3 +1,4 @@
+import type { CohortFinancials } from '../core/analytics/orderLifecycle'
 import { useMemo, useState } from 'react'
 import type React from 'react'
 import type { MetricDrilldownResult } from '../core/analytics/metricDrilldown'
@@ -11,10 +12,10 @@ import { SkuCommercialOverview } from './SkuCommercialOverview'
 import { InteractiveLineChart } from './InteractiveLineChart'
 import '../styles/actionBoard.css'
 
-type Props = { result: MetricDrilldownResult; products: readonly SkuProfitSummary[]; previousProducts: readonly SkuProfitSummary[]; advertisingSkus: readonly SkuAdvertisingSummary[]; comparisonPeriod: TimePeriodPreset | 'ALL' | 'CUSTOM' | ''; initialSku?: string; formatMoney: (value: number) => string; onClose: () => void }
+type Props = { orderActivities?: CohortFinancials['orders']; result: MetricDrilldownResult; products: readonly SkuProfitSummary[]; previousProducts: readonly SkuProfitSummary[]; advertisingSkus: readonly SkuAdvertisingSummary[]; comparisonPeriod: TimePeriodPreset | 'ALL' | 'CUSTOM' | ''; initialSku?: string; formatMoney: (value: number) => string; onClose: () => void }
 const percent = (value: number) => `${value.toFixed(2)}%`
 
-export function MetricSkuDrilldown({ result, products, previousProducts, advertisingSkus, comparisonPeriod, initialSku, formatMoney, onClose }: Props) {
+export function MetricSkuDrilldown({ orderActivities, result, products, previousProducts, advertisingSkus, comparisonPeriod, initialSku, formatMoney, onClose }: Props) {
   const [sku, setSku] = useState<string | null>(initialSku ?? null)
   const [search, setSearch] = useState('')
   const [rankDirection, setRankDirection] = useState<'TOP' | 'BOTTOM'>('TOP')
@@ -46,7 +47,7 @@ export function MetricSkuDrilldown({ result, products, previousProducts, adverti
       {product.missingCost ? <div className="drilldown-warning">Product cost is missing for this SKU. Profit follows the configured missing-cost policy.</div> : null}
       {workspace ? <SkuCommercialOverview product={product} workspace={workspace} formatMoney={formatMoney} /> : null}
       <SkuGeographyPanel product={product} formatMoney={formatMoney} />
-      <SkuOrderInvestigation product={product} previousProduct={previousProduct} formatMoney={formatMoney} />
+      <SkuOrderInvestigation orderActivities={orderActivities} product={product} previousProduct={previousProduct} formatMoney={formatMoney} />
     </div>}
   </section></div>
 }

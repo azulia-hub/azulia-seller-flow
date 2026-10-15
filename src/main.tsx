@@ -6,6 +6,7 @@ import './styles/global.css'
 import './styles/import-feedback.css'
 import './styles/motion.css'
 import './styles/theme.css'
+import './styles/orderActivity.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><AppErrorBoundary><App /></AppErrorBoundary></StrictMode>,
