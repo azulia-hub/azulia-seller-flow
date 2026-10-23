@@ -22,7 +22,7 @@ export interface MetricDrilldownResult { readonly id: MetricDrilldownId; readonl
 
 const definitions: Record<MetricDrilldownId, { label: string; format: MetricFormat; additive: boolean; value: (item: SkuProfitSummary) => number }> = {
   GROSS_SALES: { label: 'Gross sales', format: 'MONEY', additive: true, value: item => item.grossSales },
-  PROFIT: { label: 'Profit after ads', format: 'MONEY', additive: true, value: item => item.profit },
+  PROFIT: { label: 'Business profit', format: 'MONEY', additive: true, value: item => item.profit },
   PROFIT_MARGIN: { label: 'Profit margin', format: 'PERCENT', additive: false, value: item => item.profitMargin },
   ORDERS: { label: 'Orders', format: 'NUMBER', additive: false, value: item => item.orders.length },
   RETURN_RATE: { label: 'Return rate', format: 'PERCENT', additive: false, value: item => item.returnRate },

@@ -17,7 +17,7 @@ const metrics: readonly { key: keyof NonNullable<ImportComparison['left']>; labe
   { key: 'grossSales', label: 'Gross sales', format: 'money' },
   { key: 'operatingNet', label: 'After marketplace activity', format: 'money' },
   { key: 'netCogs', label: 'Net COGS', format: 'money' },
-  { key: 'profitAfterAds', label: 'Profit after ads', format: 'money' },
+  { key: 'profitAfterAds', label: 'Business profit', format: 'money' },
   { key: 'adsSpend', label: 'Ads spend', format: 'money' },
   { key: 'marketplaceCharges', label: 'Marketplace charges', format: 'money' },
   { key: 'netEasyShipFee', label: 'Net Easy Ship fee', format: 'money' },

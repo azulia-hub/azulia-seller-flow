@@ -1,4 +1,5 @@
 export interface SponsoredProductRow {
+  readonly raw?: Readonly<Record<string, unknown>>
   readonly date: string
   readonly portfolio: string
   readonly campaign: string

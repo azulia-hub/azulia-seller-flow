@@ -14,6 +14,7 @@ export function classifyAmazonReturns(dataset: CanonicalDataset): CanonicalDatas
     const isRto = ordersWithShippingReversal.has(event.orderId)
     return {
       ...event,
+      quantity: event.quantity === null ? null : Math.abs(event.quantity),
       returnType: isRto ? 'RTO' : 'CUSTOMER_RETURN',
       returnEvidence: isRto
         ? 'Easy Ship handling fee reversal found for this order'

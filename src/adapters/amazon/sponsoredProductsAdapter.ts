@@ -1,8 +1,12 @@
 import { strFromU8, unzipSync } from 'fflate'
 import type { SponsoredProductRow, SponsoredProductsReport } from '../../core/advertising/types'
 
-const required = ['Date', 'Advertised SKU', 'Advertised ASIN', 'Spend', '7 Day Total Sales (₹)', '7 Day Advertised SKU Sales (₹)', '7 Day Other SKU Sales (₹)']
-const number = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : Number(String(value ?? '').replace(/[₹,%]/g, '').trim()) || 0
+const required = ['Impressions', 'Clicks', '7 Day Total Orders (#)', '7 Day Total Units (#)', 'Date', 'Advertised SKU', 'Advertised ASIN', 'Spend', '7 Day Total Sales (₹)', '7 Day Advertised SKU Sales (₹)', '7 Day Other SKU Sales (₹)']
+const number = (value: unknown) => {
+  const parsed = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[₹,%]/g, '').trim())
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error('The advertising workbook contains an invalid or negative performance value. Review the source file.')
+  return parsed
+}
 const text = (value: unknown) => String(value ?? '').trim()
 const decodeXml = (value: string) => value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
 const attribute = (source: string, name: string) => source.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1] ?? ''
@@ -45,13 +49,16 @@ export async function parseSponsoredProductsWorkbook(data: ArrayBuffer, fileName
   if (missing.length) throw new Error(`This is not a supported Sponsored Products Advertised product report. Missing: ${missing.join(', ')}.`)
   const column = (header: string) => headers.indexOf(header) + 1
   const value = (row: readonly unknown[], header: string) => row[column(header) - 1]
-  const rows = sourceRows.map((row): SponsoredProductRow => ({
+  const rows = sourceRows.filter(row => row.some(cell => text(cell))).map((row, index): SponsoredProductRow => {
+    if (!dateKey(value(row, 'Date')) || !text(value(row, 'Advertised SKU'))) throw new Error(`Advertising worksheet row ${index + 2} is missing a valid date or advertised SKU. No rows were discarded.`)
+    return ({
+    raw: Object.fromEntries(headers.map((header, column) => [header, row[column] ?? ''])),
     date: dateKey(value(row, 'Date')), portfolio: text(value(row, 'Portfolio name')), campaign: text(value(row, 'Campaign Name')),
     adGroup: text(value(row, 'Ad Group Name')), advertisedSku: text(value(row, 'Advertised SKU')), advertisedAsin: text(value(row, 'Advertised ASIN')).toUpperCase(),
     impressions: number(value(row, 'Impressions')), clicks: number(value(row, 'Clicks')), spendExcludingTax: number(value(row, 'Spend')),
     attributedSales: number(value(row, '7 Day Total Sales (₹)')), advertisedSkuSales: number(value(row, '7 Day Advertised SKU Sales (₹)')),
     otherSkuSales: number(value(row, '7 Day Other SKU Sales (₹)')), orders: number(value(row, '7 Day Total Orders (#)')), units: number(value(row, '7 Day Total Units (#)')),
-  })).filter(row => row.date && row.advertisedSku)
+  }) })
   if (!rows.length) throw new Error('No dated advertised-product rows were found in this workbook.')
   const dates = rows.map(row => row.date).sort()
   return { id, fileName, importedAt: new Date().toISOString(), minDate: dates[0], maxDate: dates.at(-1)!, rows }

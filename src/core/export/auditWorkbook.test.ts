@@ -17,7 +17,7 @@ describe('audit workbook', () => {
     expect(workbook.sheets.map(sheet => sheet.name)).toEqual(['Read me', 'Summary', 'SKUs', 'Orders', 'Returns', 'Fees', 'Reconciliation', 'Unclassified'])
     const summary = workbook.sheets.find(sheet => sheet.name === 'Summary')!
     expect(summary.rows.find(row => row[0] === 'Operating net')?.[1]).toBe(87)
-    expect(summary.rows.find(row => row[0] === 'Profit after ads')?.[1]).toBe(47)
+    expect(summary.rows.find(row => row[0] === 'Business profit')?.[1]).toBe(47)
     const reconciliation = workbook.sheets.find(sheet => sheet.name === 'Reconciliation')!
     expect(reconciliation.rows.find(row => row[0] === 'Operating profit boundary')?.slice(2, 6)).toEqual([87, 87, 0, 'Matched'])
     expect(reconciliation.rows.find(row => row[0] === 'Settlement disclosure')?.[2]).toBe(-87)

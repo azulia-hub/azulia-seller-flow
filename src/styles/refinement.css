@@ -1,0 +1,216 @@
+/* Shared presentation tokens. Financial semantics remain in the analytics layer. */
+:root, html[data-theme='light'] {
+  --bg: #f5f5f7; --panel: #fff; --panel2: #f5f5f7; --line: #dedee3;
+  --text: #1d1d1f; --muted: #6e6e73; --accent: #0066cc; --accent2: #0066cc;
+  --green: #187344; --red: #c43131; --yellow: #926000;
+  --glass: rgba(250,250,252,.94); --selection: #eaf2fc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--text); background: var(--bg);
+}
+html[data-theme='dark'] {
+  --bg: #111113; --panel: #1c1c1e; --panel2: #252527; --line: #38383c;
+  --text: #f5f5f7; --muted: #a1a1a6; --accent: #2997ff; --accent2: #2997ff;
+  --green: #6acb91; --red: #ff8585; --yellow: #e6bb68;
+  --glass: rgba(28,28,30,.94); --selection: #24364a;
+}
+html[data-theme] body { color: var(--text); background: var(--bg); line-height: 1.5; }
+html[data-theme] .app-shell :where(h1,h2,h3,h4,strong,dd) { color: var(--text); }
+html[data-theme] :is(.app-shell,.drilldown-backdrop) :where(p,small,label,dt) { color: var(--muted); }
+html[data-theme] :is(.chart-shell,.panel,.kpi-card,.sku-mini-metric,.sku-analysis-card,.sku-trend-card,.sku-cost-card,.seller-section,.seller-disclosure,.more-metrics,.global-filter-card,.welcome-empty,.report-guide,.report-coverage-guide,.dataset-strip,.quality-card,.import-card,.backup-restore,.time-analysis-panel,.inline-order-detail,.inline-order-audit,.inline-order-summary>div,.inline-order-grid>section,.metric-overview,.metric-overview-grid article,.cohort-summary,.lifecycle-coverage-card,.order-lifecycle-snapshot,.product-kpis article,.sku-submetrics>div) {
+  color: var(--text); background: var(--panel); border-color: var(--line); box-shadow: none; background-blend-mode: normal;
+}
+html[data-theme] :is(.metric-sku-drilldown,.order-drilldown,.modal,.sku-workspace,.metric-ranking,.fee-audit-body) { color: var(--text); background: var(--bg); border-color: var(--line); }
+html[data-theme] :is(.topbar,.mobile-bottom-nav,.drilldown-head) { color: var(--text); background: var(--glass); border-color: var(--line); }
+html[data-theme] .app-shell :where(input,select,textarea,.secondary,.theme-toggle,.current-report,.money-input) {
+  color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-height: 44px;
+}
+html[data-theme] :is(.primary,.brand-mark) { background: #0066cc; color: #fff; box-shadow: none; }
+html[data-theme] .primary { border-radius: 999px; padding: 11px 20px; font-weight: 600; }
+html[data-theme] .brand-mark { background: #7664da; }
+html[data-theme] .app-shell button:not(.primary) { color: var(--text); }
+html[data-theme] :is(.desktop-top-nav,.segmented,.segment-control) { background: var(--panel2); border-color: var(--line); }
+html[data-theme] :is(.desktop-top-nav button.active,.mobile-bottom-nav button.active,.segment-control button.active,.segmented button.active) { background: var(--selection); color: var(--accent); }
+html[data-theme] :is(.good-text,.quality-good) { color: var(--green); }
+html[data-theme] :is(.bad-text,.quality-error) { color: var(--red); }
+html[data-theme] td strong.bad-text { color: var(--red); }
+html[data-theme] td strong.good-text { color: var(--green); }
+html[data-theme] :is(th,td) { color: var(--text); border-color: var(--line); font-size: 13px; }
+html[data-theme] th { color: var(--muted); font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+html[data-theme] :is(.bar-track,.bridge-track,.waterfall-list i,.inline-profit-bridge i,.location-ranking i) { background: var(--panel2); }
+html[data-theme] :is(.bar-track i,.area-line) { filter: none; }
+html[data-theme] .bar-track i { background: var(--accent); }
+html[data-theme] .content { max-width: 1200px; padding: 36px 32px 56px; }
+html[data-theme] .hero-row { margin: 30px 0; }
+html[data-theme] .hero-row h1 { font-size: clamp(32px,4vw,48px); font-weight: 650; letter-spacing: -.045em; }
+html[data-theme] .eyebrow { color: var(--muted); text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; }
+html[data-theme] .section-label { margin: 24px 0 12px; }
+html[data-theme] .section-label span { color: var(--text); font-size: 15px; }
+html[data-theme] .kpi-card { border-radius: 18px; padding: 22px; min-height: 130px; }
+html[data-theme] .kpi-card::before { display: none; }
+html[data-theme] .kpi-topline { color: var(--muted); font-size: 14px; gap: 8px; }
+html[data-theme] .kpi-card strong { font-size: 30px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+html[data-theme] .kpi-card.negative strong { color: var(--red); }
+.kpi-chevron { color: var(--accent); font-size: 17px; }
+html[data-theme] .drilldown-cue { display: none; }
+html[data-theme] .kpi-card.clickable:hover { border-color: var(--accent); box-shadow: 0 3px 14px #00000008; transform: translateY(-1px); }
+html[data-theme] .primary-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 14px; }
+html[data-theme] .primary-kpis .kpi-card:first-child { grid-column: span 3; grid-row: auto; display: flex; flex-direction: column; justify-content: center; padding: 32px; }
+html[data-theme] .primary-kpis .kpi-card:first-child strong { font-size: clamp(42px,5vw,64px); letter-spacing: -.045em; }
+html[data-theme] .primary-kpis .kpi-card:first-child .metric-note { font-size:13px; color:var(--muted); margin-top:12px; }
+html[data-theme] .seller-section { padding: 28px; margin: 28px 0; border-radius: 20px; }
+html[data-theme] .seller-section-heading h2 { font-size: 22px; letter-spacing: -.025em; font-weight: 600; }
+html[data-theme] .seller-ads-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; }
+html[data-theme] .seller-ads-grid .kpi-card { border: 0; border-radius: 0; min-height: 108px; padding: 16px; }
+html[data-theme] .seller-ads-grid .kpi-card strong { font-size: 26px; }
+html[data-theme] .seller-disclosure { border-radius: 14px; }
+html[data-theme] .seller-disclosure > summary { font-size: 14px; min-height: 30px; }
+html[data-theme] .seller-product-link strong { color: var(--accent); font-size: 14px; }
+html[data-theme] .seller-products td { padding: 18px 10px; font-variant-numeric: tabular-nums; }
+html[data-theme] .seller-footnote { color: var(--muted); font-size: 12px; }
+html[data-theme] .global-filter-card { position: static; border-radius: 14px; }
+html[data-theme] .global-filter-fields :where(input,select) { font-size: 13px; }
+html[data-theme] .filter-summary-action { color: var(--accent); }
+html[data-theme] .report-indicator { box-shadow: none; }
+html[data-theme] .app-disclosure { color: var(--muted); border-color: var(--line); }
+html[data-theme] .app-disclosure strong { color: var(--text); }
+html[data-theme] :is(button,input,select,textarea,summary,[role='button']):focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+html[data-theme] .sku-mini-metric { border-radius: 16px; }
+html[data-theme] .sku-mini-metric strong { color: var(--text); }
+html[data-theme] .seller-product-ads .sku-mini-metric:nth-child(3) { background: var(--panel); border-color: var(--line); }
+@media(max-width:760px) {
+  html[data-theme] .content { padding: 18px 16px 90px; }
+  html[data-theme] .topbar { gap: 8px; }
+  html[data-theme] .theme-toggle { max-width: 100px; font-size: 13px; }
+  html[data-theme] .hero-row { margin: 24px 0; gap: 18px; }
+  html[data-theme] .hero-actions { flex-wrap: wrap; }
+  html[data-theme] .primary-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  html[data-theme] .primary-kpis .kpi-card { padding: 18px; min-height: 112px; }
+  html[data-theme] .primary-kpis .kpi-card:first-child { grid-column: 1 / -1; grid-row: auto; padding: 24px; min-height: 180px; }
+  html[data-theme] .kpi-topline { font-size: 13px; }
+  html[data-theme] .primary-kpis .kpi-card strong { font-size: 26px; }
+  html[data-theme] .seller-section { padding: 20px 16px; margin: 20px 0; }
+  html[data-theme] .seller-ads-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  html[data-theme] .seller-ads-grid .kpi-card { padding: 14px 8px; }
+  html[data-theme] .seller-products table { min-width: 0; table-layout: fixed; }
+  html[data-theme] .seller-products th:nth-child(n+3):nth-child(-n+5),html[data-theme] .seller-products td:nth-child(n+3):nth-child(-n+5) { display: none; }
+  html[data-theme] .seller-products th,html[data-theme] .seller-products td { padding: 14px 5px; font-size: 12px; overflow-wrap: anywhere; }
+  html[data-theme] .seller-products th:first-child { width: 36%; }
+  html[data-theme] .seller-products th:last-child { width: 34%; }
+  html[data-theme] .mobile-bottom-nav button small { font-size: 11px; }
+  html[data-theme] .sku-workspace.sku-profile-workspace { padding: 18px 14px; }
+}
+
+html[data-theme] .page-header { margin: 24px 0 30px; }
+html[data-theme] .page-header h1 { font-size: clamp(34px,4vw,48px); font-weight: 650; letter-spacing: -.045em; }
+html[data-theme] .health-panel { margin: 24px 0; padding: 22px 26px; border-radius: 18px; }
+html[data-theme] .health-panel .insight-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+html[data-theme] .health-panel .insight { border-color: var(--line); }
+html[data-theme] .health-panel .insight strong { font-size: 14px; }
+html[data-theme] .health-panel .insight p { font-size: 12px; }
+html[data-theme] .health-panel .status { display: none; }
+html[data-theme] .profit-status { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 18px; margin-bottom:14px; border-radius:12px; background:var(--panel); color:var(--yellow); border:1px solid var(--line); font-size:14px; }
+html[data-theme] .profit-status .text-btn { color: var(--accent); min-height:44px; }
+html[data-theme] .content-grid.two:has(> .chart-shell:only-child) { grid-template-columns: 1fr; }
+@media(max-width:760px) {
+  html[data-theme] .primary-kpis { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  html[data-theme] .primary-kpis .kpi-card { min-width:0; padding:14px 10px; }
+  html[data-theme] .primary-kpis .kpi-card:first-child { grid-column:1 / -1; }
+  html[data-theme] .primary-kpis .kpi-card strong { font-size:22px; }
+  html[data-theme] .primary-kpis .kpi-card:first-child strong { font-size:48px; }
+  html[data-theme] .primary-kpis .kpi-topline { font-size:12px; }
+  html[data-theme] .health-panel { padding:18px; }
+  html[data-theme] .health-panel .insight-list { grid-template-columns:1fr; gap:0; }
+  html[data-theme] .profit-status { flex-wrap:wrap; }
+}
+
+html[data-theme] .kpi-card:is(.positive,.negative,.accent),
+html[data-theme] .sku-mini-metric:is(.positive,.negative,.accent) { background:var(--panel); }
+html[data-theme] .kpi-card.negative strong { color:var(--red); }
+html[data-theme] .health-panel .insight { color:var(--text); background:transparent; }
+html[data-theme] .drilldown-warning { color:var(--yellow); }
+
+html[data-theme] .sku-mini-metric::before { display:none; }
+html[data-theme] .sku-mini-metric span { color:var(--muted); font-size:13px; }
+html[data-theme] .sku-mini-metric strong { font-size:24px; }
+html[data-theme] .insight { border-color:var(--line); }
+html[data-theme] .insight.warning > span { color:var(--yellow); }
+html[data-theme] .insight.positive > span { color:var(--green); }
+.metric-unavailable-reason { display:block; margin-top:8px; font-size:12px; line-height:1.5; color:var(--muted); }
+.advertising-recovery { padding:8px 0; }
+.advertising-recovery > div { min-width:0; }
+.advertising-recovery > button { flex-shrink:0; white-space:normal; }
+.advertising-recovery small { display:block; font-size:12px; }
+.advertising-date-confirmation { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; margin:20px 0; background:var(--selection); border-radius:12px; color:var(--text); font-size:14px; }
+html[data-theme] .advertising-date-confirmation .text-btn { color:var(--accent); min-height:44px; }
+@media(max-width:760px) { .advertising-date-confirmation { align-items:flex-start; }.advertising-recovery > button { width:100%; } }
+html[data-theme] .filter-basis-help { margin:0; padding:12px 16px; color:var(--muted); font-size:13px; max-width:900px; }
+html[data-theme] .global-filter-card > summary { min-height:64px; align-items:center; }
+html[data-theme] .product-period-basis { font-size:13px; margin:8px 0 0; color:var(--muted); }
+html[data-theme] .metric-more-analysis { margin-top:24px; }
+html[data-theme] .backup-scope { font-size:14px; line-height:1.6; max-width:850px; }
+html[data-theme] .content-grid.lower > :only-child { grid-column:1 / -1; }
+/* Opaque mobile sheets keep the page beneath from showing through their text. */
+@media(max-width:760px) {
+  html[data-theme] .drilldown-backdrop,
+  html[data-theme] .metric-sku-drilldown { animation:none; opacity:1; }
+}
+/* Search and direct cost entry use the same quiet surfaces as the report. */
+.report-search { position:relative; margin:0 0 24px; }
+.report-search > label { display:block; color:var(--text); font-size:15px; font-weight:600; margin-bottom:8px; }
+.report-search-field { display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:14px; background:var(--panel); padding:4px 14px; }
+.report-search-field > span { color:var(--muted); font-size:25px; }
+html[data-theme] .report-search-field input { flex:1; min-width:0; border:0; background:transparent; font-size:16px; }
+html[data-theme] .report-search-field button { color:var(--accent); min-height:44px; white-space:nowrap; }
+.report-search > small { display:block; margin-top:8px; color:var(--muted); font-size:12px; }
+.report-search-results { margin-top:10px; padding:16px; border:1px solid var(--line); background:var(--panel); border-radius:14px; max-height:480px; overflow:auto; }
+.report-search-results > p { margin-top:0; font-size:13px; }
+.report-search-results ul { list-style:none; padding:0; margin:0; }
+.report-search-results li + li { border-top:1px solid var(--line); }
+html[data-theme] .report-search-results button { display:grid; gap:4px; width:100%; min-height:70px; padding:14px 8px; background:transparent; border:0; color:var(--text); text-align:left; border-radius:8px; }
+html[data-theme] .report-search-results button:hover { background:var(--selection); }
+.search-result-kind { color:var(--accent); font-size:12px; }
+.report-search-results strong { font-size:15px; overflow-wrap:anywhere; }
+.report-search-results small { color:var(--muted); font-size:12px; }
+.inline-product-cost { margin-bottom:24px; }
+.inline-product-cost h3 { margin:0; font-size:20px; }
+.inline-product-cost form { display:flex; flex-wrap:wrap; align-items:flex-end; gap:12px; margin:18px 0 12px; }
+.inline-product-cost label { display:grid; gap:8px; font-size:13px; flex:1 1 160px; }
+html[data-theme] .inline-product-cost input { color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-height:44px; width:100%; min-width:0; font-size:16px; }
+.inline-product-cost small,.inline-product-cost p { color:var(--muted); font-size:13px; line-height:1.6; }
+.inline-product-cost [role=alert] { color:var(--red); }
+.inline-product-cost summary { cursor:pointer; min-height:44px; padding:10px 0; }
+.cost-preview-banner { margin-bottom:16px; padding:12px 16px; background:var(--selection); color:var(--text); border-radius:12px; font-size:14px; }
+.report-search-detail { position:fixed; inset:0; margin:auto; width:min(1150px,100%); height:95dvh; max-width:100%; max-height:100dvh; border:1px solid var(--line); border-radius:18px; padding:0; color:var(--text); background:var(--bg); }
+.report-search-detail::backdrop { background:#0008; backdrop-filter:blur(5px); }
+.report-search-detail[open] { display:flex; flex-direction:column; }
+.report-search-detail .drilldown-head { position:static; flex-shrink:0; }
+.report-search-detail h2 { overflow-wrap:anywhere; }
+.report-search-detail small,.report-search-detail p { color:var(--muted); }
+.search-detail-body { overflow:auto; min-height:0; padding:24px; }
+.search-detail-body > section { margin-bottom:24px; }
+.search-product-links,.search-order-links { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+html[data-theme] .report-search-detail .secondary { color:var(--text); background:var(--panel); border-color:var(--line); }
+.report-search-detail .inline-product-cost { background:var(--panel); border:1px solid var(--line); border-radius:16px; }
+@media(max-width:760px) {
+ .report-search-field { padding:4px 8px; gap:4px; }.report-search-field input { font-size:16px; }
+ .report-search-field button { padding:8px; font-size:12px; }
+ .inline-product-cost form { display:grid; grid-template-columns:1fr; }
+ .report-search-detail { width:100%; height:100dvh; border-radius:0; }
+ .search-detail-body { padding:16px; }
+ .report-search-detail .drilldown-head { flex-wrap:wrap; gap:12px; }
+}
+.inline-product-cost > details > .product-cost-summary { display:flex; justify-content:space-between; gap:16px; align-items:center; padding:4px 0; }
+.product-cost-summary > strong { font-size:18px; }
+.product-cost-summary > span { color:var(--muted); font-size:13px; text-align:right; }
+.cost-live-readouts { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin:18px 0; }
+.cost-live-readouts > div { background:var(--panel2); padding:14px; border-radius:12px; min-width:0; }
+.cost-live-readouts span { display:block; font-size:12px; color:var(--muted); }
+.cost-live-readouts strong { display:block; font-size:24px; margin-top:6px; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+@media(max-width:760px) { .cost-live-readouts { grid-template-columns:repeat(2,minmax(0,1fr)); }.cost-live-readouts strong { font-size:22px; }.product-cost-summary > span { max-width:55%; } }
+.inline-product-cost button:disabled { opacity:.5; cursor:default; }
+.inline-product-cost button:disabled::after { display:none; }
+html[data-theme] .report-search-field select { flex:0 0 auto; width:130px; min-height:44px; padding:8px; border:0; border-right:1px solid var(--line); border-radius:0; background:transparent; font-size:13px; }
+@media(max-width:600px) {
+ .report-search-field { flex-wrap:wrap; }
+ html[data-theme] .report-search-field select { flex-basis:100%; width:100%; border-right:0; border-bottom:1px solid var(--line); }
+}

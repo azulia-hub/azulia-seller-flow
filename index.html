@@ -3,11 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b1220" />
+    <meta name="theme-color" content="#f7f5ef" />
+    <link rel="icon" type="image/png" href="%BASE_URL%brand/azulia-icon.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%brand/azulia-logo.png" />
     <title>Azulia Seller Flow</title>
   </head>
   <body>
-    <script>try{const t=localStorage.getItem('azulia-theme');document.documentElement.dataset.theme=t==='light'?'light':'dark';document.documentElement.style.colorScheme=t==='light'?'light':'dark'}catch{document.documentElement.dataset.theme='dark'}</script>
+    <script>try{const p=localStorage.getItem('azulia-theme');const t=p==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p==='dark'?'dark':'light';document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t}catch{document.documentElement.dataset.theme='light'}</script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

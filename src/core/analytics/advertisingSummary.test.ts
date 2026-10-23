@@ -19,6 +19,17 @@ describe('advertising summary', () => {
     expect(result.unassignedAdsSpend).toBe(80)
   })
 
+  it('keeps unknown and fee-only financial products visible in the all-products scope', () => {
+    const result = summarizeAdvertising([{ ...event('unknown', 25, 'UNKNOWN', 'REVIEW-SKU'), classified: false }])
+    expect(result.skus).toMatchObject([{ sku: 'REVIEW-SKU', grossSales: 0, attribution: 'UNATTRIBUTED' }])
+    expect(result.grossSales).toBe(0)
+  })
+  it('can show only products supported by uploaded advertising rows, including zero-spend rows', () => {
+    const base = { sku: 'A', grossSales: 100, directAdsSpend: 0, tacos: 0, roas: 0, attribution: 'DIRECT' as const }
+    const rows = [{ ...base, attributionSource: 'REPORT' as const }, { ...base, sku: 'B', attributionSource: 'BOOKED' as const }]
+    expect(filterAdvertisingSkus(rows, { reportedAdsOnly: true }).map(item => item.sku)).toEqual(['A'])
+    expect(filterAdvertisingSkus(rows, {}).map(item => item.sku)).toEqual(['A', 'B'])
+  })
   it('nets advertising credits against charges', () => {
     const result = summarizeAdvertising([event('s1', 500, 'PRODUCT_REVENUE', 'A'), event('a1', -100, 'ADVERTISING_FEE', null), event('a2', 25, 'ADVERTISING_FEE', null)])
     expect(result.adsSpend).toBe(75)

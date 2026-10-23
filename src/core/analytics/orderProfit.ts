@@ -1,5 +1,5 @@
 import type { CanonicalFinancialEvent } from '../data/types'
-import { calculateCosts, type MissingCostPolicy } from '../costs/calculateCosts'
+import { calculateCosts, createProductCostResolver, type ProductCostResolver, type MissingCostPolicy } from '../costs/calculateCosts'
 import type { AppliedProductCost } from '../costs/calculateCosts'
 import type { ProductCost } from '../costs/types'
 import { canonicalDateKey, summarizeDashboard } from './dashboardSummary'
@@ -138,16 +138,18 @@ export function summarizeOrders(
   costs: readonly ProductCost[],
   policy: MissingCostPolicy,
   normalizeSku?: (sku: string) => string,
+  resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku),
 ): OrderProfitSummary[] {
   const grouped = new Map<string, CanonicalFinancialEvent[]>()
   events.forEach((event) => {
     if (!event.orderId) return
-    grouped.set(event.orderId, [...(grouped.get(event.orderId) ?? []), event])
+    const group = grouped.get(event.orderId)
+    if (group) group.push(event); else grouped.set(event.orderId, [event])
   })
 
   return [...grouped].map(([orderId, orderEvents]) => {
     const summary = summarizeDashboard(orderEvents)
-    const cost = calculateCosts(orderEvents, costs, policy, normalizeSku)
+    const cost = calculateCosts(orderEvents, costs, policy, normalizeSku, resolveCost)
     const explained = summary.grossSales - summary.refundValue - summary.marketplaceCharges
       - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements + summary.taxNet
     const profit = round(summary.operatingNet - cost.netCogs)
@@ -207,20 +209,29 @@ export function summarizeSkuProfit(
   })
   const skuOrderIds = new Set([...orderSkus].flatMap(([orderId, skus]) => skus.has(sku) ? [orderId] : []))
   const skuEvents = events.filter((event) => event.sku === sku || (!event.sku && event.orderId && skuOrderIds.has(event.orderId) && orderSkus.get(event.orderId)?.size === 1))
+  return summarizeSkuEvents(skuEvents, sku, costs, policy, normalizeSku, createProductCostResolver(costs, normalizeSku))
+}
+
+function summarizeSkuEvents(skuEvents: readonly CanonicalFinancialEvent[], sku: string, costs: readonly ProductCost[], policy: MissingCostPolicy,
+  normalizeSku: ((sku: string) => string) | undefined, resolveCost: ProductCostResolver): SkuProfitSummary {
   const summary = summarizeDashboard(skuEvents)
-  const cost = calculateCosts(skuEvents, costs, policy, normalizeSku)
+  const cost = calculateCosts(skuEvents, costs, policy, normalizeSku, resolveCost)
   const profit = round(summary.operatingNet - cost.netCogs)
   const unitEconomics = calculateUnitEconomics({ grossSales: summary.grossSales, netDeliveredQuantity: summary.netDeliveredQuantity, profitAfterAds: profit, adsSpend: summary.adsSpend, profitReady: cost.profitReady })
-  const returns = summarizeReturns(skuEvents, costs, normalizeSku)
+  const returns = summarizeReturns(skuEvents, costs, normalizeSku, resolveCost)
   const byDate = new Map<string, CanonicalFinancialEvent[]>()
   skuEvents.forEach((event) => {
     const date = canonicalDateKey(event.date)
-    if (date) byDate.set(date, [...(byDate.get(date) ?? []), event])
+    if (date) { const group = byDate.get(date); if (group) group.push(event); else byDate.set(date, [event]) }
   })
+  const appliedCosts = new Map(cost.appliedCosts.map(item => [item.eventId, item]))
   const trend = [...byDate].map(([date, dayEvents]) => {
     const day = summarizeDashboard(dayEvents)
-    const dayCost = calculateCosts(dayEvents, costs, policy, normalizeSku)
-    return { date, grossSales: day.grossSales, profit: round(day.operatingNet - dayCost.netCogs), returns: day.returnQuantity }
+    const dayCogs = dayEvents.reduce((total, event) => {
+      const applied = appliedCosts.get(event.id)
+      return total + (applied ? (event.event === 'REFUND' ? -1 : 1) * applied.quantity * applied.unitCost : 0)
+    }, 0)
+    return { date, grossSales: day.grossSales, profit: round(day.operatingNet - round(dayCogs)), returns: day.returnQuantity }
   }).sort((a, b) => a.date.localeCompare(b.date))
 
   const shippingEvents = skuEvents.filter(event => event.amountClass === 'OPERATING' && event.amountType === 'SHIPPING_FEE')
@@ -265,13 +276,28 @@ export function summarizeSkuProfit(
     returnCharges: round(Math.abs(skuReturns?.netShipping ?? 0) + Math.abs(skuReturns?.marketplaceCharges ?? 0)),
     recoveredCogs: skuReturns?.cogsRecovered ?? 0,
     trend,
-    orders: summarizeOrders(skuEvents, costs, policy, normalizeSku),
+    orders: summarizeOrders(skuEvents, costs, policy, normalizeSku, resolveCost),
   }
 }
 
 export function summarizeProductProfitability(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[], policy: MissingCostPolicy, normalizeSku?: (sku: string) => string): SkuProfitSummary[] {
-  const skus = [...new Set(events.flatMap((event) => event.sku && event.amountType === 'PRODUCT_REVENUE' ? [event.sku] : []))]
-  return skus.map((sku) => summarizeSkuProfit(events, sku, costs, policy, normalizeSku))
+  const skus = new Set<string>()
+  const orderSkus = new Map<string, Set<string>>()
+  for (const event of events) {
+    if (!event.sku || event.amountType !== 'PRODUCT_REVENUE') continue
+    skus.add(event.sku)
+    if (event.orderId) { const group = orderSkus.get(event.orderId) ?? new Set<string>(); group.add(event.sku); orderSkus.set(event.orderId, group) }
+  }
+  const groups = new Map<string, CanonicalFinancialEvent[]>()
+  for (const event of events) {
+    const linked = event.orderId ? orderSkus.get(event.orderId) : undefined
+    const sku = event.sku || (linked?.size === 1 ? linked.values().next().value : undefined)
+    if (!sku || !skus.has(sku)) continue
+    const group = groups.get(sku)
+    if (group) group.push(event); else groups.set(sku, [event])
+  }
+  const resolveCost = createProductCostResolver(costs, normalizeSku)
+  return [...skus].map(sku => summarizeSkuEvents(groups.get(sku) ?? [], sku, costs, policy, normalizeSku, resolveCost))
 }
 
 export function filterProductProfitability(items: readonly SkuProfitSummary[], spec: ProductProfitabilityFilterSpec): SkuProfitSummary[] {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { parseCsvDataset } from '../../core/csv/parseCsv'
 import { autoDetectSource } from '../sourceDetection'
 import fixture from './__fixtures__/unified-transactions.csv?raw'
+import { calculateCosts } from '../../core/costs/calculateCosts'
+import { summarizeDashboard } from '../../core/analytics/dashboardSummary'
 import { amazonUnifiedTransactionAdapter } from './unifiedTransactionAdapter'
 
 const raw = parseCsvDataset(fixture, 'amazon-aug-2026', 'Amazon August 2026.csv')
@@ -29,6 +31,17 @@ const previouslyUnclassifiedFormat = `date/time\tsettlement id\ttype\torder id\t
 17 Jun 2026\t1\tTax Withheld\t\t\tTDS - Section 194-O\t\t0\t-114.07\t0\t0\t0\t0\t-114.07\tReleased`
 
 describe('Amazon Unified Transaction adapter', () => {
+  it('normalizes signed refund units without changing source money or raw evidence', () => {
+    const negative = amazonUnifiedTransactionAdapter.normalize(raw)
+    const positive = amazonUnifiedTransactionAdapter.normalize(parseCsvDataset(fixture.replace('Red shelf,-1,', 'Red shelf,1,'), 'positive', 'positive.csv'))
+    for (const dataset of [negative, positive]) {
+      const product = dataset.events.filter(event => event.sku === 'SKU-RED' && event.amountType === 'PRODUCT_REVENUE')
+      expect(summarizeDashboard(product)).toMatchObject({ soldQuantity: 1, returnQuantity: 1, netDeliveredQuantity: 0 })
+      expect(calculateCosts(product, [{ sku: 'SKU-RED', unitCost: 100, updatedAt: '' }]).netCogs).toBe(0)
+      expect(dataset.quality.reconciliation).toMatchObject({ reconciled: true, difference: 0 })
+    }
+    expect(negative.events.find(event => event.event === 'REFUND')?.raw.quantity).toBe('-1')
+  })
   it('is selected by automatic source detection', () => {
     const detected = autoDetectSource(raw)
     expect(detected?.adapter.id).toBe('amazon-unified-transactions')

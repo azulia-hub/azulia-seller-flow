@@ -301,3 +301,29 @@ Initial product should be local-first and deployable to GitHub Pages.
 Business data should remain in the browser for core analytics.
 
 Future connected/live mode may require a backend for authenticated APIs, secrets, scheduled ingestion, and cloud sync, but core analytics must remain independent of backend infrastructure.
+
+## Product advertising enrichment
+
+Uploading Sponsored Products data enriches the existing SKU view with actual reported spend, ACOS, attributed ROAS, TACOS, click/conversion metrics, per-unit ad costs, campaign/day evidence and profit after product ads. Reported spend is never scaled to booked advertising expense. Advertising GST is not allocated or entered. Product contribution after reported ads excludes advertising GST and unassigned account expenses, while retaining existing source taxes, charges and entered product-cost treatment. It uses posting dates and is not final net profit or fully GST-exclusive. See ADR-049. Existing Unified business metrics remain unchanged. See ADR-046.
+
+Current navigation follows ADR-051: Dashboard → product → order. Advertising metrics appear directly at their overall/product scope. Report-specific tabs and product advertising entry buttons are superseded. Reports remains the upload and data-quality destination.
+
+Seller-facing labels and context follow ADR-052: Business profit uses booked expense; Product contribution uses reported spend. Product comparisons with advertising and direct product profiles use posting-period financial results; metric investigations preserve their selected financial basis. These views disclose their basis and do not alter canonical financial formulas.
+
+Report search and direct cost entry follow ADR-053. Search covers the active report's products, SKUs, supplied product identities, orders, locations and account source labels across all dates. Product cost can be entered inside the product profile, with live preview and explicit Save/Cancel. Historical cost and missing-data policies remain intact; only cost-dependent values become available when adequate cost coverage is supplied.
+
+Current seller workspace (ADR-054) supersedes the earlier three-destination navigation: Dashboard, Products, Advertising, Returns, Product costs, Reports and Settings have clear destinations. Header search and direct product profiles retain the existing financial evidence hierarchy. Search profiles can cover all active-report dates without changing the dashboard selection. Active report/date/basis preferences restore after refresh. Explicit follow-up coverage recovery prevents exclusions from looking like lost data. Core calculations remain generic and local-first.
+
+Current product interaction (ADR-055): products open in a dedicated workspace page. Back restores the originating list context. Unit cost uses a compact, initially closed Add/Edit control; it previews and saves the default fallback only. Dated cost maintenance remains in Product costs.
+
+Azulia identity (ADR-056): the supplied gold/charcoal logo appears on warm ivory or charcoal surfaces with gold accents. Product advertising shared-date recovery stays on the selected product. Product search opens within explicitly selected dates, using all report dates only when All dates is selected; source evidence search remains report-wide.
+
+Presentation refinement (ADR-057): Returns snapshots and order hover/selection use active theme surfaces. Small fixed filter/search choices remain visible as radio groups; dropdowns are retained for longer or dynamic lists, with disclosures for advanced/heavy investigations.
+
+Report search now offers visible All / SKU / ASIN / Title / City / Order / Location modes. City searches cities only; Location searches cities and states; Order searches order identifiers. ASIN uses conservatively matched advertising identities.
+
+ADR-059: Product contribution is presented as Profit after ads, with unchanged calculations and explicit advertising GST/shared-expense exclusions. Product pages show continuous titled sections instead of accordions. A brief once-per-tab logo entrance respects reduced motion and does not block analytics loading.
+
+Where to focus (ADR-060) prioritizes the actual products/campaigns behind most selected-period sales, product losses, return losses and reported ad spend. It measures concentration rather than promising 80% growth. Losses are separate from profits, missing evidence remains explicit, and campaign spend/sales do not imply verified campaign profitability.
+
+ADR-061: Ads/Campaigns focus now selects weaker sales output relative to spend, zero-sale spend, spend exceeding attributed sales and supported product losses after ads. Large budgets with proportionate sales are not automatically flagged. The 80% analysis covers only flagged spend; full-group spend/sales shares are labelled separately.

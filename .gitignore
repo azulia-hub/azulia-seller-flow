@@ -6,3 +6,6 @@ reprot/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Private seller source reports (including local symlink)
+/report

@@ -1,6 +1,6 @@
 import type { CanonicalFinancialEvent, ReturnType } from '../data/types'
 import type { ProductCost } from '../costs/types'
-import { resolveProductCost } from '../costs/calculateCosts'
+import { createProductCostResolver, type ProductCostResolver } from '../costs/calculateCosts'
 import { canonicalDateKey } from './dashboardSummary'
 
 export interface ReturnOrderSummary {
@@ -111,10 +111,10 @@ export function filterSkuReturns(items: readonly SkuReturnSummary[], spec: SkuRe
   return [...filtered].sort((a, b) => direction * (value(a) - value(b)) || a.sku.localeCompare(b.sku))
 }
 
-export function summarizeReturns(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[] = [], normalizeSku: (sku: string) => string = (sku) => sku) {
+export function summarizeReturns(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[] = [], normalizeSku: (sku: string) => string = (sku) => sku, resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku)) {
   const refundEvents = events.filter((event) => event.event === 'REFUND' && event.amountType === 'PRODUCT_REVENUE' && event.amount < 0)
   const byOrder = new Map<string, CanonicalFinancialEvent[]>()
-  events.forEach((event) => { if (event.orderId) byOrder.set(event.orderId, [...(byOrder.get(event.orderId) ?? []), event]) })
+  events.forEach((event) => { if (event.orderId) { const group = byOrder.get(event.orderId); if (group) group.push(event); else byOrder.set(event.orderId, [event]) } })
   const refundGroups = new Map<string, CanonicalFinancialEvent[]>()
   refundEvents.forEach((refund) => {
     const key = refund.orderId ?? `Unassigned row ${refund.sourceRow}`
@@ -131,7 +131,7 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
     const cogsRecovered = round(refunds.reduce((sum, event) => {
       if (!event.sku) { missingCost = true; return sum }
       const saleDate = canonicalDateKey(related.find(item => item.event === 'SALE' && item.amountType === 'PRODUCT_REVENUE' && item.sku === event.sku)?.date ?? null)
-      const cost = resolveProductCost(costs, event.sku, saleDate ?? canonicalDateKey(event.date), normalizeSku)
+      const cost = resolveCost(event.sku, saleDate ?? canonicalDateKey(event.date))
       if (!cost) { missingCost = true; return sum }
       return sum + cost.unitCost * (event.quantity ?? 0)
     }, 0))
@@ -179,7 +179,7 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
     const skuCogsRecovered = round(returned.reduce((sum, event) => {
       const related = event.orderId ? byOrder.get(event.orderId) ?? [] : []
       const saleDate = canonicalDateKey(related.find((item) => item.event === 'SALE' && item.amountType === 'PRODUCT_REVENUE' && item.sku === sku)?.date ?? null)
-      const cost = resolveProductCost(costs, sku, saleDate ?? canonicalDateKey(event.date), normalizeSku)
+      const cost = resolveCost(sku, saleDate ?? canonicalDateKey(event.date))
       if (!cost) { skuMissingCost = true; return sum }
       return sum + cost.unitCost * (event.quantity ?? 0)
     }, 0))

@@ -8,9 +8,9 @@ const adSpend = (events: readonly CanonicalFinancialEvent[]) => rounded(-sum(eve
 const grossSales = (events: readonly CanonicalFinancialEvent[]) => rounded(sum(events.filter((event) => event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0).map((event) => event.amount)))
 
 export interface AdvertisingTrendPoint { readonly date: string; readonly grossSales: number; readonly adsSpend: number; readonly tacos: number; readonly roas: number }
-export interface SkuAdvertisingSummary { readonly sku: string; readonly grossSales: number; readonly directAdsSpend: number; readonly tacos: number; readonly roas: number; readonly attribution: 'DIRECT' | 'UNATTRIBUTED' }
+export interface SkuAdvertisingSummary { readonly sku: string; readonly grossSales: number; readonly directAdsSpend: number; readonly tacos: number; readonly roas: number; readonly attributionSource?: 'REPORT' | 'BOOKED'; readonly attribution: 'DIRECT' | 'UNATTRIBUTED' }
 export interface AdvertisingSummary { readonly grossSales: number; readonly adsSpend: number; readonly tacos: number; readonly roas: number; readonly directAdsSpend: number; readonly unassignedAdsSpend: number; readonly attributionCoverage: number; readonly adEventCount: number; readonly trend: readonly AdvertisingTrendPoint[]; readonly skus: readonly SkuAdvertisingSummary[] }
-export interface AdvertisingSkuFilterSpec { readonly search?: string; readonly sort?: 'ADS_SPEND' | 'TACOS' | 'ROAS' | 'GROSS_SALES'; readonly direction?: 'ASC' | 'DESC' }
+export interface AdvertisingSkuFilterSpec { readonly reportedAdsOnly?: boolean; readonly search?: string; readonly sort?: 'ADS_SPEND' | 'TACOS' | 'ROAS' | 'GROSS_SALES'; readonly direction?: 'ASC' | 'DESC' }
 export interface AdvertisingDimensionFilters { readonly accountType?: string; readonly fulfillmentType?: string }
 export interface AdvertisingSkuInsight { readonly sku: string; readonly hasDirectAttribution: boolean; readonly directAdsSpend: number; readonly tacos: number | null; readonly roas: number | null; readonly bookedProfit: number; readonly profitBeforeAds: number; readonly profitAfterDirectAds: number | null; readonly marginAfterDirectAds: number | null; readonly breakEvenTacos: number; readonly maximumAffordableAds: number }
 
@@ -33,7 +33,7 @@ export function filterAdvertisingSkus(items: readonly SkuAdvertisingSummary[], s
   const query = spec.search?.trim().toLocaleLowerCase() ?? ''
   const direction = spec.direction === 'ASC' ? 1 : -1
   const value = (item: SkuAdvertisingSummary) => spec.sort === 'TACOS' ? item.tacos : spec.sort === 'ROAS' ? item.roas : spec.sort === 'GROSS_SALES' ? item.grossSales : item.directAdsSpend
-  return items.filter((item) => !query || item.sku.toLocaleLowerCase().includes(query)).sort((left, right) => (value(left) - value(right)) * direction || left.sku.localeCompare(right.sku))
+  return items.filter((item) => (!spec.reportedAdsOnly || item.attributionSource === 'REPORT') && (!query || item.sku.toLocaleLowerCase().includes(query))).sort((left, right) => (value(left) - value(right)) * direction || left.sku.localeCompare(right.sku))
 }
 
 export function summarizeAdvertising(events: readonly CanonicalFinancialEvent[]): AdvertisingSummary {
@@ -50,7 +50,7 @@ export function summarizeAdvertising(events: readonly CanonicalFinancialEvent[])
     return { date, grossSales: dailyGrossSales, adsSpend: dailyAdsSpend, tacos: dailyGrossSales ? dailyAdsSpend / dailyGrossSales * 100 : 0, roas: dailyAdsSpend ? dailyGrossSales / dailyAdsSpend : 0 }
   })
 
-  const skuNames = [...new Set(events.flatMap((event) => event.sku && ((event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0) || event.amountType === 'ADVERTISING_FEE') ? [event.sku] : []))].sort()
+  const skuNames = [...new Set(events.flatMap((event) => event.sku && event.amountClass === 'OPERATING' ? [event.sku] : []))].sort()
   const skuInputs = skuNames.map((sku) => ({ sku, grossSales: grossSales(events.filter((event) => event.sku === sku)), directAdsSpend: adSpend(advertisingEvents.filter((event) => event.sku === sku)) }))
   const skus = skuInputs.map((item): SkuAdvertisingSummary => {
     return { ...item, tacos: item.grossSales && item.directAdsSpend ? item.directAdsSpend / item.grossSales * 100 : 0, roas: item.directAdsSpend ? item.grossSales / item.directAdsSpend : 0, attribution: item.directAdsSpend ? 'DIRECT' : 'UNATTRIBUTED' }

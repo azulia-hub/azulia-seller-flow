@@ -1,5 +1,5 @@
 import type { CanonicalFinancialEvent } from '../data/types'
-import { calculateCosts, resolveProductCost } from './calculateCosts'
+import { calculateCosts, createProductCostResolver } from './calculateCosts'
 import type { ProductCost } from './types'
 
 export type BulkCostMode = 'SET' | 'INCREASE_PERCENT' | 'DECREASE_PERCENT'
@@ -21,12 +21,13 @@ export function applyBulkCostEdit(costs: readonly ProductCost[], spec: BulkCostE
   const uniqueSkus = [...new Map(spec.skus.map(sku => [normalizeSku(sku).trim().toLocaleLowerCase(), sku.trim()])).values()].filter(Boolean)
   if (!uniqueSkus.length || !Number.isFinite(spec.value) || spec.value < 0) return { costs, changes: [], conflicts: [], missingBaseSkus: [], valid: false }
   const existingByKey = new Map(costs.map(cost => [key(cost.sku, cost.effectiveFrom ?? null, normalizeSku), cost]))
+  const resolveCost = createProductCostResolver(costs, normalizeSku)
   const changes: BulkCostChange[] = []
   const missingBaseSkus: string[] = []
   uniqueSkus.forEach(sku => {
     const targetKey = key(sku, spec.effectiveFrom, normalizeSku)
     const conflict = existingByKey.has(targetKey)
-    const active = resolveProductCost(costs, sku, spec.effectiveFrom, normalizeSku)
+    const active = resolveCost(sku, spec.effectiveFrom)
     if (spec.mode !== 'SET' && !active) { missingBaseSkus.push(sku); return }
     const previousCost = active?.unitCost ?? null
     const nextCost = spec.mode === 'SET' ? round(spec.value) : round((previousCost ?? 0) * (spec.mode === 'INCREASE_PERCENT' ? 1 + spec.value / 100 : Math.max(0, 1 - spec.value / 100)))

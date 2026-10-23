@@ -262,3 +262,120 @@ AI must not independently calculate business numbers.
 - fee anomaly detection
 - unit economics simulator
 - seller benchmarks based only on user-owned data initially
+
+## Sponsored Products SKU economics follow-up
+
+- [x] Joined SKU advertising panel in existing metric/SKU and Advertising drilldowns
+- [x] Reported pre-tax spend, ACOS, attributed ROAS, TACOS, CPC, CTR, conversion and unit-cost metrics
+- [x] Profit bridge with missing-cost guard and no duplicate advertising deduction
+- [x] Referenced actual-GST entry, optional explicit allocation and visible unassigned GST
+- [x] Campaign/day evidence and downloadable SKU calculation evidence
+- [x] Unmatched identity review and visible account-level adjustments/reconciliation difference
+- [x] Independent private report control-total verification and synthetic desktop/mobile regression coverage
+- [ ] Parse advertising invoices for actual tax evidence and billing-period matching
+- [ ] Add ads reports and tax evidence to versioned backup/restore (ads report currently stored separately)
+- [ ] Merge the newer main-branch sale-period accounting fix before extending joined ads beyond posting-period analysis
+- [x] Normalize signed Amazon refund units so good returns reverse COGS for either source encoding (ADR-047)
+- [x] Advertising defaults to shared report dates and matched advertised SKUs, with clear coverage/filter recovery and an all-financial-products selector (ADR-048)
+
+## Current two-report advertising policy (ADR-049)
+
+- [x] Use Unified Transactions + Sponsored Products for product advertising contribution; SKU Economics import deferred
+- [x] Remove manual advertising GST entry, allocation and tax-inclusive SKU-profit placeholders
+- [x] Show product contribution after reported ads with explicit advertising GST/account-overhead exclusions
+- [x] Keep overall business profit on Unified booked expense, without a second Sponsored Products deduction
+- [x] Export contribution formula, source context and exclusions; retain missing-cost and date/matching guards
+
+The earlier referenced-GST allocation item is superseded by ADR-049.
+
+- [x] Integrate Business overview and Advertising within Dashboard while retaining the original three primary navigation destinations
+- [x] Reuse one SKU workspace with Overview / Advertising / Geography / Orders tabs from both financial and advertising entry points
+- [x] Link SKU advertising to existing order investigation without inventing order-level advertising attribution (ADR-050)
+
+### Seller workflow refinement (2026-10-21)
+- Dashboard embeds overall advertising results and a searchable combined product list.
+- Product profiles display advertising and contribution directly alongside financial performance; source orders remain on the same page.
+- Advanced report explanations, campaign evidence, financial breakdowns and order filters use progressive disclosure.
+
+- UI density refinement: metric cards show labels and values; formulas stay in label tooltips and expandable details. Removed repeated dashboard/product descriptions and shortened primary product metric labels, retaining visible cost/tax limitations.
+- Account charges moved from advertising details to financial details, using the active financial selection. Source charge/adjustment labels and signed amounts remain explicit; rows state inclusion in business profit and retain review status for unknown classifications.
+
+### Calm presentation and dashboard hierarchy (2026-10-23)
+- Light appearance is the default; Light / Dark / System preferences persist locally and System follows live OS changes.
+- Neutral surfaces, blue interactions, readable typography and explicit keyboard focus replace decorative gradients and status glows.
+- Dashboard leads with profit, sales, margin and returns, followed by existing data-quality actions and products before advertising. Secondary metrics and the profit bridge remain available in disclosures.
+- Mobile product comparisons keep product, sales and contribution visible; all advertising metrics remain available within the product profile.
+- Missing-cost estimates remain explicit beside headline profit. Financial calculations and report normalization are unchanged.
+
+### Advertising availability guidance (2026-10-23)
+- Dashboard and product profiles show exact report coverage and selected dates when advertising is unavailable.
+- Shared-date action names the actual available range, explicitly switches to posted activity/all dimensions, confirms the selection and offers Undo restoring prior filters and calculation basis.
+- Non-overlapping reports show both coverage ranges and an upload action. Missing report, unmatched SKU, zero-denominator ratios and missing-cost contribution have distinct explanations.
+- Desktop/mobile browser regressions cover exact-date recovery, Undo, zero advertising activity and reports with no overlapping dates. Financial calculations remain unchanged.
+
+### Seller clarity corrections (ADR-052, 2026-10-23)
+- [x] Distinguish Business profit, Product contribution, total product sales, attributed sales, booked expense and reported advertising spend.
+- [x] Align the product comparison and direct profile with posting-period financial results when advertising is available; preserve financial context in metric investigation.
+- [x] Replace blanket accuracy and SKU-matching assurances with scoped reconciliation wording and actual matching counts.
+- [x] Use readable calculation-basis and return-type labels, preserving raw source evidence.
+- [x] Collapse filters with visible dates/basis; reset all dates, dimensions, basis and Undo explicitly.
+- [x] Remove duplicate dashboard product chart and Settings introduction cards; move broad portfolio analysis behind More analysis.
+- [x] Disclose the exact backup scope, advertising/preferences exclusions and separate advertising restore behavior.
+
+### Search and inline product costs (ADR-053, 2026-10-23)
+- [x] Report-wide search for product names, SKUs, supplied ASIN/identity aliases, orders, cities/states and account source labels.
+- [x] Search scope disclosure, match counts, unknown/undated source evidence and conservative identity matching.
+- [x] Product-cost entry inside product profiles and single-product order search detail, with immediate derived-metric preview.
+- [x] Explicit Save/Cancel, local persistence, optional effective date, preservation of dated history, and rejection of invalid costs.
+- [x] Shared draft recalculation across product, order, financial, advertising contribution, return and data-quality selectors.
+- [x] Desktop/mobile regressions for search navigation, date-specific costs, live order/contribution changes, cancellation and reload persistence.
+
+- [x] Explicit Search by → Product title mode, using preserved title/product-name/item-name columns and sale descriptions; case-insensitive word matching and title-specific empty states.
+
+### Workspace reliability and performance (ADR-054)
+- [x] Dedicated seller destinations and a responsive sidebar/drawer/bottom-navigation shell.
+- [x] Header report search, compact KPIs, sales trend plus financial breakdown, and meaningful product tables in financial/advertising contexts.
+- [x] Direct native product details without building an unrelated metric investigation; scope-preserving source search and clear return destinations.
+- [x] Restore active report and date/basis/fulfilment selection after refresh; disclose/recover from follow-up exclusions.
+- [x] Indexed cost resolution, one-pass SKU event grouping, incremental cost previews and deferred UI updates.
+- [x] Lazy heavy disclosures and workflow-specific comparison, quality and audit calculations.
+- [x] Bounded product/order/cost/bulk-selection rendering, product filters/sorting and searchable cost history.
+- [x] Original-sale cost reversal in daily refund trends, visible single-point charts, correct mobile result-column visibility and refreshed bulk-edit consent.
+- [x] Synthetic benchmark command and large-report browser responsiveness/reload regression.
+- [ ] Extend performance profiling to substantially larger, representative private reports before claiming arbitrary-scale responsiveness.
+
+### Product page and focused cost entry (ADR-055)
+- [x] Replace the product drawer with a dedicated responsive workspace page and performance-first hierarchy.
+- [x] Preserve list search, status, sort, pagination, scroll and focus with Back/Forward navigation.
+- [x] Compact Add/Edit unit-cost control with live preview and explicit Save/Cancel.
+- [x] Keep dates and history in Product costs; quick edits preserve dated costs.
+
+### Azulia brand and advertising date recovery (ADR-056)
+- [x] Transparent logo assets, optimized app image, browser icons and responsive brand placement.
+- [x] Warm ivory/gold light theme and charcoal/gold dark theme with distinct financial colors.
+- [x] Apply shared dates within the current product; search-opened products respect explicit date selection.
+- [x] Desktop/mobile regressions for full-report recovery and manually matched advertising dates.
+
+### Theme consistency and simpler choices (ADR-057)
+- [x] Remove legacy dark gradients from Returns cards and use theme tokens for source-order hover/selection.
+- [x] Make short search/status/calculation/return/order choices visible without opening dropdowns.
+- [x] Preserve native keyboard radio behavior, mobile wrapping and long-list selects.
+- [x] Add desktop/mobile regressions for neutral card surfaces, text contrast, readable hover states and visible filters.
+
+- [x] Extend theme tokens to metric investigation charts/comparison/ranking controls; use visible ranking direction choices and bounded table scrolling with sticky column headers. Validation deferred at the user's request.
+
+- [x] Visible All/SKU/ASIN/Title/City/Order/Location search choices, scoped matching and contextual placeholders/empty states. New regression cases added; execution deferred by user instruction.
+
+- [x] Rename Product contribution to Profit after ads with visible shared-expense/GST exclusions.
+- [x] Continuous product sections, jump links and viewport-deferred heavy content replace product accordions.
+- [x] Visible order filters and timing choices; short dimension radios and exact-name inputs replace product dropdowns.
+- [x] Brief center-to-brand logo entrance once per tab session, with reduced-motion/error/resize fallbacks. Validation deferred at user instruction.
+
+### Where to focus (ADR-060)
+- [x] Dashboard priority cards and visible Sales/Losses/Returns/Ads/Campaigns analysis.
+- [x] Pure positive-amount concentration ranking with actual counts/shares, cumulative 80% cutoff and top-fifth comparison.
+- [x] Separate complete-cost product losses, return-loss evidence, unsupported coverage recovery and unmatched advertising spend.
+- [x] Product/campaign review, bounded source rows and mobile labelled cards.
+- [x] Add core regression cases; execution deferred at the user's explicit request.
+
+- [x] Replace spend-only advertising priorities with spend-versus-sales comparison, supported losses, visible reasons/ROAS and flagged-spend concentration (ADR-061). Regression cases updated/added; execution remains deferred.

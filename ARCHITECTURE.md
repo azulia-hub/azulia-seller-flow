@@ -416,3 +416,41 @@ src/
   persistence/
   workers/
 ```
+
+## Joined product advertising
+
+`core/advertising/sponsoredProducts.ts` aggregates reported advertising performance and builds joined product economics from `SkuProfitSummary`. It does not normalize marketplace identities internally: application orchestration supplies the source adapter's SKU normalizer. Aggregation preserves all spend and separates unmatched evidence. Financial normalization and business dashboard totals are unchanged.
+
+Advertising uses posting dates and ad report dates; the older completed-order dashboard basis does not gate advertising sales. `SkuAdvertisingPanel` renders the same pure results inside both metric/SKU and advertising drilldowns. There is no GST evidence entry or allocation. The core returns product contribution after reported ads, restoring booked SKU advertising before deducting reported spend once. Overall business profit remains on Unified booked expense. See ADR-049, which supersedes ADR-046 tax allocation.
+
+Seller presentation selectors (`core/advertising/sellerOverview.ts`) compose existing financial and advertising results without changing canonical evidence or financial profit. React renders overall results and continuous product profiles; advanced source detail uses disclosures rather than report navigation.
+
+Presentation context (ADR-052): seller product selectors receive separate financial/cohort and posting-period results. With available advertising evidence, the product list displays the posting-period result and direct product entry preserves it. Metric entry retains its financial selection. Advertising presentation never substitutes financial-cohort amounts for missing posting-period activity. Selection state and reset/Undo belong in application orchestration; React renders explicit context and the selectors' availability results.
+
+`core/search/reportSearch.ts` builds deterministic search documents and bounded query results from canonical events plus optional configured product aliases. React renders those results and source evidence. `core/costs/setProductCost.ts` validates and immutably replaces one SKU/effective-period record. Application orchestration holds an ephemeral cost draft and supplies the same preview cost collection to dependent selectors; the existing browser cost adapter persists only explicit saves. Product workspaces and search-order evidence share the inline cost editor through an application-provided context.
+
+## Workspace responsiveness (ADR-054)
+
+- Product analysis groups canonical events once and shares an invocation-local `ProductCostResolver` instead of scanning the full cost master for every inventory event.
+- `productCostPreview.ts` updates only summaries whose normalized SKU is affected by the draft, preserving unaffected result references. React defers preview work and displays pending state, but never calculates financial formulas.
+- `businessOverview.ts` composes existing dashboard/cost/unit-economics selectors into a single financial result for KPI and breakdown presentation.
+- Direct product opening uses `ProductDetailDialog`; it does not invoke the metric comparison/ranking builder. Source search detail calculates only relevant linked orders. Report comparison, fee audit and full quality diagnostics run in their relevant workflows.
+- Heavy commercial/geography/time/portfolio disclosures mount on demand. Product tables, order lists, cost history and bulk SKU pickers render bounded subsets with explicit navigation/counts; no canonical evidence is discarded.
+- `activeReportStore.ts` persists active-report/view identifiers and preferences separately from normalized datasets. Restoring that optional view does not alter source evidence or backup schema.
+- `workspace.css` defines the current application shell, compact financial layout and responsive destinations; earlier theme layers remain compatible with evidence/detail components.
+
+No analytics worker or new dependency is introduced by this optimization. Current measurements exercise synchronous pure selectors and browser interactions; they do not establish performance guarantees for arbitrary dataset sizes.
+
+Product navigation (ADR-055): `useProductPage` owns static-host-compatible hash history, product scope, return destination, scroll and focus. The originating workspace remains mounted but hidden while `ProductPage` renders. `ProductCostEditor` submits fallback cost records through the existing pure cost operation and shared draft context; dated history remains in CostMaster. ProductPage displays selector results without introducing financial formulas.
+
+Brand assets live in `public/brand/` and are referenced through Vite BASE_URL; original artwork stays in `logo/`. Workspace tokens own the warm/gold palette and chart sales/profit colors. Advertising recovery updates global dates plus the selected product scope together; product search discovery remains report-wide but navigation follows the explicit date selection (ADR-056).
+
+`ChoiceGroup` is a presentation-only native radio group for small fixed option sets, with a unique React-generated group name. Consumers continue to submit existing filter specifications. Theme tokens govern Returns cards and source-order interaction states, preventing legacy dark component backgrounds from leaking into light mode (ADR-057).
+
+ReportSearchField controls field-specific matching in the pure search selector. Search documents separate SKU aliases, configured identity aliases, titles and city text; core uses generic identity naming while the UI labels advertising identities as ASIN. Mode selection remains presentation state (ADR-058).
+
+ContentSection uses IntersectionObserver to mount visible product sections near the viewport without disclosure controls. BrandEntrance is presentation-only: Web Animations API measures the responsive logo destination, reveals the workspace and records a per-tab session flag; reduced-motion and failure paths skip safely. Financial selectors and internal contribution identifiers remain unchanged by the Profit after ads display label (ADR-059).
+
+`core/insights/focusAnalysis.ts` accepts generic product/return/ad/campaign evidence and produces deterministic ranked shares, cumulative totals and concentration groups. App maps existing financial/advertising selector outputs into that input. `FocusPriorities` displays results, manages visible analysis selection and opens source product/campaign evidence; React does not calculate financial values/shares. Work is limited to the active Dashboard.
+
+`rankAdvertisingEfficiency` filters review candidates using generic spend/sales evidence and optional known product profit, then feeds flagged spend into the existing concentration selector. Full-group spend/sales percentages, ROAS and review reason are calculated in core. Unmatched source sales remain distinct from unavailable sales. UI displays the two denominators explicitly (ADR-061).

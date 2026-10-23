@@ -6,14 +6,37 @@ export type MissingCostPolicy = 'BLOCK' | 'ASSUME_ZERO'
 
 export interface AppliedProductCost { readonly eventId: string; readonly sku: string; readonly eventDate: string | null; readonly costDate: string | null; readonly unitCost: number; readonly quantity: number; readonly cogs: number; readonly fallback: boolean }
 
-export function resolveProductCost(costs: readonly ProductCost[], sku: string, date: string | null, normalizeSku: (sku: string) => string = value => value): ProductCost | undefined {
-  const skuKey = (sku: string) => normalizeSku(sku).trim().toLocaleLowerCase()
-  const candidates = costs.filter(cost => skuKey(cost.sku) === skuKey(sku))
-  const dated = candidates.filter(cost => cost.effectiveFrom && date && cost.effectiveFrom <= date).sort((a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''))
-  return dated[0] ?? candidates.filter(cost => !cost.effectiveFrom).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+export type ProductCostResolver = (sku: string, date: string | null) => ProductCost | undefined
+
+/** One immutable-input lookup index per analysis; no shared mutable analytics state. */
+export function createProductCostResolver(costs: readonly ProductCost[], normalizeSku: (sku: string) => string = value => value): ProductCostResolver {
+  const groups = new Map<string, { dated: ProductCost[]; fallback?: ProductCost }>()
+  const key = (sku: string) => normalizeSku(sku).trim().toLocaleLowerCase()
+  for (const cost of costs) {
+    const identity = key(cost.sku)
+    const group = groups.get(identity) ?? { dated: [] }
+    if (cost.effectiveFrom) group.dated.push(cost)
+    else if (!group.fallback || cost.updatedAt.localeCompare(group.fallback.updatedAt) > 0) group.fallback = cost
+    groups.set(identity, group)
+  }
+  for (const group of groups.values()) group.dated.sort((a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''))
+  return (sku, date) => {
+    const group = groups.get(key(sku))
+    if (!group) return undefined
+    if (date) {
+      let low = 0, high = group.dated.length
+      while (low < high) { const mid = (low + high) >>> 1; if (group.dated[mid].effectiveFrom! > date) low = mid + 1; else high = mid }
+      if (low < group.dated.length) return group.dated[low]
+    }
+    return group.fallback
+  }
 }
 
-export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[], policy: MissingCostPolicy = 'BLOCK', normalizeSku: (sku: string) => string = (sku) => sku) {
+export function resolveProductCost(costs: readonly ProductCost[], sku: string, date: string | null, normalizeSku: (sku: string) => string = value => value): ProductCost | undefined {
+  return createProductCostResolver(costs, normalizeSku)(sku, date)
+}
+
+export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[], policy: MissingCostPolicy = 'BLOCK', normalizeSku: (sku: string) => string = (sku) => sku, resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku)) {
   const skuKey = (sku: string) => normalizeSku(sku).trim().toLocaleLowerCase()
   const inventoryEvents = events.filter((event) => event.sku && event.amountType === 'PRODUCT_REVENUE' && (event.event === 'SALE' || event.event === 'REFUND'))
   const requiredSkus = [...new Set(inventoryEvents.flatMap((event) => event.sku ? [event.sku] : []))].sort()
@@ -24,7 +47,7 @@ export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs
   const netCogs = inventoryEvents.reduce((total, event) => {
     const eventDate = canonicalDateKey(event.date)
     const costDate = event.event === 'REFUND' && event.orderId && event.sku ? saleDates.get(`${event.orderId}\u001f${skuKey(event.sku)}`) ?? eventDate : eventDate
-    const cost = event.sku ? resolveProductCost(costs, event.sku, costDate, normalizeSku) : undefined
+    const cost = event.sku ? resolveCost(event.sku, costDate) : undefined
     if (!cost) { missingEvents.push(event); return total }
     const quantity = event.quantity ?? 0
     const cogs = (event.event === 'REFUND' ? -quantity : quantity) * cost.unitCost

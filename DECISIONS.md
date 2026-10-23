@@ -398,3 +398,131 @@ The report's pre-tax spend is loaded with a configurable 18% GST assumption for 
 
 Reason:
 Adding attributed sales to Unified sales would double-count revenue, while replacing Unified advertising charges with campaign spend would break financial reconciliation and omit tax or timing adjustments. Strict coverage, direct identity evidence, and explicit residuals provide useful SKU/ASIN advertising analysis without presenting attribution-window estimates as accounting facts.
+
+## ADR-046 — Joined SKU advertising economics with evidence-based tax
+
+Decision:
+Supersede ADR-045's automatic 18% GST, proportional spend cap and inferred organic sales. Sponsored Products reported pre-tax spend remains unchanged even when it exceeds booked Unified advertising expense. Advertising analysis uses the selected posting period independently of the older completed-order dashboard view. Financial sales, fees and historical COGS are joined with advertising rows through exact SKU identity or an unambiguous source-adapter alias; punctuation is not discarded. ASIN is display evidence, not a replacement join key.
+
+Pure core selectors calculate aggregate and per-SKU ACOS, attributed ROAS (both using total attribution including disclosed cross-sell), TACOS, CPC, CTR, conversion, cost per attributed order, per-sold/retained-unit advertising costs, campaign/day evidence and a profit bridge. Product profit restores any booked SKU advertising before deducting report spend once. Missing costs block definitive joined profit, including under the legacy assume-zero policy. Ratios with non-positive denominators remain unavailable. Marketplace fees, shipping reversals, reimbursements, unknown adjustments and existing source-tax policy retain their existing treatment; settlements never enter profit.
+
+Advertising GST is unknown by default. A seller may enter an actual amount and invoice/evidence reference for the active financial report, advertising report and exact selected dates. Product tax allocation requires explicit consent and uses share of report spend, including unmatched products. Cumulative paise rounding preserves the entered tax total; unassigned tax stays visible. Tax evidence is session-only and is invalidated by report/date changes. This is an analytical allocation, not proof of SKU tax or tax recoverability; it does not change canonical data or business booked totals. Invoice parsing and automatic tax classification remain future work.
+
+Account-level charges without SKU/order identity, unknown classifications, unmatched/ambiguous advertised SKUs, unassigned GST and signed financial differences remain visible. Differences are not labelled as tax or recoverable costs. Account/fulfillment filters disable enrichment with a specific explanation because advertising rows lack those dimensions. Observed first/last advertising dates gate coverage, without claiming proof of missing zero-activity days.
+
+Verification:
+Synthetic tests use hand-calculated financial examples. An opt-in private integration check compares production selectors against independent Python XML/Decimal controls at total and every advertised-SKU level, plus full-import monetary reconciliation. Private inputs/control files remain outside tracked artifacts. Desktop/mobile browser journeys verify numbers, missing costs, GST allocation and evidence downloads.
+
+## ADR-047 — Amazon signed refund quantities are returned-unit magnitudes
+
+Decision:
+The Amazon adapter converts refund quantities to non-negative magnitudes while preserving raw quantity and signed monetary components. Some exports encode a returned unit as `-1`, while others use `1`. Canonical refund event kind controls COGS reversal; source quantity sign must not reverse it again. Regression coverage proves identical returned units, zero net COGS for a fully returned sale, and unchanged financial reconciliation for both encodings. Previously saved signed-quantity imports require reimport to apply this adapter correction.
+
+## ADR-048 — Advertising defaults to shared dates and evidenced products
+
+Entering Advertising with the financial report's default Entire report selection chooses the intersection of financial and advertising coverage and displays the resulting custom dates. Explicit custom ranges remain unchanged; uncovered dates and unsupported dimensions show actionable reasons rather than “No SKU ad data.” A visible action selects shared dates and clears unsupported dimension filters. No overlap still disables enrichment; no missing spend is fabricated.
+
+The product table defaults to SKUs actually matched to uploaded advertising rows, including zero-spend rows. A selector exposes all financial products; those without advertising rows are labelled accordingly. Booked-only evidence, missing sales/spend denominators, coverage gaps and unsupported filters have distinct labels. Unmatched advertised SKUs remain in their existing review rather than being discarded or guessed. Desktop/mobile regressions reproduce a long financial report with a shorter ads report and verify date recovery, matched rows and the all-products selector.
+
+## ADR-049 — Two-report product contribution, with no advertising GST allocation
+
+Decision (explicit seller instruction):
+Use Unified Transactions and Sponsored Products only for this workflow. Do not ingest SKU Economics into the current feature. Remove the optional GST entry, proportional tax allocation and tax-inclusive SKU profit outputs introduced by ADR-046. Preserve reported pre-tax Sponsored Products spend without scaling to booked charges.
+
+Display “Product contribution after reported ads” as Unified SKU operating result + any booked SKU advertising already deducted - historical net COGS - reported Sponsored Products spend. Missing costs make this result unavailable even under the legacy assume-zero policy. Preserve existing source tax, fee, refund, reimbursement, unknown-adjustment and entered product-cost treatment. Explicitly exclude advertising GST, unassigned account expenses and advertising outside the uploaded Sponsored Products report; do not label this result fully GST-exclusive or final business net profit. Source product sales exclude separately reported sales tax; attributed sales are never added to those financial sales.
+
+The existing overall business-profit calculation continues to use Unified booked advertising expense with its existing source treatment. Never subtract Sponsored Products spend again from that business result. Booked expense less reported pre-tax spend is a source difference, not inferred GST. Contribution evidence exports contain formula, exact period and exclusions. Existing exact/shared-date behavior, conservative SKU matching and unmatched/unknown evidence remain.
+
+This supersedes ADR-046's referenced GST allocation and related profit labels. Historical entries remain as decision history, not current behavior.
+
+## ADR-050 — Advertising integrated into Dashboard → SKU → Order
+
+Decision (seller clarification):
+Keep the original Dashboard, Reports and Data & Settings primary navigation. Business overview and Advertising are views within Dashboard. Both financial metric drilldowns and advertised-product selections use the same reusable SKU workspace with Overview, Advertising, Geography and Orders tabs. Advertising opens its tab directly; financial entry opens Overview. The selected SKU remains the same across tabs, preserving order investigation state. Tab navigation supports keyboard arrows and Home/End, and scrolls on small screens.
+
+The common workspace composes existing pure-selector results and shared presentation components; it does not introduce a second financial engine. Overview and order evidence retain their financial calculation context. Advertising explicitly uses the selected posting dates and the contribution policy in ADR-049. SKU-level Sponsored Products spend must not be divided into order profit without order attribution evidence; the order tab explains this boundary. SKU Economics remains outside this feature.
+
+## ADR-051 — Seller workflow replaces report navigation
+
+Supersedes ADR-050's dashboard and SKU report tabs. The dashboard presents overall financial results, overall advertising results, and one searchable product list. Product selection opens a continuous profile: sales/returns, advertising and contribution, then source orders. Essential product metrics never require an advertising button or tab. Campaigns, attribution explanations, financial bridges, geography and advanced order filters remain accessible through progressive disclosure. Order lists show eight essential columns; expanding a row retains the complete financial audit.
+
+Financial calculations from ADR-049 remain unchanged. Booked expense belongs to business profit; reported pre-tax spend belongs to advertising performance and product contribution. Missing costs, uncovered periods and unmatched evidence remain explicit. Selecting shared dates switches to posted activity so financial and advertising periods align; explicit selections are not silently changed. Mobile uses the same hierarchy with two-column metrics and horizontally scrollable tables.
+
+## ADR-052 — Explicit financial context and focused seller workflows
+
+Decision (seller instruction):
+Use “Business profit” for the existing overall operating result after historical product costs and booked advertising, with visible settlement exclusion and missing-cost estimation status. Use “Product contribution” for ADR-049's product result after reported ad spend; retain its advertising GST/account-expense exclusions. “Ad ROAS” always means attributed sales divided by reported spend. Financial sales/booked-expense ratios use explicit descriptive labels.
+
+When Sponsored Products is available, the combined product list uses posting-period financial results for sales, returns, costs and contribution. Direct product selection preserves that posting basis, including products absent from the sales-period cohort. Metric investigations retain their selected financial basis; financial and advertising sections identify their context separately. Missing posting-period financial activity must never fall back to sales-period financial amounts when calculating advertising contribution. Existing monetary formulas, canonical events and reconciliation boundaries are unchanged.
+
+Reconciliation success is labelled as financial totals matching the source, explicitly scoped to the complete import. Import success does not claim all advertised SKUs are matched; matching counts identify their selected dates. “Sales-period view” describes the existing completed-order cohort without implying verified delivery. Canonical return types get readable display labels while raw evidence remains intact.
+
+Filters start collapsed with visible dates and calculation basis. Clear all explicitly restores the full financial report, all dimensions and the default sales-period basis, and dismisses shared-date Undo state. Remove the duplicate dashboard product chart and Settings introduction cards. Keep broader portfolio analysis behind a disclosure after the selected metric's ranking. Backup explicitly lists its included data, excluded advertising/preferences, and the fact that restoring leaves the separately stored advertising report unchanged.
+
+## ADR-053 — Report search and live product-cost entry
+
+Decision (seller instruction):
+Search indexes the active financial report across all dates, independently of dashboard filters. Pure TypeScript selectors produce product/name/SKU, order, location and account-transaction documents, including unknown and undated evidence. Advertising identity aliases are optional configuration; source-normalized aliases attach only to an unambiguous financial SKU. Search reports full match counts while bounding displayed results. Order/location/account results open source evidence without changing dashboard filters. Product result actions explicitly state that opening them uses all report dates and posting-date view.
+
+Every product workspace offers inline unit-cost entry with an optional effective date. Valid input updates a session preview shared by all cost-dependent analytics, including financial/product/order results and reported-ad contribution. Input never mutates canonical evidence. Blank, invalid or negative values do not become implicit zero costs; zero must be entered explicitly. A pure cost-record operation replaces only the selected normalized SKU and effective period, preserving unrelated SKUs and dated history. Blank effective date is the existing fallback policy, not an override of dated costs.
+
+Saving persists through the existing product-cost store and recalculates from saved state. Cancel or leaving the product discards unsaved preview. Saved costs use a compact editable disclosure; missing-cost entry opens automatically. Live readouts identify their financial basis, and reported-ad contribution remains on posting dates. Costs cannot fabricate missing advertising activity, identities, sales or classifications. No new dependency or backend is introduced.
+
+## ADR-054 — Seller workspace and measured performance correction
+
+Decision (seller instruction to address slow/buggy workflows and use established seller dashboards as design references):
+Replace the three-destination presentation with explicit Dashboard, Products, Advertising, Returns, Product costs, Reports and Settings destinations. Desktop uses a stable sidebar and header search; mobile uses primary bottom destinations plus a navigation drawer. Dashboard shows compact comparable KPIs, visible source/cost checks, a sales trend beside a financial breakdown, and a bounded product table. Products supports title/SKU search, status/sort controls and pages; cost history and bulk selection have bounded rendering. Settings holds preferences/backup; cost maintenance has its own destination. This supersedes the navigation restriction in ADR-051 while preserving its product-to-order investigation hierarchy and ADR-049 accounting boundaries.
+
+Products open directly in a native accessible detail dialog, without first constructing a metric-ranking workspace. Metric ranking selection opens that same product dialog. Global-search product results open a full-report product context while leaving dashboard dates and filters unchanged; the context and return destination are explicit. This supersedes ADR-053's global date-switch behavior for product search. Order/location evidence likewise preserves dashboard context. The active saved report, date selection, fulfilment filter and calculation basis restore on refresh. Missing follow-up coverage is a visible recoverable state, not an apparently empty dashboard with hidden exclusions.
+
+Core performance work groups canonical events once for product analysis, shares indexed effective-date cost resolvers across orders/products/returns, and rebuilds only cost-affected SKU summaries during live preview. The resolver preserves source normalization, fallback/date precedence, explicit zero, and missing periods. Cost drafts use deferred presentation with an updating state; cancel/invalid input restores saved calculations without a stale draft. Hidden heavy chart/portfolio disclosures and report comparison/quality analyses no longer execute unnecessarily during ordinary product interaction. Indexes are scoped to an analysis invocation; core has no mutable global analytics cache, browser API or dependency.
+
+Financial correction: daily SKU profit trends now reuse original-sale cost resolution from the full analyzed SKU context. A later refund after a cost-price change reverses the original sale cost in both the total and daily trend. Canonical amounts, settlement exclusion, unknown events and reported/booked advertising boundaries remain unchanged. One-point charts render a visible point. Bulk-edit confirmation is invalidated when selected products or preview inputs change.
+
+Verification includes optimized-versus-individual SKU parity for unassigned and multi-SKU order charges (including blank identifiers), historical refund trend tests, incremental preview equivalence, full browser journeys, and a reproducible synthetic benchmark. Reference sites inform layout, not financial formulas or source-data assumptions.
+
+## ADR-055 — Dedicated product pages and compact cost editing
+
+Supersedes ADR-054's product dialog and ADR-053's automatically expanded, dated inline editor. Products open as a full page inside the existing workspace, with product identity, performance metrics, trend, advertising and order evidence. Hash history supports static hosting and Browser Back/Forward. The originating list stays mounted while hidden so search, status, sort and pagination survive; Back restores its scroll and focused product. Search products retain full-report scope without changing dashboard filters.
+
+Unit cost starts as a compact Add/Edit control beside the product identity. Editing reveals one currency input with Save/Cancel and a live unsaved preview. The quick editor changes only the undated fallback; existing dated records retain precedence and remain intact. Effective dates, bulk maintenance and history belong in Product costs. Blank/invalid input never implies zero, and leaving the product discards previews. Financial selectors, missing-cost policy and accounting boundaries are unchanged.
+
+## ADR-056 — Azulia branding and date-aware product recovery
+
+Use the supplied Azulia gold/charcoal logo, isolated onto transparency, in workspace navigation, mobile identity, onboarding and browser icons. Preserve the source image; serve a small WebP in the UI. Warm ivory/charcoal surfaces and accessible gold action/selection tokens support both themes; profit/loss retain separate semantic colors. No dependency is added.
+
+Fix product advertising recovery at its scope boundary: applying shared dates keeps the same product open and changes its selection to the posted-date scope. Product searches continue to find evidence across the whole report; opening a product respects explicitly selected dates, while All dates retains full-report scope. Search result actions disclose the destination scope, and product headers show the applied dates. This supersedes ADR-054's unconditional all-report product search destination. Source order/location/account evidence remains report-wide. Shared-date recovery still clears unsupported dimensions and selects posted activity; accounting and coverage validation are unchanged. Product-level Add report/Upload another report must navigate out of the product to Reports.
+
+## ADR-057 — Theme-safe evidence and visible small choices
+
+Fix the legacy Returns card gradients and order hover/selection backgrounds at the presentation layer. All Return snapshot cards use the active neutral panel/text/border tokens with restrained semantic edge markers. Order hover/selection uses the active selection token so source identifiers and financial values remain readable. Return rule/donut surfaces follow the active theme too.
+
+Small fixed choices should be visible native radio groups rather than dropdowns: report search mode, product status, calculation basis, return type and short order activity/return/profitability filters. Radio groups have unique names, readable labels, checked state and keyboard focus. Long/dynamic selectors (date presets, sorting, geography and other dimensions) remain native selects; costly secondary investigations and advanced filters retain disclosures. No financial logic or filter semantics change, and no dependency is added.
+
+## ADR-058 — Explicit report-search modes
+
+Expose All, SKU, ASIN, Title, City, Order and Location as visible choices above the query. Field-specific search matches only the requested field: product SKU/source SKU aliases, configured product identities (presented as ASIN), product titles, location city only, order IDs only, or combined city/state locations. All retains the existing report-wide search. Core uses generic identity terminology and conservative unambiguous alias mapping; it does not infer missing identities. Search results retain existing source evidence and date-scope behavior. Each mode has a matching placeholder and empty-state explanation.
+
+## ADR-059 — Plain profit label, continuous products and brand entrance
+
+Rename the seller-facing Product contribution label to Profit after ads, retaining the exact reported-spend calculation, missing-cost guards and visible exclusions for advertising GST/shared business expenses. It remains distinct from overall Business profit; internal financial identifiers/formulas are unchanged.
+
+Product results use a continuous report with titled sections and jump links rather than accordions. Advertising metrics/calculation/campaign/day evidence, costs/returns, customer locations and sales timing become visible as the user scrolls. Heavy sections mount near the viewport through ContentSection, preserving lazy work without a click requirement. Tables have bounded scrolling. Order filters are visible: short dimensions use radios, longer dimensions use exact-name inputs, and non-variable dimensions are omitted. Timing metric uses visible choices. Source order rows still expand in place for individual evidence.
+
+On the first opening per tab session, the transparent Azulia logo appears centrally, moves to the visible sidebar/mobile brand position and reveals the workspace in roughly 1.1 seconds. Report loading proceeds independently. Reduced-motion preferences bypass the entrance; resize, asset failure and an 1.8-second fallback reveal content immediately. No animation dependency is added.
+
+## ADR-060 — Evidence-led concentration priorities
+
+Add Where to focus below Dashboard's primary metrics. Three cards expose sales concentration, product losses and return losses; visible Sales/Losses/Returns/Ads/Campaigns choices select a shared ranked chart/table. Pure TypeScript selectors compute positive-amount totals, row/cumulative shares, the smallest ranked group reaching at least 80%, and the actual share represented by the top fifth. No fixed 20/80 outcome or growth claim is assumed. Display real counts and percentages, including small groups that depart from 20/80.
+
+Financial sales/loss/return views retain Dashboard's selected financial scope. Product losses use complete-cost profit before unassigned advertising/shared expenses, separately from profitable products. Return losses use the existing order-level loss after recovery/reimbursement; groups with missing costs and entries lacking product identity are excluded with a warning. Product and return losses overlap and must not be added. These rankings do not allocate unassigned account charges.
+
+Ads/campaigns use selected posting dates only when advertising coverage/dimensions are supported. Spend is ranked as spend, not automatically labelled waste/loss. Product rows show ad-attributed sales and existing profit-after-reported-ads where supported; unmatched spend remains as explicit non-navigable evidence. Campaign groups preserve portfolio/name identity and aggregate actual source spend/attributed sales. Campaign review shows constituent products, withholding product navigation for unmatched identities. No campaign profit or incremental return is inferred.
+
+Rows are bounded with explicit more actions, mobile rows retain labels, and selected focus area survives product review. Focus/return analysis is limited to the active Dashboard, excluding open product pages. No dependency or canonical accounting change is introduced. Regression cases are added but execution is deferred by explicit user instruction.
+
+## ADR-061 — Advertising focus compares sales output with spend
+
+Supersedes ADR-060's spend-only Ads/Campaigns candidate selection. Compare each entity's share of reported spend with its share of ad-attributed sales across the complete known advertising group in the selected dates. Review candidates have positive spend and one of: zero attributed sales, spend exceeding attributed sales, known negative product profit after reported ads, or spend share exceeding sales share. A high budget with proportionate sales and no known loss is not flagged. Campaigns do not infer product-cost profit.
+
+Rank only flagged candidates by actual spend. Their shares/cumulative 80% group use flagged spend as denominator; separately labelled Spend share/Sales share compare the full known group. Show ROAS and the reason for review. Relative inefficiency is a review signal, not verified waste, recoverable savings or a recommendation to cut a budget automatically. Unmatched-product sales come from selected-period source campaign rows; missing sales are not assumed zero and incomplete comparisons are excluded with a count. Canonical figures, reported/booked advertising policy and missing-cost guards remain unchanged.

@@ -8,9 +8,9 @@ type Props = {
 }
 
 const statusLabel: Record<OrderLifecycleStatus, string> = {
-  COMPLETED_DELIVERED: 'Completed · delivered',
-  COMPLETED_RETURNED: 'Completed · returned',
-  INCOMPLETE_COVERAGE: 'Awaiting coverage',
+  COMPLETED_DELIVERED: 'Included · no recorded return',
+  COMPLETED_RETURNED: 'Included · return recorded',
+  INCOMPLETE_COVERAGE: 'Awaiting follow-up history',
   INCOMPLETE_DEFERRED: 'Deferred activity',
   INCOMPLETE_MISSING_SALE: 'Original sale missing',
 }
@@ -27,10 +27,10 @@ export function OrderLifecycleSnapshot({ cohort, formatMoney, onClose }: Props) 
 
   return <div className="drilldown-backdrop lifecycle-snapshot-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section className="order-lifecycle-snapshot" role="dialog" aria-modal="true" aria-labelledby="order-lifecycle-title">
-      <header className="drilldown-head"><div><button className="workspace-back" onClick={onClose}>← Dashboard</button><small>Completed-order performance</small><h2 id="order-lifecycle-title">Orders not included</h2><p>Order cycles excluded from performance for {cohort.range.from} to {cohort.range.to}, with the money and evidence still waiting to be included.</p></div><button className="close" aria-label="Close excluded orders snapshot" onClick={onClose}>×</button></header>
+      <header className="drilldown-head"><div><button className="workspace-back" onClick={onClose}>← Dashboard</button><small>Sales-period view</small><h2 id="order-lifecycle-title">Orders not included</h2><p>Orders excluded from the sales-period view for {cohort.range.from} to {cohort.range.to}, with the money and evidence still waiting to be included.</p></div><button className="close" aria-label="Close excluded orders snapshot" onClick={onClose}>×</button></header>
       <div className="lifecycle-snapshot-body">
         <section className="lifecycle-snapshot-kpis" aria-label="Order lifecycle totals">
-          <article className="warning"><span>Orders not included</span><strong>{(cohort.incompleteOrderCount + cohort.missingSaleOrderCount).toLocaleString('en-IN')}</strong><small>Immature, deferred or missing-origin cycles</small></article>
+          <article className="warning"><span>Orders not included</span><strong>{(cohort.incompleteOrderCount + cohort.missingSaleOrderCount).toLocaleString('en-IN')}</strong><small>Immature, deferred or without an original sale cycles</small></article>
           <article className={cohort.incompleteSales ? 'warning' : ''}><span>Sales not included yet</span><strong>{formatMoney(cohort.incompleteSales)}</strong><small>Sales awaiting lifecycle completion</small></article>
           <article className={cohort.excludedOrderCharges ? 'warning' : ''}><span>Order charges not included</span><strong>{formatMoney(cohort.excludedOrderCharges)}</strong><small>Net charges on excluded cycles</small></article>
           <article className={cohort.excludedRefundValue ? 'warning' : ''}><span>Refunds not included yet</span><strong>{formatMoney(cohort.excludedRefundValue)}</strong><small>Refunds on excluded cycles</small></article>
@@ -38,7 +38,7 @@ export function OrderLifecycleSnapshot({ cohort, formatMoney, onClose }: Props) 
           <article><span>Observation through</span><strong>{cohort.observationThrough ?? '—'}</strong><small>{cohort.maturityDays}-day lifecycle rule</small></article>
         </section>
 
-        <section className="lifecycle-method-note"><strong>Why are these orders excluded?</strong><p>An order stays here when its follow-up window has not finished, a linked transaction is deferred, or its original sale is missing from imported history. These events remain in Posted activity and will move into performance automatically when the required evidence becomes available.</p></section>
+        <section className="lifecycle-method-note"><strong>Why are these orders excluded?</strong><p>An order stays here when its follow-up window has not finished, a linked transaction is deferred, or its original sale is missing from imported history. These events remain in Transactions by posting date and will move into performance automatically when the required evidence becomes available.</p></section>
 
         <div className="lifecycle-order-controls"><label>Search order<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Order ID" /></label><label>Exclusion reason<select value={status} onChange={event => setStatus(event.target.value as typeof status)}><option value="ALL">All excluded orders</option>{Object.entries(statusLabel).filter(([value]) => value.startsWith('INCOMPLETE')).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label><span>{orders.length.toLocaleString('en-IN')} of {(cohort.incompleteOrderCount + cohort.missingSaleOrderCount).toLocaleString('en-IN')} excluded orders</span></div>
 

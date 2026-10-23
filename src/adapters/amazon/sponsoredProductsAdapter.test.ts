@@ -21,6 +21,15 @@ describe('Sponsored Products workbook adapter', () => {
     expect(result.rows[0]).toMatchObject({ advertisedSku: 'SKU-1', advertisedAsin: 'B001', spendExcludingTax: 20, attributedSales: 80, advertisedSkuSales: 60, otherSkuSales: 20 })
   })
 
+  it('preserves unknown source columns and rejects invalid rows instead of dropping them', async () => {
+    const headers = ['Date', 'Advertised SKU', 'Advertised ASIN', 'Spend', '7 Day Total Sales (₹)', '7 Day Advertised SKU Sales (₹)', '7 Day Other SKU Sales (₹)', 'Impressions', 'Clicks', '7 Day Total Orders (#)', '7 Day Total Units (#)', 'Future field']
+    const values = ['2026-08-01', 'SKU1', 'B001', 10, 20, 20, 0, 100, 2, 1, 1, 'preserve this']
+    const parsed = await parseSponsoredProductsWorkbook(workbook(headers, values), 'ads.xlsx', 'a')
+    expect(parsed.rows[0].raw?.['Future field']).toBe('preserve this')
+    await expect(parseSponsoredProductsWorkbook(workbook(headers, ['', ...values.slice(1)]), 'ads.xlsx', 'a')).rejects.toThrow(/No rows were discarded/)
+    const invalid = [...values]; invalid[3] = 'not-a-number'
+    await expect(parseSponsoredProductsWorkbook(workbook(headers, invalid), 'ads.xlsx', 'a')).rejects.toThrow(/invalid/)
+  })
   it('rejects unrelated workbooks visibly', async () => {
     await expect(parseSponsoredProductsWorkbook(workbook(['Anything']), 'wrong.xlsx', 'a')).rejects.toThrow(/not a supported/)
   })
