@@ -10,7 +10,7 @@ import type { ClassificationRule } from '../../core/classification/types'
 import { TransactionReviewManager } from '../data-quality/TransactionReviewManager'
 import type { DataQualityCenterResult, QualityAction } from '../../core/validation/dataQualityCenter'
 import { DataQualityCenter } from '../data-quality/DataQualityCenter'
-import type { CompletedOrderCohort } from '../../core/analytics/orderLifecycle'
+import type { OrderCohort } from '../../core/analytics/orderLifecycle'
 import type { SponsoredProductsReport } from '../../core/advertising/types'
 
 type Props = {
@@ -19,7 +19,7 @@ type Props = {
   readonly imports: readonly StoredImport[]; readonly currentImportId: string | null; readonly leftId: string; readonly rightId: string
   readonly comparison: ImportComparison | null; readonly formatMoney: (value: number) => string; readonly classificationRules: readonly ClassificationRule[]
   readonly qualityCenter: DataQualityCenterResult | null; readonly onQualityAction: (action: Exclude<QualityAction, null>) => void
-  readonly cohort: CompletedOrderCohort | null; readonly reportMinDate?: string; readonly reportMaxDate?: string
+  readonly cohort: OrderCohort | null; readonly reportMinDate?: string; readonly reportMaxDate?: string
   readonly sponsoredAttribution: SponsoredProductsAttribution
   readonly sponsoredReport: SponsoredProductsReport | null; readonly sponsoredImporting: boolean; readonly sponsoredError: string | null
   readonly onViewSponsored: () => void
@@ -46,11 +46,7 @@ export function ReportsPage(props: Props) {
       {props.sponsoredReport ? <div className="sponsored-file-status"><span className="status good">Advertising report imported</span>{props.sponsoredAttribution.status === 'AVAILABLE' ? <small>{props.sponsoredAttribution.skus.length} financial products matched · {props.sponsoredAttribution.unmatched.length} advertised SKUs unmatched for {props.sponsoredAttribution.selectedFrom} – {props.sponsoredAttribution.selectedTo}</small> : <small>Choose shared dates to review product matching. An imported report does not mean every SKU is matched.</small>}<strong>{props.sponsoredReport.fileName}</strong><small>{props.sponsoredReport.minDate} → {props.sponsoredReport.maxDate} · {props.sponsoredReport.rows.length.toLocaleString('en-IN')} daily rows</small><button className="secondary" onClick={props.onViewSponsored}>View shared dates</button></div> : null}
       {props.sponsoredError ? <div className="notice-card danger" role="alert"><span>!</span><div><strong>Ads report was not imported</strong><p>{props.sponsoredError}</p></div></div> : null}
     </section>
-    {props.dataset && props.cohort ? <section className={`lifecycle-coverage-card ${props.cohort.missingSaleOrderCount || props.cohort.incompleteOrderCount ? 'warning' : 'good'}`}>
-      <header><div><small>Order follow-up coverage</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orderCoveragePercent.toFixed(1)}% complete</span></header>
-      <div className="lifecycle-coverage-grid"><div><b>{props.cohort.candidateOrderCount.toLocaleString('en-IN')}</b><small>orders in this selection</small></div><div><b>{props.cohort.completedOrderCount.toLocaleString('en-IN')}</b><small>orders with sufficient follow-up</small></div><div><b>{props.cohort.incompleteOrderCount.toLocaleString('en-IN')}</b><small>awaiting follow-up history</small></div><div><b>{props.cohort.missingSaleOrderCount.toLocaleString('en-IN')}</b><small>original sale not in report</small></div></div>
-      <p>Incomplete and orders without an original sale are excluded only from the sales-period view. Every transaction remains preserved in Transactions by posting date and financial reconciliation.</p>
-    </section> : null}
+    {props.dataset && props.cohort ? <section className="lifecycle-coverage-card"><header><div><small>Sales-period evidence</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orders.length} orders selected</span></header><p>All known sales-period orders are included without a maturity cutoff. Pending activity is separate from released results.</p><div className="lifecycle-coverage-grid"><div><b>{props.cohort.pendingOrderCount}</b><small>orders with pending activity</small></div><div><b>{props.cohort.limitedFollowUpOrderCount}</b><small>orders with limited follow-up, still included</small></div><div><b>{props.cohort.missingSale.length}</b><small>original sale missing</small></div></div></section> : null}
     {props.needsMapping && props.rawDataset ? <MappingPanel dataset={props.rawDataset} onApply={props.onApplyMapping} /> : null}
     {props.qualityCenter ? <DataQualityCenter result={props.qualityCenter} formatMoney={props.formatMoney} onAction={props.onQualityAction} /> : null}
     {props.dataset ? <div id="classification-review"><TransactionReviewManager dataset={props.dataset} rules={props.classificationRules} formatMoney={props.formatMoney} onSaveRule={props.onSaveClassificationRule} onDeleteRule={props.onDeleteClassificationRule} /></div> : null}

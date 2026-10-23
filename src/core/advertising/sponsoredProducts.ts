@@ -92,8 +92,14 @@ export function buildSponsoredProductsAttribution(
   const rows = report.rows.filter(row => row.date >= range.from && row.date <= range.to)
   const performance = summarizeSponsoredPerformance(rows)
 
+  const salesBySku = new Map<string,number>()
+  for (const event of events) if (event.sku && event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0) salesBySku.set(event.sku,(salesBySku.get(event.sku) ?? 0) + event.amount)
+  const append = (map:Map<string,SponsoredProductRow[]>, key:string, row:SponsoredProductRow) => {
+    const group = map.get(key)
+    if (group) group.push(row); else map.set(key,[row])
+  }
   const grouped = new Map<string, SponsoredProductRow[]>()
-  for (const row of rows) grouped.set(row.advertisedSku, [...(grouped.get(row.advertisedSku) ?? []), row])
+  for (const row of rows) append(grouped,row.advertisedSku,row)
   const matched = new Map<string, SponsoredProductRow[]>()
   const unmatched: { sku: string; spend: number; reason: string }[] = []
   for (const [advertisedSku, skuRows] of grouped) {
@@ -101,16 +107,16 @@ export function buildSponsoredProductsAttribution(
     // Exact identity wins; normalized aliases are accepted only when unambiguous.
     const sku = candidates?.has(advertisedSku) ? advertisedSku : candidates?.size === 1 ? [...candidates][0] : undefined
     if (!sku) { unmatched.push({ sku: advertisedSku, spend: summarizeSponsoredPerformance(skuRows).spend, reason: candidates?.size ? 'Ambiguous SKU identity' : 'No financial SKU match' }); continue }
-    matched.set(sku, [...(matched.get(sku) ?? []), ...skuRows])
+    for (const row of skuRows) append(matched,sku,row)
   }
   const skus: SponsoredSkuAttribution[] = [...matched].map(([sku, skuRows]) => {
     const values = summarizeSponsoredPerformance(skuRows)
-    const grossSales = round(sum(events.filter(event => event.sku === sku && event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0).map(event => event.amount)))
+    const grossSales = round(salesBySku.get(sku) ?? 0)
 
     const groups = new Map<string, SponsoredProductRow[]>(), days = new Map<string, SponsoredProductRow[]>()
     for (const row of skuRows) {
       const group = JSON.stringify([row.campaign, row.adGroup])
-      groups.set(group, [...(groups.get(group) ?? []), row]); days.set(row.date, [...(days.get(row.date) ?? []), row])
+      append(groups,group,row); append(days,row.date,row)
     }
     return { ...values, sku, asin: [...new Set(skuRows.map(row => row.advertisedAsin).filter(Boolean))].join(', '), grossSales,
       tacos: ratio(values.spend, grossSales, 100),

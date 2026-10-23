@@ -289,7 +289,7 @@ The shared application shell owns an explicit dark/light preference, persists it
 Reason:
 A global root theme prevents feature-specific styling logic and reduces reload flashes. An explicit, persistent choice is predictable for non-technical users, while native `color-scheme` keeps browser controls consistent with the selected appearance.
 
-## ADR-044 — Completed-order cohort performance
+## ADR-044 — Completed-order cohort performance (superseded by ADR-045)
 
 Decision:
 The selected performance period identifies orders by their original positive product-sale date. A pure lifecycle selector gathers every order-linked event available in imported history, including later refunds, fee reversals, and reimbursements. Orders with deferred activity or insufficient follow-up coverage are excluded from completed-order metrics, as are in-period refunds and charges whose original sale is absent. Exclusion never deletes canonical events: posted-date activity remains available as the reconciliation view. Account-level events without an order ID remain in the selected posted period and are disclosed separately from order lifecycle evidence.
@@ -526,3 +526,32 @@ Rows are bounded with explicit more actions, mobile rows retain labels, and sele
 Supersedes ADR-060's spend-only Ads/Campaigns candidate selection. Compare each entity's share of reported spend with its share of ad-attributed sales across the complete known advertising group in the selected dates. Review candidates have positive spend and one of: zero attributed sales, spend exceeding attributed sales, known negative product profit after reported ads, or spend share exceeding sales share. A high budget with proportionate sales and no known loss is not flagged. Campaigns do not infer product-cost profit.
 
 Rank only flagged candidates by actual spend. Their shares/cumulative 80% group use flagged spend as denominator; separately labelled Spend share/Sales share compare the full known group. Show ROAS and the reason for review. Relative inefficiency is a review signal, not verified waste, recoverable savings or a recommendation to cut a budget automatically. Unmatched-product sales come from selected-period source campaign rows; missing sales are not assumed zero and incomplete comparisons are excluded with a count. Canonical figures, reported/booked advertising policy and missing-cost guards remain unchanged.
+
+
+## ADR-045 — Sale-period orders with released and pending activity
+
+Decision (15 October 2026, explicitly requested by the seller):
+Replace the completed-order waiting gate with **Orders sold in selected period**. Original positive product-sale dates select the orders, including deferred sales for pending disclosure. Search the entire active report for their linked activity, independent of the selected end date. Include available/released activity immediately; never remove a released sale because a later refund resets a deadline or another transaction is deferred. Less than 20 days of follow-up is informational only and never proves completion.
+
+Explicit Deferred transactions are separated from main metrics as pending sales, refunds, fees, reimbursements, operating net, and settlement transfers. An explicitly labelled estimate combines available and pending events once and recalculates COGS under the same historical cost and missing-cost policy. Unknown/missing release statuses stay included with a visible disclosure; they are not silently discarded or claimed as verified Released transactions.
+
+Resolve matching deferred/released records conservatively at the whole source-row level. Only otherwise identical rows, including raw references and evidence except status, can match. Preserve repeated-row multiplicity; each Released row replaces at most one matching Deferred row. Date-shifted, changed, and ambiguous rows remain separate for review. Canonical imports, raw data, reconciliation, and Posted activity are unchanged.
+
+Missing-original-sale activity is shown separately and never assigned an invented sales month. Account-level events without an order ID use posting dates in the selected period; their pending amounts are separated too. Settlement transfers remain outside operating profit. Only the active report is searched; saved report snapshots are not silently merged.
+
+UI shows the original sale range, observation-through date, selected-order count, pending activity, unmatched evidence, and inline release statuses. Audit workbooks disclose the calculation basis and provide pending, missing-origin, and superseded-deferred evidence sheets. Desktop and mobile share this flow.
+
+Reason:
+The 20-day gate excluded known sales and adjustments without establishing actual lifecycle completion. An observed-to-date order cohort answers how a sales period performed using all imported evidence, while explicit pending values and a separate Posted activity view preserve status transparency and financial auditability.
+
+## ADR-062 — Installable release, system appearance and reliability audit
+
+User authorizes installation support, full checks/review/performance fixes and pushing the completed release to main. Default appearance follows the operating system on the first visit and in the first-paint script; explicit saved Light/Dark choices remain respected.
+
+Ship a scoped web manifest, logo-based 192/512 icons, a padded maskable icon and an iPhone touch icon. Install actions live in navigation and Settings, using the browser prompt when available and accessible browser-specific instructions otherwise. Standalone installation is detected. Production registers a service worker; development intentionally avoids worker caches. A build-time local Vite plugin precaches the shell, hashed lazy chunks and small brand assets. It uses native Node build APIs, with @types/node added only for development type checking. No PWA runtime dependency is added.
+
+Navigation uses network-first with a scoped cached-shell offline fallback. Cache versions depend on file contents; updates wait for an explicit Update and reload action so drafts are not silently interrupted. Cache cleanup is app-scope-specific and keeps a preceding version. Source report data stays in IndexedDB/local storage and is never uploaded or added to shell caches. Offline/setup/update status remains visible.
+
+Integrate main's sale-period correction (c54c474): all orders originally sold within the selected period remain included regardless of age, linked released activity is included, pending evidence stays separate, and deferred/released duplicates are resolved conservatively. Preserve that evidence in summaries, order details and audit export. Migrate the older saved calculation-basis identifier. The 20-day window is a follow-up indicator, never an eligibility gate.
+
+Performance changes: index advertising sales and SKU joins once, avoid copying growing campaign/day arrays, share cost resolution within cohort analysis, omit per-order financial details until requested, and lazy-load Cost/Returns/Reports/Settings screens. Remove unused legacy advertising/order dialogs, stale cost-panel styles and unused symbols. Update Vite to the compatible audited security patch. Production PWA tests run separately from dev tests with distinct artifact directories.

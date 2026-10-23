@@ -1,0 +1,10 @@
+date/time,settlement id,type,order id,sku,description,quantity,order city,order state,Transaction Status,fulfillment,product sales,selling fees,other,total
+31 Aug 2026 10:00:00 UTC,TEST,Order,TEST-AUG,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,1000,0,0,1000
+5 Sep 2026 10:00:00 UTC,TEST,Refund,TEST-AUG,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,-1000,0,0,-1000
+14 Oct 2026 10:00:00 UTC,TEST,SAFE-T Reimbursement,TEST-AUG,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,0,0,100,100
+30 Sep 2026 10:00:00 UTC,TEST,Order,TEST-SEP,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,1000,-100,0,900
+5 Oct 2026 10:00:00 UTC,TEST,Refund,TEST-SEP,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Deferred,Merchant,-1000,0,0,-1000
+7 Oct 2026 10:00:00 UTC,TEST,SAFE-T Reimbursement,TEST-SEP,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Deferred,Merchant,0,0,100,100
+29 Sep 2026 10:00:00 UTC,TEST,Order,TEST-PENDING,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Deferred,Merchant,500,0,0,500
+5 Oct 2026 10:00:00 UTC,TEST,Order,TEST-OCT,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,700,0,0,700
+15 Sep 2026 10:00:00 UTC,TEST,Refund,TEST-MISSING,TEST-SKU,Synthetic test transaction,1,Test City,Test State,Released,Merchant,-200,0,0,-200

@@ -1,0 +1,17 @@
+{
+  "id": "./",
+  "name": "Azulia Seller Flow",
+  "short_name": "Azulia",
+  "description": "Private seller analytics, product profit and advertising insights.",
+  "lang": "en",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f5ef",
+  "theme_color": "#806017",
+  "icons": [
+    { "src": "brand/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "brand/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "brand/app-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

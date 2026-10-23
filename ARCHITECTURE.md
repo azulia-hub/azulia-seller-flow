@@ -454,3 +454,14 @@ ContentSection uses IntersectionObserver to mount visible product sections near 
 `core/insights/focusAnalysis.ts` accepts generic product/return/ad/campaign evidence and produces deterministic ranked shares, cumulative totals and concentration groups. App maps existing financial/advertising selector outputs into that input. `FocusPriorities` displays results, manages visible analysis selection and opens source product/campaign evidence; React does not calculate financial values/shares. Work is limited to the active Dashboard.
 
 `rankAdvertisingEfficiency` filters review candidates using generic spend/sales evidence and optional known product profit, then feeds flagged spend into the existing concentration selector. Full-group spend/sales percentages, ROAS and review reason are calculated in core. Unmatched source sales remain distinct from unavailable sales. UI displays the two denominators explicitly (ADR-061).
+
+
+## Sale-period analysis and release status
+
+`buildOrderCohort` in `core/analytics/orderLifecycle.ts` selects orders by original positive sale date and gathers their complete linked history from the active report. It returns available, pending, unmatched, and superseded evidence streams without modifying canonical events. No maturity deadline gates inclusion. Account-level activity uses the selected posting period.
+
+`buildCohortFinancials` produces available totals, pending components, an estimate including pending activity, and order-level evidence using the shared dashboard and historical-cost engines. React only renders these results. An entire identical Deferred source row may be superseded by one Released counterpart; raw references and multiplicity must be preserved. Posted activity remains the source reconciliation view. See ADR-045.
+
+PWA delivery (ADR-062): scripts/viteOffline.ts is a local build-only plugin that hashes finished assets and generates scoped sw.js. public/manifest.webmanifest and platform brand icons are relative-path safe for static subdirectory hosting. adapters/browser/pwa.tsx owns install/update/offline presentation and production-only worker registration. A local-only built-server fixture and separate Playwright config exercise nested hosting, cache persistence and update activation; test artifacts are isolated. @types/node is a development-only requirement for the Node build adapter.
+
+Performance/reliability audit: indexed advertising grouping and product joins replace repeated full scans; core cohort financial summaries share indexed cost lookup and only include per-order details when requested. React.lazy splits large workspace screens. Main's sale-period order/pending semantics are integrated; OrderActivityContext carries optional source activity into inline audits without duplicating metric calculations.

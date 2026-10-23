@@ -1,0 +1,38 @@
+.calculation-view-note { margin: 0; padding: 0 16px 14px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.pending-note { display: block; color: var(--yellow); font-size: 12px; line-height: 1.5; }
+.pending-activity-panel { margin-bottom: 20px; }
+.pending-activity-panel .panel-head { flex-wrap: wrap; }
+.pending-activity-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.pending-activity-grid article { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); }
+.pending-activity-grid span,.pending-activity-grid strong { display: block; overflow-wrap: anywhere; }
+.pending-activity-grid span { color: var(--muted); font-size: 11px; }
+.pending-activity-grid strong { margin-top: 6px; font-size: 18px; }
+.pending-estimate { margin-top: 16px; }
+.pending-estimate summary { cursor: pointer; padding: 10px 0; }
+.pending-estimate p,.activity-order-evidence p,.activity-order-card p,.inline-activity-status p { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.activity-tabs { display: flex; flex-wrap: wrap; }
+.activity-tabs button { white-space: normal; }
+.activity-order-list { display: grid; gap: 12px; }
+.activity-order-card { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.activity-order-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 14px; padding: 16px; border: 0; background: transparent; color: var(--text); text-align: left; overflow-wrap: anywhere; }
+.activity-order-toggle small { display: block; margin-top: 5px; color: var(--muted); }
+.activity-order-toggle > span:last-child { font-size: 12px; color: var(--muted); }
+.activity-order-evidence { min-width: 0; padding: 0 16px 16px; }
+.activity-order-evidence .table-scroll,.inline-activity-status .table-scroll { max-width: 100%; overflow-x: auto; }
+.activity-order-evidence table { min-width: 650px; }
+.inline-activity-status { min-width: 0; padding: 12px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.order-lifecycle-snapshot { background: var(--bg); color: var(--text); }
+.lifecycle-snapshot-body { overflow-x: hidden; }
+.cohort-summary-actions { max-width: 100%; }
+.cohort-summary-actions button,.cohort-summary-actions > span { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .pending-activity-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .activity-order-toggle { align-items: flex-start; flex-direction: column; }
+  .pending-activity-grid strong { font-size: 16px; }
+  .activity-tabs button { flex: 1; min-width: 0; }
+}
+
+/* Expanded filters must scroll away on small screens so cards and actions remain reachable. */
+@media (max-width: 900px) {
+  .global-filter-card { position: static; }
+}

@@ -327,3 +327,12 @@ ADR-059: Product contribution is presented as Profit after ads, with unchanged c
 Where to focus (ADR-060) prioritizes the actual products/campaigns behind most selected-period sales, product losses, return losses and reported ad spend. It measures concentration rather than promising 80% growth. Losses are separate from profits, missing evidence remains explicit, and campaign spend/sales do not imply verified campaign profitability.
 
 ADR-061: Ads/Campaigns focus now selects weaker sales output relative to spend, zero-sale spend, spend exceeding attributed sales and supported product losses after ads. Large budgets with proportionate sales are not automatically flagged. The 80% analysis covers only flagged spend; full-group spend/sales shares are labelled separately.
+
+
+## Sales-period performance (current policy)
+
+Select orders by original sale date and include all linked activity available in the active uploaded report, even when posted later. Main totals exclude explicit deferred transactions; pending sales, refunds, fees, reimbursements, and an estimate including pending activity are shown separately. Never exclude an entire order because it has pending activity or insufficient follow-up days. Unknown release statuses remain visible and included with disclosure.
+
+Label this view “Orders sold in selected period” with an observation-through date; do not claim an order is finally completed after an arbitrary waiting period. Keep Posted activity for reconciliation, missing-origin activity separate, and unassigned account expenses on their selected posting dates. See ADR-045.
+
+Current release (ADR-062): default theme is System; explicit choices persist. Azulia is installable from its deployed HTTPS site, uses the provided logo in platform icons and supports offline reopening of already saved reports after the production shell is cached. Updates require explicit reload and do not silently interrupt drafts. Installation does not sync devices. Sale-period reporting includes recent orders without a maturity gate; pending activity is separate.

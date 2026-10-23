@@ -79,6 +79,14 @@ describe('focus concentration', () => {
     expect(result.CAMPAIGNS.rows[0]).toMatchObject({ sales:0, reviewReason:'Spend without ad-attributed sales' })
     expect(result.CAMPAIGNS.rows[0].children?.[0].sku).toBeUndefined()
   })
+  it('links campaign SKU aliases only to unambiguous financial identities', () => {
+    const input = { products:[], returns:[], ads:[], unmatchedAds:[], from:'2026-09-01', to:'2026-09-30', advertisingAvailable:true,
+      normalizeSku:(value:string) => value.replaceAll('-CHANNEL',''), financialSkus:['A'],
+      campaigns:[{ campaign:'Weak', portfolio:'', sku:'A-CHANNEL', date:'2026-09-01', spend:100, attributedSales:0 }],
+    }
+    expect(buildFocusAnalysis(input).CAMPAIGNS.rows[0].children?.[0].sku).toBe('A')
+    expect(buildFocusAnalysis({ ...input, financialSkus:['A','A-CHANNEL','A-CHANNEL-CHANNEL'], campaigns:[{ ...input.campaigns[0],sku:'A-CHANNEL-CHANNEL-CHANNEL' }] }).CAMPAIGNS.rows[0].children?.[0].sku).toBeUndefined()
+  })
   it('withholds ad and campaign results when coverage is unavailable', () => {
     const result = buildFocusAnalysis({ products:[], returns:[], ads:[{ sku:'A', spend:100, attributedSales:200, profitAfterAds:30 }], unmatchedAds:[], campaigns:[], from:'', to:'', advertisingAvailable:false })
     expect(result.ADS.rows).toEqual([])

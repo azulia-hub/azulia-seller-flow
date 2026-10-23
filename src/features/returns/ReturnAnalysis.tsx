@@ -1,5 +1,4 @@
 import { ChoiceGroup } from '../../components/ChoiceGroup'
-import { returnTypeLabel } from '../../components/presentationLabels'
 import { useMemo, useState } from 'react'
 import { filterSkuReturns, summarizeReturns, type SkuReturnFilterSpec } from '../../core/analytics/returnSummary'
 import { ReturnCharts } from '../../components/ReturnCharts'

@@ -2,7 +2,6 @@ import { LazyDetails } from './LazyDetails'
 import { SkuWorkspace } from './SkuWorkspace'
 import { useEffect, useState } from 'react'
 import { ChoiceGroup } from './ChoiceGroup'
-import type React from 'react'
 import type { MetricDrilldownResult } from '../core/analytics/metricDrilldown'
 import type { TimePeriodPreset } from '../core/analytics/timePeriods'
 import type { SkuProfitSummary } from '../core/analytics/orderProfit'
@@ -31,7 +30,6 @@ export function MetricSkuDrilldown({ onSelectProduct, sponsored, advertisingProd
   const rows = result.rows.filter(row => row.label.toLowerCase().includes(search.trim().toLowerCase()) && (!hideZero || Math.abs(row.value ?? 0) >= .01)).sort((a, b) => rankDirection === 'TOP' ? Math.abs(b.value ?? 0) - Math.abs(a.value ?? 0) : Math.abs(a.value ?? 0) - Math.abs(b.value ?? 0))
 
   const value = (amount: number | null) => amount === null ? '—' : result.format === 'MONEY' ? formatMoney(amount) : result.format === 'PERCENT' ? percent(amount) : amount.toLocaleString('en-IN')
-  const geoMax = Math.max(1, ...result.geography.map(point => Math.abs(point.value)))
   const selectedPeriodId = comparisonPeriod || result.recommendedPeriod
   const comparison = result.periodComparisons.find(item => item.id === selectedPeriodId) ?? result.periodComparisons[0]
 

@@ -1,6 +1,6 @@
 # Azulia Seller Flow — Project Handoff
 
-Last updated: 12 September 2026  
+Last updated: 15 October 2026
 Current production version: `v1.0.2`  
 Repository: https://github.com/azulia-hub/azulia-seller-flow  
 Live application: https://azulia-hub.github.io/azulia-seller-flow/
@@ -121,9 +121,11 @@ Returned goods are assumed resellable, so their COGS is reversed. Return profita
 - Secondary analysis reached through metric and SKU drilldowns rather than a large sidebar.
 - Global fulfilment and time-period filters.
 - Default period is now **Entire report**. An August report shows August; a January–August report shows January–August.
-- Dashboard calculations can switch between **Completed orders** and **Posted activity**. Completed orders are selected by original sale date, collect later linked refunds/reimbursements from imported history, and exclude deferred, immature, or missing-origin cycles with visible coverage counts. Posted activity retains every event on its marketplace posting date for reconciliation.
-- The completed-order banner opens an excluded-orders snapshot with sales, net order charges, refunds, and reimbursements not included yet, plus a searchable/status-filtered evidence row for every immature, deferred, or missing-origin order.
-- Report upload guidance recommends at least 20 days before and after the intended analysis period. This is a minimum observation window, not a promise that every marketplace lifecycle has finalized.
+- Dashboard calculations switch between **Orders sold in selected period** and **Posted activity**. Sale-period analysis selects original sales in the chosen dates and gathers all later linked activity from the entire active report. There is no 20-day exclusion.
+- Main results exclude explicit Deferred components. Pending sales, refunds, fees, reimbursements, operating net, and settlements are disclosed separately, with an estimate including pending activity and historical COGS. A deferred fee/refund never hides a released sale. Missing/unknown release statuses remain included with a visible warning.
+- The summary opens searchable Pending transactions and Original sale missing tabs with order-level financial results and full source/status evidence. Inline order details also show pending components and release status. Missing-origin activity is never assigned a guessed sales month.
+- Upload guidance requests the widest available history. Follow-up under 20 days is informational only. Exact whole-row Deferred/Released matches are counted once in order analysis, preserving raw references and multiplicity; all source events remain in Posted activity and reconciliation.
+- Account-level activity uses posting dates in the chosen period. Saved reports remain separate snapshots rather than automatically merged history. Audit exports disclose basis and observation date, with separate pending, unmatched, and superseded evidence sheets.
 - Available preset periods are restricted by report date coverage.
 - Presets include last 3/7/30 days, week/month choices, 3/6 months, and year choices where supportable.
 - Custom date range and automatic equal-length previous-period comparison.
@@ -159,7 +161,15 @@ Returned goods are assumed resellable, so their COGS is reversed. Return profita
 
 ## Quality and deployment state
 
-Current verified state at `v1.0.2`:
+Working-tree verification on 15 October 2026 (ADR-045; not yet deployed):
+
+- Typecheck and production build pass.
+- 25 Vitest files / 91 tests pass, including embedded-fee and later-refund profit regressions.
+- All 10 Playwright desktop/mobile journeys pass, including sale-period pending totals, later evidence, unmatched review, and mobile overflow checks.
+- A private local report review confirmed that August/September sale-period orders are retained, deferred amounts are separated, and complete-import reconciliation remains unchanged at zero difference. Private financial values and source records are not included in repository artifacts.
+- `report/` is ignored alongside the legacy `reprot/` path. Regression fixtures are synthetic.
+
+Historical production verification at `v1.0.2`:
 
 - TypeScript build passes.
 - 24 Vitest files and 77 tests pass.
@@ -382,3 +392,19 @@ Ads focus also shows verified product losses after reported ads separately from 
 User rejected large-budget ranking as a signal of poor ads. Ads/Campaigns focus now compares full-group spend share against ad-attributed sales share, with explicit zero-sale/spend-exceeds-sales criteria and known negative product profit after ads. Candidates alone are ranked by spend; 80%/running totals refer to flagged spend. Table shows full-group Spend share, Sales share, ROAS and Why review. Strong spenders with proportionate sales and no supported loss disappear from the attention list. This is relative inefficiency, not verified waste or recoverable savings.
 
 Unmatched source products use their raw selected-period attributed sales; missing sales exclude comparison instead of assuming zero. Campaign profitability remains unclaimed. Updated unexecuted regressions for proportional large budgets, weak output, zero sales, unavailable evidence, known losses and date-scoped campaign evidence. No tests, builds or browser automation run.
+
+## Installable audited release — ADR-062
+
+Added native/fallback Install Azulia actions in the sidebar and Settings. Production manifest/icons use the supplied logo, including maskable and iPhone variants. Local build plugin generates a content-versioned scoped service worker, precaching hashed lazy chunks and small brand assets. Offline reopening restores reports from existing local storage. Updates wait for explicit reload; local reports/costs are not cleared. Dev mode avoids service-worker caches. Fresh users follow OS appearance; explicit saved themes persist.
+
+Integrated main c54c474 without reverting the workspace: sale-period totals include recent sales, linked released evidence and separate pending activity. Restored pending/unmatched review and per-order activity in inline audit, carried source cohort into exports and migrated the legacy saved-basis identifier. Financial regression tests cover original-sale COGS reversal and released/deferred duplication.
+
+Optimized repeated advertising scans/array copies and bulk SKU joins. Shared cohort cost resolvers and deferred per-order details reduce unnecessary Dashboard work. Split Cost/Returns/Reports/Settings into lazy chunks. Removed three unrouted legacy screens and old cost-panel CSS/unused imports. Added Node development types for the build plugin and patched Vite to 6.4.5; dependency audit returned zero vulnerabilities.
+
+Production browser tests verify manifest/icon dimensions, native prompt integration, offline report/product reopening on desktop/mobile under /azulia-seller-flow/, and update activation without data loss. A test-runner artifact collision found during parallel verification is fixed by distinct output directories. Expanded app journeys cover weak-ad/campaign selection, field-specific search and initial system/reduced-motion behavior.
+
+Release validation (2026-10-24): production build/type checks pass with unused-symbol checks enabled. Unit suite: 138 passing, one opt-in private fixture skipped. Current app suite: all 20 journeys passed; restored main sales-period/pending-evidence journeys also pass at 1280px and 375px. Targeted large-report check after the final scope optimization: product open 317 ms, live cost preview 640 ms for 3,000 orders/6,000 events. Synthetic 12,000-order/26,400-event benchmark measured 612 ms for product summaries and 247 ms for search indexing on this host. These are bounded synthetic measurements, not arbitrary-scale guarantees. Initial JS bundle reduced from approximately 502 KB to 445 KB (147 KB → 133 KB gzip).
+
+Production PWA checks include a real persistent Chromium profile (not private browsing), manifest/icon/platform metadata, native install-event integration, nested-host offline report/product restoration at both sizes, and explicit update/reload preserving saved reports. Icon backgrounds are opaque warm ivory, while ordinary workspace logos retain transparency; the maskable logo fits inside the circular safe zone. A native-radio hit-target bug discovered by browser checks is fixed with full-label inputs and scroll spacing, and fixed navigation now scrolls at short viewport heights.
+
+Final release-build PWA verification: all 6 checks passed, including normal-profile Chromium installability. Combined browser coverage is 22 app journeys plus 6 production PWA checks. Dependency audit: zero known vulnerabilities.

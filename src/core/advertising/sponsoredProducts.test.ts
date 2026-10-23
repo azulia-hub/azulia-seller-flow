@@ -1,5 +1,5 @@
 import { listAccountCharges } from '../analytics/accountCharges'
-import { buildSellerAdvertisingOverview, buildSellerProductOverview } from './sellerOverview'
+import { buildSellerAdvertisingOverview, buildSellerProductOverview, buildSellerProductOverviews } from './sellerOverview'
 import { describe, expect, it } from 'vitest'
 import type { CanonicalFinancialEvent } from '../data/types'
 import type { SponsoredProductsReport } from './types'
@@ -135,6 +135,14 @@ describe('seller overview composition', () => {
     const withoutAds = buildSellerProductOverview(cohort, posted, buildSponsoredProductsAttribution(events, null, range))
     expect(withoutAds.product).toBe(cohort)
     expect(withoutAds.contributionStatus).toBe('NO_ADS_EVIDENCE')
+  })
+  it('indexed list composition matches individual selector results without mutating source evidence', () => {
+    const attribution = buildSponsoredProductsAttribution(events, report, range)
+    const posted = summarizeSkuProfit(events, 'SKU1', [{ sku:'SKU1', unitCost:100, updatedAt:'' }], 'BLOCK')
+    const products = [posted, { ...posted, sku:'UNKNOWN', missingCost:true }]
+    const before = JSON.stringify({ products, attribution })
+    expect(buildSellerProductOverviews(products,[posted],attribution)).toEqual(products.map(product => buildSellerProductOverview(product,product.sku === posted.sku ? posted : undefined,attribution)))
+    expect(JSON.stringify({ products, attribution })).toBe(before)
   })
   it('joins product evidence while retaining missing costs and unmatched status', () => {
     const attribution = buildSponsoredProductsAttribution(events, report, range)

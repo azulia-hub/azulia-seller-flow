@@ -165,7 +165,8 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 
 - [x] Previous period comparison with report-anchored presets and coverage status
 - [x] SKU and filtered-order posted-time analysis by day, weekday, hour, and relative week
-- [x] Completed-order cohort view with lifecycle maturity, missing-origin detection, coverage disclosure, and posted-activity fallback
+- [x] Sale-period order view searches full active-report history, includes released activity without a maturity gate, separates pending transactions and estimates, and retains unmatched evidence and Posted activity
+- [x] Pending/unmatched review, inline release-status evidence, and calculation-basis-aware audit workbook sheets
 - [ ] MoM
 - [ ] QoQ
 - [ ] YoY
@@ -274,7 +275,7 @@ AI must not independently calculate business numbers.
 - [x] Independent private report control-total verification and synthetic desktop/mobile regression coverage
 - [ ] Parse advertising invoices for actual tax evidence and billing-period matching
 - [ ] Add ads reports and tax evidence to versioned backup/restore (ads report currently stored separately)
-- [ ] Merge the newer main-branch sale-period accounting fix before extending joined ads beyond posting-period analysis
+- [x] Merge the newer main-branch sale-period accounting fix before extending joined ads beyond posting-period analysis
 - [x] Normalize signed Amazon refund units so good returns reverse COGS for either source encoding (ADR-047)
 - [x] Advertising defaults to shared report dates and matched advertised SKUs, with clear coverage/filter recovery and an all-financial-products selector (ADR-048)
 
@@ -342,7 +343,7 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 - [x] Bounded product/order/cost/bulk-selection rendering, product filters/sorting and searchable cost history.
 - [x] Original-sale cost reversal in daily refund trends, visible single-point charts, correct mobile result-column visibility and refreshed bulk-edit consent.
 - [x] Synthetic benchmark command and large-report browser responsiveness/reload regression.
-- [ ] Extend performance profiling to substantially larger, representative private reports before claiming arbitrary-scale responsiveness.
+- [ ] Extend performance profiling to substantially larger, representative private reports before claiming arbitrary-scale responsiveness. Synthetic 12,000-order and browser 3,000-order checks are available.
 
 ### Product page and focused cost entry (ADR-055)
 - [x] Replace the product drawer with a dedicated responsive workspace page and performance-first hierarchy.
@@ -379,3 +380,12 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 - [x] Add core regression cases; execution deferred at the user's explicit request.
 
 - [x] Replace spend-only advertising priorities with spend-versus-sales comparison, supported losses, visible reasons/ROAS and flagged-spend concentration (ADR-061). Regression cases updated/added; execution remains deferred.
+
+### Installable release and audited main integration (ADR-062)
+- [x] Scoped manifest, native install/fallback actions, proper logo/maskable/iPhone icons and production offline shell.
+- [x] Explicit safe update/reload, offline notice and per-app cache cleanup.
+- [x] System theme by default, with saved overrides and reduced-motion behavior preserved.
+- [x] Merge main's sale-period correction and preserve pending/unknown source evidence.
+- [x] Advertising grouping/indexed joins, shared/deferred cohort cost work and lazy workspace bundles.
+- [x] Remove obsolete dialogs/styles/imports and apply audited compatible build-tool patch.
+- [x] Add production installation/offline/update and expanded focus/search/theme browser regressions.

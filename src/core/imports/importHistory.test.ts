@@ -4,7 +4,7 @@ import { compareImports, profileDataset, type StoredImport } from './importHisto
 
 const base = { source: 'test', sourceDatasetId: 'd', sourceRow: 1, orderId: 'O1', sku: 'A', quantity: 1, amountClass: 'OPERATING' as const, state: null, city: null, status: null, rawType: 'Order', rawDescription: null, classified: true, raw: {} }
 const sale = (id: string, date: string, amount: number): CanonicalFinancialEvent => ({ ...base, id, date, event: 'SALE', amount, amountType: 'PRODUCT_REVENUE' })
-const dataset = (id: string, events: CanonicalFinancialEvent[]): CanonicalDataset => ({ source: 'test', events, quality: { source: 'test', sourceRowCount: events.length, normalizedEventCount: events.length, unknownTransactionTypes: [], unclassifiedEventCount: 0, missingKeys: { orderId: 0, sku: 0, date: 0 }, reconciliation: { supported: true, sourceTotal: events.reduce((sum, event) => sum + event.amount, 0), normalizedTotal: events.reduce((sum, event) => sum + event.amount, 0), difference: 0, reconciled: true } } })
+const dataset = (_id: string, events: CanonicalFinancialEvent[]): CanonicalDataset => ({ source: 'test', events, quality: { source: 'test', sourceRowCount: events.length, normalizedEventCount: events.length, unknownTransactionTypes: [], unclassifiedEventCount: 0, missingKeys: { orderId: 0, sku: 0, date: 0 }, reconciliation: { supported: true, sourceTotal: events.reduce((sum, event) => sum + event.amount, 0), normalizedTotal: events.reduce((sum, event) => sum + event.amount, 0), difference: 0, reconciled: true } } })
 const stored = (id: string, data: CanonicalDataset): StoredImport => ({ id, fileName: `${id}.csv`, importedAt: '2026-09-01', dataset: data, profile: profileDataset(data) })
 
 describe('import history comparison', () => {

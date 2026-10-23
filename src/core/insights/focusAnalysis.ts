@@ -48,6 +48,8 @@ export interface FocusProduct { sku:string; name?:string; sales:number; profitBe
 export interface FocusAd { sku:string; spend:number; attributedSales:number; profitAfterAds:number | null }
 export interface FocusCampaignEvent { campaign:string; portfolio:string; sku:string; date:string; spend:number; attributedSales:number }
 export function buildFocusAnalysis(input: {
+  financialSkus?:readonly string[]
+  normalizeSku?:(sku:string) => string
   products:readonly FocusProduct[]
   returns:readonly { sku:string | null; loss:number; missingCost:boolean }[]
   ads:readonly FocusAd[]
@@ -56,6 +58,18 @@ export function buildFocusAnalysis(input: {
   from:string; to:string; advertisingAvailable:boolean
 }): Record<FocusArea, FocusResult> {
   const identities = new Map(input.products.map(product => [product.sku,product]))
+  const financialSkus = new Set(input.financialSkus ?? input.products.map(product => product.sku))
+  const identityKey = (sku:string) => (input.normalizeSku?.(sku) ?? sku).trim()
+  const canonical = new Map<string,string[]>()
+  for (const sku of financialSkus) {
+    const key = identityKey(sku), values = canonical.get(key)
+    if (values) values.push(sku); else canonical.set(key,[sku])
+  }
+  const financialSku = (source:string) => {
+    if (financialSkus.has(source)) return source
+    const matches = canonical.get(identityKey(source))
+    return matches?.length === 1 ? matches[0] : undefined
+  }
   const ads = new Map(input.ads.map(ad => [ad.sku,ad]))
   const productItem = (sku:string, value:number): FocusItem => {
     const product = identities.get(sku), ad = ads.get(sku)
@@ -82,7 +96,7 @@ export function buildFocusAnalysis(input: {
     group.products.set(item.sku,product); campaigns.set(id,group)
   }
   const campaignItems = [...campaigns].map(([id,group]): FocusItem => ({ id, label:group.label, value:group.spend, adSpend:group.spend, sales:group.sales,
-    children:[...group.products].map(([sku,product]) => ({ id:sku || '(unidentified)', sku:identities.has(sku) ? sku : undefined, label:sku || 'Unidentified product', value:product.spend, adSpend:product.spend, sales:product.sales })).sort((a,b) => b.value - a.value || a.id.localeCompare(b.id)) }))
+    children:[...group.products].map(([sku,product]) => ({ id:sku || '(unidentified)', sku:financialSku(sku), label:sku || 'Unidentified product', value:product.spend, adSpend:product.spend, sales:product.sales })).sort((a,b) => b.value - a.value || a.id.localeCompare(b.id)) }))
   const adItems: FocusItem[] = input.advertisingAvailable ? input.ads.map(ad => ({ ...productItem(ad.sku,ad.spend), sales:ad.attributedSales })) : []
   if (input.advertisingAvailable) for (const ad of input.unmatchedAds) adItems.push({ id:JSON.stringify(['unmatched',ad.sku]), label:`${ad.sku || 'Unidentified product'} (unmatched)`, value:ad.spend, adSpend:ad.spend, sales:sourceSales.get(ad.sku) })
   return {

@@ -226,7 +226,7 @@ html[data-theme] .return-hero p { font-size:13px; max-width:780px; }
 .choice-group legend { padding:0; margin-bottom:5px; color:var(--muted); font-size:11px; }
 .choice-group > div { display:flex; flex-wrap:wrap; gap:4px; }
 html[data-theme] .choice-group label { position:relative; display:block; margin:0; padding:0; min-height:0; border:0; background:transparent; cursor:pointer; color:var(--muted); font-size:12px; }
-html[data-theme] .choice-group input[type=radio] { position:absolute; opacity:0; width:1px; height:1px; min-height:0; margin:0; padding:0; }
+html[data-theme] .choice-group input[type=radio] { position:absolute; inset:0; z-index:1; opacity:0; width:100%; height:100%; min-height:0; margin:0; padding:0; cursor:pointer; }
 .choice-group label > span { display:flex; align-items:center; justify-content:center; min-height:38px; padding:7px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
 html[data-theme] .choice-group .is-selected > span { color:var(--accent); background:var(--selection); border-color:var(--accent); font-weight:600; }
 .choice-group input:focus-visible + span { outline:2px solid var(--accent); outline-offset:2px; }
@@ -378,3 +378,18 @@ html[data-theme] .focus-priorities :is(th,td) { font-size:12px; border-color:var
 @media(max-width:600px) { .focus-campaign-evidence { scroll-margin-top:210px; } }
 
 @media(min-width:601px) { html[data-theme] .focus-ad-review > .table-scroll table { min-width:1120px; } }
+
+.workspace-install { margin-top:auto; padding:12px 10px; }
+.workspace-install + .workspace-privacy { margin-top:0; }
+html[data-theme] .install-dialog { width:min(480px,calc(100vw - 32px)); padding:26px; border:1px solid var(--line); border-radius:18px; background:var(--panel); color:var(--text); }
+.install-dialog::backdrop { background:#0008; backdrop-filter:blur(4px); }
+.install-dialog h2 { font-size:23px; margin:14px 0 8px; }.install-dialog p,.install-dialog li { font-size:13px; line-height:1.6; }.install-dialog li { margin-bottom:12px; }.install-dialog ol { padding-left:20px; }
+.install-dialog small { display:block; color:var(--muted); margin-bottom:20px; font-size:11px; }
+.install-card { display:flex; gap:20px; align-items:flex-start; margin:20px 0; }.install-card img { border-radius:14px; }.install-card h3 { margin:0; }.install-card p { font-size:13px; }
+.pwa-notice { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; margin:0 0 14px; color:var(--text); background:var(--selection); border:1px solid var(--line); border-radius:10px; font-size:12px; }
+html[data-theme] .pending-activity-panel,html[data-theme] .activity-order-card,html[data-theme] .inline-activity-status { color:var(--text); background:var(--panel); border-color:var(--line); }
+html[data-theme] .pending-activity-grid article { color:var(--text); background:var(--panel2); border-color:var(--line); }
+
+.choice-group,.choice-group input { scroll-margin-top:180px; }
+@media(max-width:600px) { .choice-group,.choice-group input { scroll-margin-top:210px; } }
+.workspace-sidebar { overflow-y:auto; overscroll-behavior:contain; }
