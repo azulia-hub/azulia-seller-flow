@@ -20,6 +20,14 @@ describe('order profit summary', () => {
     expect(order).toMatchObject({ grossSales: 100, marketplaceCharges: 10, shippingFees: 10, tax: 18, operatingNet: 98, netCogs: 40, profit: 58, profitPerDeliveredUnit: 58, breakEvenTacos: 58, profitReady: true, returnType: null })
   })
 
+  it('nets fulfillment fees and reversals without mixing shipping or settlement', () => {
+    const product = summarizeSkuProfit([
+      ...events,
+      { ...base, id:'fulfillment', event:'FEE', quantity:null, amount:-50, amountType:'FULFILLMENT_FEE' },
+      { ...base, id:'fulfillment-return', event:'FEE', quantity:null, amount:10, amountType:'FULFILLMENT_FEE' },
+    ], 'SKU-1', [{ sku:'SKU-1', unitCost:40, updatedAt:'' }], 'BLOCK')
+    expect(product.fulfillmentFees).toBe(40)
+  })
   it('reverses COGS for a returned resellable item', () => {
     const refund = { ...base, id: 'refund', event: 'REFUND' as const, amount: -100, amountType: 'PRODUCT_REVENUE' as const }
     const [order] = summarizeOrders([...events, refund], [{ sku: 'SKU-1', unitCost: 40, updatedAt: '' }], 'BLOCK')

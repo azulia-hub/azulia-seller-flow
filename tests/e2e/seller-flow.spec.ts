@@ -611,7 +611,19 @@ test('first visit follows the system theme and reduced motion skips the entrance
 
 for (const width of [1280,375]) test(`focus reviews weak ads and search modes stay field-specific at ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width,height:900 })
+  await page.evaluate(()=>localStorage.setItem('sellerflow.product-costs.v2',JSON.stringify([
+    {sku:'SKU-RED',unitCost:100,updatedAt:''},{sku:'SKU-BLUE',unitCost:300,updatedAt:''},
+  ])))
+  await page.reload()
   await uploadReport(page)
+  const sourceCsv = readFileSync(report,'utf8').trimEnd()
+  const financialHeaders = sourceCsv.split('\n')[0].split(',')
+  const financialRows:Record<string,string>[] = [
+    {'date/time':'8 Aug 2026 10:00:00 UTC',type:'Order','order id':'FOCUS-BLUE',sku:'SKU-BLUE',description:'Blue shelf',quantity:'1','product sales':'200','selling fees':'-30','fba fees':'-20',total:'150'},
+    {'date/time':'8 Aug 2026 10:00:00 UTC',type:'Shipping Services','order id':'FOCUS-BLUE',description:'Amazon Easy Ship Weight Handling Fee','other transaction fees':'-40',total:'-40'},
+  ]
+  await page.locator('input[type="file"]').first().setInputFiles({name:'focus-ranking.csv',mimeType:'text/csv',buffer:Buffer.from(`${sourceCsv}\n${financialRows.map(row=>financialHeaders.map(header=>row[header]??'').join(',')).join('\n')}\n`)})
+  await expect(page.locator('.report-status-card h3')).toContainText('focus-ranking.csv')
   const { zipSync,strToU8 } = await import('fflate')
   const headings = ['Date','Advertised SKU','Advertised ASIN','Spend','7 Day Total Sales (₹)','Impressions','Clicks','Campaign Name','Ad Group Name','7 Day Total Orders (#)','7 Day Total Units (#)','7 Day Advertised SKU Sales (₹)','7 Day Other SKU Sales (₹)']
   const source = [headings,['2026-08-01','SKU-RED','BRED001',100,1000,1000,20,'Healthy','Group',4,4,1000,0],['2026-08-09','SKU-BLUE','BBLUE001',200,0,1000,20,'Weak','Group',0,0,0,0]]
@@ -623,9 +635,18 @@ for (const width of [1280,375]) test(`focus reviews weak ads and search modes st
   if (await dates.isVisible()) await dates.click()
   const focus = page.getByRole('region',{ name:'Where to focus',exact:true })
   await focus.getByRole('group',{ name:'Focus area',exact:true }).getByRole('radio',{ name:'Ads',exact:true }).check()
-  await expect(focus.locator('.focus-analysis')).toContainText('Spend without ad-attributed sales')
+  await expect(focus.locator('.focus-analysis')).toContainText('TACOS above 20% and loss after ads')
   await expect(focus.locator('.focus-analysis > .table-scroll tbody')).toContainText('SKU-BLUE')
   await expect(focus.locator('.focus-analysis > .table-scroll tbody')).not.toContainText('SKU-RED')
+  await expect(focus.locator('.focus-analysis tbody td[data-label="TACOS"]').first()).toHaveText('100.0%')
+  await expect(focus.locator('.focus-analysis tbody td[data-label="Loss after ads"] .bad-text').first()).toContainText('-₹')
+  for (const name of ['Marketplace charges','Easy Ship fees','FBA fees']) {
+    await focus.getByRole('group',{name:'Focus area',exact:true}).getByRole('radio',{name,exact:true}).check()
+    const rows = focus.locator('.focus-analysis > .table-scroll tbody')
+    await expect(rows).toContainText('SKU-BLUE')
+    await expect(rows).not.toContainText('SKU-RED')
+    await expect(rows.locator('tr').first().locator('td').nth(1).locator('.bad-text')).toContainText('-₹')
+  }
   await focus.getByRole('group',{ name:'Focus area',exact:true }).getByRole('radio',{ name:'Campaigns',exact:true }).check()
   await expect(focus.locator('.focus-analysis > .table-scroll tbody')).toContainText('Weak')
   await expect(focus.locator('.focus-analysis > .table-scroll tbody')).not.toContainText('Healthy')

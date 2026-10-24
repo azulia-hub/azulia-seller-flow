@@ -342,10 +342,11 @@ html[data-brand-entering=true] .seller-workspace > :is(.app-main,.workspace-side
 .focus-finding > strong { flex-shrink:0; font-size:22px; font-variant-numeric:tabular-nums; }
 .focus-finding > strong small { display:block; font-size:10px; font-weight:400; }
 .focus-chart { display:grid; gap:12px; padding:18px 0; margin:12px 0; border-block:1px solid var(--line); }
-.focus-chart-row { display:grid; grid-template-columns:minmax(100px,1fr) minmax(100px,1.2fr) 55px 140px; align-items:center; gap:12px; font-size:12px; }
+.focus-chart-row { display:grid; grid-template-columns:minmax(100px,1fr) minmax(100px,1.2fr) minmax(90px,.7fr) minmax(90px,.7fr) 180px; align-items:center; gap:12px; font-size:12px; }
 .focus-chart-row > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .focus-chart-row > strong { font-size:12px; text-align:right; }
 .focus-chart-row > small { text-align:right; font-size:10px; color:var(--muted); }
+.focus-chart-row > .focus-chart-amount { color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
 .focus-bar { height:10px; background:var(--panel2); border-radius:99px; overflow:hidden; }
 .focus-bar i { display:block; height:100%; min-width:1px; background:var(--accent); border-radius:inherit; }
 .focus-chart-note { font-size:11px; color:var(--muted); }

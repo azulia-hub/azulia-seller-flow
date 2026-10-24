@@ -408,3 +408,31 @@ Release validation (2026-10-24): production build/type checks pass with unused-s
 Production PWA checks include a real persistent Chromium profile (not private browsing), manifest/icon/platform metadata, native install-event integration, nested-host offline report/product restoration at both sizes, and explicit update/reload preserving saved reports. Icon backgrounds are opaque warm ivory, while ordinary workspace logos retain transparency; the maskable logo fits inside the circular safe zone. A native-radio hit-target bug discovered by browser checks is fixed with full-label inputs and scroll spacing, and fixed navigation now scrolls at short viewport heights.
 
 Final release-build PWA verification: all 6 checks passed, including normal-profile Chromium installability. Combined browser coverage is 22 app journeys plus 6 production PWA checks. Dependency audit: zero known vulnerabilities.
+
+## Money leak priority clarity — 24 October 2026
+
+Losses and Returns lead with the largest-loss product and its rupee amount. Both remain sorted by absolute monetary loss descending; return losses use existing recovery/reimbursement-adjusted results. Charts lead with money, and loss views replace percentage concentration guidance with explicit largest-loss-first guidance. Added a regression proving higher percentage rates cannot outrank larger product/aggregated return losses.
+
+## Loss ranking includes advertising — 24 October 2026
+
+Losses now rank negative SKU profit after ads. Matched supported Sponsored Products economics replace booked SKU advertising once using the existing economics engine; other products retain their booked SKU advertising. Unsupported matched profit and missing costs are excluded visibly. Unassigned account ads, advertising GST and shared expenses are not allocated. Matched loss reviews open posted product evidence.
+
+## Ads focus threshold — 24 October 2026
+
+Ads focus requires both TACOS strictly above 20% and known negative profit after ads, ranked by loss amount. Denominator is same-period posted Unified gross product sales from the advertising join, not attributed sales or sale-cohort sales. Zero/missing sales and unknown profit cannot establish eligibility and are disclosed as exclusions. Campaign criteria remain unchanged.
+
+## Separate ranking tabs — 24 October 2026
+
+User clarified profit, marketplace charges and Easy Ship were requested as independent focus tabs. Removed the added financial strips and extra shared table columns to restore the compact chart/table layout. Added Profit after ads (supported reported/booked SKU profit), Marketplace charges and Easy Ship fees (existing net fees including return charges/reversals) rankings by amount.
+
+Marketplace charges focus now includes only products with known negative profit after supported reported/booked SKU advertising, ranked by marketplace charge amount; profitable and incomplete-evidence products do not enter the ranking.
+
+Easy Ship focus uses the same known-loss-after-ads eligibility as Marketplace charges, ranking eligible products by net Easy Ship fees including returns/reversals.
+
+FBA fees focus added for products losing money after ads, ranked by net fulfillment fees from the adapter-classified fba fees column. Sale/return charges and reversals net together; unassigned fees remain unallocated. This is a subset of marketplace fees, not an additional loss to sum. Core uses generic fulfillment fee classification.
+
+## Product simulator removed — 24 October 2026
+The user rejected the What if implementation and requested complete removal. Removed the product-page button/dialog, scenario engine, simulator tax helper, associated styles and scenario-only tests/documentation. Earlier focus rankings and FBA fee behavior remain. The user subsequently authorized checks and a push to main; current verification follows below.
+
+## Main preparation checks — 24 October 2026
+Typecheck, production build and whitespace checks pass. Unit suite: 144 passing tests, one opt-in private fixture skipped. Browser coverage: all 22 app journeys pass (20 unchanged journeys plus both updated desktop/mobile focus journeys); all six production PWA checks pass. Focus fixtures now contain explicit synthetic costs and actual SKU sales, validating TACOS >20% with a loss, SKU labels, negative amount styling and loss-only marketplace/shipping/FBA rankings. Simulator button, code, styles and tests are absent. No private reports or generated artifacts are included.

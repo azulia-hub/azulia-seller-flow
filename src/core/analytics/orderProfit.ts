@@ -50,6 +50,7 @@ export interface SkuTrendPoint {
 }
 
 export interface SkuProfitSummary {
+  readonly fulfillmentFees?: number
   readonly sku: string
   readonly grossSales: number
   readonly netProductRevenue: number
@@ -250,6 +251,7 @@ function summarizeSkuEvents(skuEvents: readonly CanonicalFinancialEvent[], sku: 
     returnRate: summary.returnRate,
     averageSellingPrice: summary.averageSellingPrice,
     marketplaceCharges: summary.marketplaceCharges,
+    fulfillmentFees: round(-skuEvents.filter(event => event.amountClass === 'OPERATING' && event.amountType === 'FULFILLMENT_FEE').reduce((sum,event) => sum + event.amount,0)),
     commissionCharges: round(-skuEvents.filter(event => event.amountClass === 'OPERATING' && event.amountType === 'COMMISSION').reduce((sum, event) => sum + event.amount, 0)),
     otherMarketplaceCharges: round(summary.marketplaceCharges + skuEvents.filter(event => event.amountClass === 'OPERATING' && event.amountType === 'COMMISSION').reduce((sum, event) => sum + event.amount, 0)),
     shippingFees: summary.netEasyShipFee,

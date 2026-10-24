@@ -269,17 +269,18 @@ export function App() {
   const focusAnalysis = useMemo(() => {
     if (active !== 'Home' || productSelection) return null
     const names = new Map(searchDocuments.filter(document => document.kind === 'PRODUCT').map(document => [document.sku,document.label]))
+    const focusPostedProducts = new Map(advertisingProducts.map(product => [product.sku,product]))
     const economics = new Map(sellerProducts.map(product => [product.sku,product.contribution]))
     return buildFocusAnalysis({
       financialSkus:searchDocuments.flatMap(document => document.kind === 'PRODUCT' && document.sku ? [document.sku] : []), normalizeSku:skuNormalizer,
-      products:productProfitability.map(product => ({ sku:product.sku, name:names.get(product.sku), sales:product.grossSales, profitBeforeAds:product.profitBeforeAds, missingCost:product.missingCost, returnRate:product.returnRate })),
-      returns:returnSummary.orders.map(order => ({ sku:order.sku, loss:order.returnLossAfterReimbursement, missingCost:order.missingCost })),
-      ads:sponsoredAttribution.skus.map(product => ({ sku:product.sku, spend:product.spend, attributedSales:product.attributedSales, profitAfterAds:economics.get(product.sku) ?? null })),
+      products:productProfitability.map(product => ({ sku:product.sku, name:names.get(product.sku), sales:product.grossSales, profitBeforeAds:product.profitBeforeAds, profitAfterAds:product.profit, marketplaceCharges:product.marketplaceCharges, easyShipCharges:product.shippingFees, fulfillmentFees:product.fulfillmentFees, missingCost:product.missingCost, returnRate:product.returnRate })),
+      returns:returnSummary.orders.map(order => ({ sku:order.sku, loss:order.returnLossAfterReimbursement, refundValue:order.refundValue, cogsRecovered:order.cogsRecovered, missingCost:order.missingCost })),
+      ads:sponsoredAttribution.skus.map(product => ({ sku:product.sku, spend:product.spend, attributedSales:product.attributedSales, totalSales:product.grossSales, marketplaceCharges:focusPostedProducts.get(product.sku)?.marketplaceCharges, easyShipCharges:focusPostedProducts.get(product.sku)?.shippingFees, profitAfterAds:economics.get(product.sku) ?? null })),
       unmatchedAds:sponsoredAttribution.unmatched,
       campaigns:(sponsoredReport?.rows ?? []).map(row => ({ campaign:row.campaign, portfolio:row.portfolio, sku:row.advertisedSku, date:row.date, spend:row.spendExcludingTax, attributedSales:row.attributedSales })),
       from:fromDate, to:toDate, advertisingAvailable:sponsoredAttribution.status === 'AVAILABLE',
     })
-  }, [active, productSelection, searchDocuments, sellerProducts, productProfitability, returnSummary, sponsoredAttribution, sponsoredReport, fromDate, toDate, skuNormalizer])
+  }, [active, productSelection, searchDocuments, sellerProducts, advertisingProducts, productProfitability, returnSummary, sponsoredAttribution, sponsoredReport, fromDate, toDate, skuNormalizer])
 
   const searchEvidenceEvents = useMemo(() => {
     if (!searchDetail) return []

@@ -389,3 +389,9 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 - [x] Advertising grouping/indexed joins, shared/deferred cohort cost work and lazy workspace bundles.
 - [x] Remove obsolete dialogs/styles/imports and apply audited compatible build-tool patch.
 - [x] Add production installation/offline/update and expanded focus/search/theme browser regressions.
+
+- [x] Rank money leaks by product loss after supported reported/booked SKU advertising, with explicit evidence exclusions.
+
+- [x] Independent profit, marketplace, shipping and fulfillment fee focus rankings; fee rankings require loss after ads.
+
+- Product What if simulator removed at the user’s request; implementation is deferred until explicitly requested again.
