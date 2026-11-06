@@ -14,8 +14,9 @@ const fixture = (name: string, labelId: number) => ({ name, mimeType: 'applicati
 
 for (const mobile of [false, true]) test(`PDF cutter prepares local downloads on ${mobile ? 'mobile' : 'desktop'}`, async ({ page }) => {
   await page.setViewportSize(mobile ? { width: 375, height: 812 } : { width: 1440, height: 1000 })
-  const errors: string[] = [], uploads: string[] = []
+  const errors: string[] = [], uploads: string[] = [], navigations: string[] = []
   page.on('pageerror', error => errors.push(error.message))
+  page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations.push(frame.url()) })
   page.on('request', request => { if (!['GET', 'HEAD'].includes(request.method())) uploads.push(request.url()) })
   await openTools(page)
   await expect(page.getByRole('button', { name: 'Prepare labels', exact: true })).toBeDisabled()
@@ -46,6 +47,7 @@ for (const mobile of [false, true]) test(`PDF cutter prepares local downloads on
   expect(await page.locator('.pdf-cutter').evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
   await page.screenshot({ path: `test-results/pdf-cutter-${mobile ? 'mobile' : 'desktop'}.png`, fullPage: true, animations: 'disabled' })
   expect(errors).toEqual([]); expect(uploads).toEqual([])
+  expect(navigations).toHaveLength(1)
 })
 
 test('PDF cutter rejects the whole batch and recovers after a bad file', async ({ page }) => {

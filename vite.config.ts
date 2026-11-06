@@ -7,7 +7,7 @@ export default defineConfig({
   base: './',
   worker: { format: 'es' },
   build: { target: 'es2022' },
-  optimizeDeps: { esbuildOptions: { target: 'es2022' } },
+  optimizeDeps: { include: ['mupdf'], esbuildOptions: { target: 'es2022' } },
   test: {
     include: ['src/**/*.test.ts', 'tests/integration/**/*.test.ts'],
   },
