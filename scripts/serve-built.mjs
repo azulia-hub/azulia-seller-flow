@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve, sep, extname } from 'node:path'
 const root = resolve('dist'), base = '/azulia-seller-flow/'
 let release = 0
-const types = { '.html':'text/html', '.js':'application/javascript', '.css':'text/css', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.webp':'image/webp' }
+const types = { '.wasm':'application/wasm', '.ttf':'font/ttf', '.html':'text/html', '.js':'application/javascript', '.css':'text/css', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.webp':'image/webp' }
 createServer(async (request,response) => {
   try {
     const path = decodeURIComponent(new URL(request.url,'http://localhost').pathname)

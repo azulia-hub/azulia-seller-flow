@@ -395,3 +395,11 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 - [x] Independent profit, marketplace, shipping and fulfillment fee focus rankings; fee rankings require loss after ads.
 
 - Product What if simulator removed at the user’s request; implementation is deferred until explicitly requested again.
+
+### Local seller tools (ADR-064)
+
+- [x] Report-independent Tools destination with Amazon PDF Cutter, desktop/mobile navigation and ordered multi-file selection.
+- [x] Browser worker rewrite of the Python cutter: original barcode pixels, four-up A4, complete product names, ordered quantities and merged product rows.
+- [x] Optional matching packing-list PDF/CSV, duplicate/layout/quantity validation, cancellation and local downloads.
+- [x] Self-hosted fonts/WASM with on-demand offline caching (first run online), avoiding an approximately 11.9 MB mandatory shell download; no PDF uploads or backend.
+- [x] Synthetic unsafe-input/layout tests, desktop/mobile browser flows and private original-output comparison at 72/203/300 DPI.

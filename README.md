@@ -131,3 +131,12 @@ After the production app has cached its files, saved reports can reopen offline.
 Run `npm run build` then `npm run test:pwa` to check the production manifest, logo icons, nested-path offline operation and update behavior. Core checks remain `npm test`; UI journeys use `npm run test:e2e`. Production PWA and UI tests use separate artifact directories.
 
 Sales-period reporting includes every order sold in the selected period regardless of its age; pending activity is separate from released results. Twenty days of follow-up is a completeness indicator, not a reason to exclude recent sales.
+
+### Amazon PDF Cutter
+
+Open **Tools → Amazon PDF Cutter** without importing an analytics report. Choose original Amazon Easy Ship PDFs, arrange their file order, optionally enable a product-wise packing list, then select **Prepare labels**. Download `amazon-labels.pdf` and optional packing-list PDF/CSV. Print **A4, actual size / 100%, one PDF page per sheet**; the PDF already has four labels per page.
+
+Processing runs locally in a cancellable worker. Original barcode image pixels are preserved; complete product names and quantities replace seller SKUs. Ambiguous or unsupported files fail with an explanation rather than a partial output. Supported layouts and print guidance are available on the tool page. The first run needs an internet connection to load the self-hosted PDF tools. Those assets cache on use for later offline jobs; analytics-only users do not download them. This adds the official `mupdf` WASM dependency (AGPL-3.0-or-later or Artifex commercial terms); DejaVu font notices are included in `public/fonts/LICENSE.txt`.
+
+Synthetic checks: `npm test -- tests/integration/labelCutter.test.ts` and `npm run test:e2e -- tests/e2e/label-cutter.spec.ts`.
+For local parity testing against the original Python installation and private `input/*.pdf` samples, run `AZULIA_LABEL_REFERENCE=/absolute/path/to/amazon_pdf npm test -- tests/integration/privateLabelCutter.test.ts`. It uses the reference directory's `.venv/bin/python`, checks image digests, text, CSV and page pixels at 72/203/300 DPI, and removes temporary output. Set `AZULIA_LABEL_EXTRA_FILE=/absolute/path/to/another.pdf` to include an additional layout sample. Private PDFs are never copied into the repository.

@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { chromium, expect, test } from '@playwright/test'
 import path from 'node:path'
+import { labelPdf } from '../fixtures/labelPdf'
 
 async function ready(page: import('@playwright/test').Page) {
   await page.goto('./')
@@ -94,4 +95,40 @@ test('normal browser profile recognizes Azulia as installable', async () => {
     await cdp.send('Page.enable')
     await expect.poll(async () => (await cdp.send('Page.getInstallabilityErrors')).installabilityErrors).toEqual([])
   } finally { await context.close(); await rm(directory,{ recursive:true,force:true }) }
+})
+
+
+test('PDF cutter loads large assets on demand and reopens offline under nested hosting', async ({ page, context }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await ready(page)
+  const pdfAssets = () => page.evaluate(async () => {
+    const cache = await caches.open((await caches.keys()).find(key => key.startsWith('azulia-shell-'))!)
+    return (await cache.keys()).map(request => request.url).filter(url => /\.wasm$|\/fonts\//.test(url))
+  })
+  expect(await pdfAssets()).toEqual([])
+  const open = async () => {
+    await page.getByRole('button', { name: 'Open navigation', exact: true }).click()
+    await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Tools', exact: true }).click()
+    await page.getByLabel('Amazon label PDFs').setInputFiles({ name: 'offline.pdf', mimeType: 'application/pdf', buffer: Buffer.from(labelPdf()) })
+    await page.getByRole('checkbox', { name: /Also create a product-wise packing list/ }).check()
+  }
+  await context.setOffline(true)
+  await open()
+  await page.getByRole('button', { name: 'Prepare labels', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Connect to the internet')
+  await context.setOffline(false)
+  await page.getByRole('button', { name: 'Prepare labels', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Prepared labels' })).toContainText('2 labels · 8 ordered units · 1 A4 sheet')
+  await expect.poll(async () => (await pdfAssets()).length).toBe(3)
+  await context.setOffline(true)
+  await page.reload()
+  await open()
+  await page.getByRole('button', { name: 'Prepare labels', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Prepared labels' })).toContainText('2 labels · 8 ordered units · 1 A4 sheet')
+  const event = page.waitForEvent('download')
+  await page.getByRole('link', { name: 'Download labels PDF', exact: true }).click()
+  expect((await event).suggestedFilename()).toBe('amazon-labels.pdf')
+  await expect(page.getByRole('link', { name: 'Packing list PDF', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Packing list CSV', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true)
 })
