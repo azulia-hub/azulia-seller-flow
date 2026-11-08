@@ -8,6 +8,7 @@ function storedTheme(): Theme { try { const value = localStorage.getItem('azulia
 
 type Props = {
   readonly search?: ReactNode
+  readonly syncStatus?: ReactNode
   readonly active: AppPage
   readonly mobileNavOpen: boolean
   readonly reportName: string
@@ -17,7 +18,7 @@ type Props = {
   readonly children: ReactNode
 }
 
-export function AppShell({ active, search, mobileNavOpen, onToggleMobileNav, reportName, reportLoaded, onNavigate, children }: Props) {
+export function AppShell({ active, search, syncStatus, mobileNavOpen, onToggleMobileNav, reportName, reportLoaded, onNavigate, children }: Props) {
   const [theme, setTheme] = useState<Theme>(storedTheme)
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -44,7 +45,7 @@ export function AppShell({ active, search, mobileNavOpen, onToggleMobileNav, rep
       <header className="topbar workspace-topbar">
         <div className="workspace-topbar-title"><button className="workspace-menu secondary" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={onToggleMobileNav}>☰</button><img className="mobile-brand-logo" src={`${import.meta.env.BASE_URL}brand/azulia-logo.webp`} alt="Azulia" width="32" height="32" /><span>{page?.label ?? 'Dashboard'}</span></div>
         <div className="workspace-search-slot">{search}</div>
-        <div className="topbar-actions"><select className="theme-toggle" aria-label="Appearance" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select><button className={`current-report ${reportLoaded ? 'ready' : ''}`} onClick={() => onNavigate('Reports')} title={reportLoaded ? reportName : 'Upload a report'}><span className="report-indicator" /><span><small>{reportLoaded ? 'Active report' : 'Get started'}</small><strong>{reportLoaded ? reportName : 'Upload a report'}</strong></span><b>Change</b></button></div>
+        <div className="topbar-actions"><select className="theme-toggle" aria-label="Appearance" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select><button className={`current-report ${reportLoaded ? 'ready' : ''}`} onClick={() => onNavigate('Reports')} title={reportLoaded ? reportName : 'Upload a report'}><span className="report-indicator" /><span><small>{reportLoaded ? 'Active report' : 'Get started'}</small><strong>{reportLoaded ? reportName : 'Upload a report'}</strong></span><b>Change</b></button>{syncStatus}</div>
       </header>
       <div className="content"><PwaStatus />{children}</div>
       <footer className="app-disclosure"><strong>Private by design</strong><span>Reports and costs stay in this browser. Profit depends on source classifications and product-cost coverage.</span></footer>

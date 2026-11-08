@@ -1,4 +1,4 @@
-import { productTitles } from '../search/productTitles'
+import { productTitles, productImage } from '../search/productTitles'
 import type { SponsoredProductsAttribution, SponsoredSkuAttribution } from './sponsoredProducts'
 import { buildSkuAdvertisingEconomics } from './sponsoredProducts'
 import type { SkuProfitSummary } from '../analytics/orderProfit'
@@ -16,7 +16,7 @@ export function buildSellerProductOverview(product: SkuProfitSummary, postedProd
   const economics = advertising && matchingPostedProduct ? buildSkuAdvertisingEconomics(matchingPostedProduct, advertising) : null
   const displayedProduct = report.status === 'AVAILABLE' && matchingPostedProduct ? matchingPostedProduct : product
   const name = productTitles(displayedProduct.orders.flatMap(order => order.events).filter(event => event.sku === product.sku))[0]
-  return { sku: product.sku, name: name && name !== product.sku ? name : null, product: displayedProduct, advertising, economics,
+  return { sku: product.sku, imageUrl: productImage(displayedProduct.orders.flatMap(order => order.events).filter(event => event.sku === product.sku)), name: name && name !== product.sku ? name : null, product: displayedProduct, advertising, economics,
     contribution: displayedProduct.missingCost || matchingPostedProduct?.missingCost ? null : economics?.contributionAfterReportedAds ?? null,
     contributionStatus: !advertising ? 'NO_ADS_EVIDENCE' as const : !matchingPostedProduct ? 'NO_FINANCIAL_ACTIVITY' as const : !economics || displayedProduct.missingCost || matchingPostedProduct?.missingCost ? 'MISSING_COST' as const : 'AVAILABLE' as const,
   }

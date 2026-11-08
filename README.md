@@ -130,7 +130,7 @@ After the production app has cached its files, saved reports can reopen offline.
 
 Run `npm run build` then `npm run test:pwa` to check the production manifest, logo icons, nested-path offline operation and update behavior. Core checks remain `npm test`; UI journeys use `npm run test:e2e`. Production PWA and UI tests use separate artifact directories.
 
-Sales-period reporting includes every order sold in the selected period regardless of its age; pending activity is separate from released results. Twenty days of follow-up is a completeness indicator, not a reason to exclude recent sales.
+Purchase-period reporting includes every known order purchased in the selected dates, regardless of completion or release status. All recorded sales, charges, refunds and reimbursements update the original purchase period immediately, including deferred entries. Orders awaiting financial postings appear separately; order totals are never substituted for financial product revenue. Missing purchase dates remain in review. Follow-up history is a coverage indicator, not a recognition gate.
 
 ### Amazon PDF Cutter
 
@@ -140,3 +140,19 @@ Processing runs locally in a cancellable worker. Original barcode image pixels a
 
 Synthetic checks: `npm test -- tests/integration/labelCutter.test.ts` and `npm run test:e2e -- tests/e2e/label-cutter.spec.ts`.
 For local parity testing against the original Python installation and private `input/*.pdf` samples, run `AZULIA_LABEL_REFERENCE=/absolute/path/to/amazon_pdf npm test -- tests/integration/privateLabelCutter.test.ts`. It uses the reference directory's `.venv/bin/python`, checks image digests, text, CSV and page pixels at 72/203/300 DPI, and removes temporary output. Set `AZULIA_LABEL_EXTRA_FILE=/absolute/path/to/another.pdf` to include an additional layout sample. Private PDFs are never copied into the repository.
+
+## Retained local connection
+
+The app has been restored to the pre-API report/PDF version (`34f5eac`). The local backend remains available: run `npm run local`, open http://127.0.0.1:8788/, and use `/auth/local` for the existing credential check. Existing credentials and original data files are preserved. See [local connection instructions](server/local/README.md).
+
+### Automatic financial activity (local backend)
+
+`npm run local` now maintains a private local activity cache even when the browser is closed. The initial fetch covers 30 days; subsequent work fills missing history and merges new/changed source IDs. Open the app to see the last reading and live updates through the existing report calculations. Upload remains a fallback; advertising workbooks retain their existing flow. The computer and local process must remain on. See [delivery details and API limitations](server/local/README.md).
+
+### Restarting the local backend after a connector fix
+
+`node scripts/restart-local-backend.mjs` restarts only the local backend belonging to this checkout and preserves downloaded records and credentials. It leaves the replacement running in the background; diagnostic output is in the private `.local/backend.log`, and its process ID is saved in `.local/backend.pid`. Refresh the app once to load a newly built frontend. Purchase-date backfill and later financial updates continue without further page reloads while the computer and backend are running.
+
+## Optional Netlify hosted mode
+
+See [NETLIFY_SETUP.md](NETLIFY_SETUP.md). The checked-in Netlify configuration selects a stateless Amazon API relay and explicit browser-owned syncing/cache. No Amazon environment variables, cloud database or scheduled sync are required. Existing local mode remains available with the hosted build flag unset. This implementation is currently source-prepared only: no verification, commit/push or deployment has been performed for it.

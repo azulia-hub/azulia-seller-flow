@@ -10,7 +10,7 @@ import type { ClassificationRule } from '../../core/classification/types'
 import { TransactionReviewManager } from '../data-quality/TransactionReviewManager'
 import type { DataQualityCenterResult, QualityAction } from '../../core/validation/dataQualityCenter'
 import { DataQualityCenter } from '../data-quality/DataQualityCenter'
-import type { OrderCohort } from '../../core/analytics/orderLifecycle'
+import { summarizeCohortOrders, type OrderCohort } from '../../core/analytics/orderLifecycle'
 import type { SponsoredProductsReport } from '../../core/advertising/types'
 
 type Props = {
@@ -31,6 +31,7 @@ type Props = {
 
 export function ReportsPage(props: Props) {
   const quality = props.dataset?.quality
+  const orderCoverage = props.cohort ? summarizeCohortOrders(props.cohort) : null
   return <>
     <PageHeader eyebrow="Reports" title="Manage your marketplace reports" description="Upload a new report, check that every rupee is accounted for, or compare saved reports over the same dates." action={<UploadZone onFile={props.onFile} loading={props.importing} />} />
     <section className="report-coverage-guide" aria-label="Recommended report coverage">
@@ -46,7 +47,7 @@ export function ReportsPage(props: Props) {
       {props.sponsoredReport ? <div className="sponsored-file-status"><span className="status good">Advertising report imported</span>{props.sponsoredAttribution.status === 'AVAILABLE' ? <small>{props.sponsoredAttribution.skus.length} financial products matched · {props.sponsoredAttribution.unmatched.length} advertised SKUs unmatched for {props.sponsoredAttribution.selectedFrom} – {props.sponsoredAttribution.selectedTo}</small> : <small>Choose shared dates to review product matching. An imported report does not mean every SKU is matched.</small>}<strong>{props.sponsoredReport.fileName}</strong><small>{props.sponsoredReport.minDate} → {props.sponsoredReport.maxDate} · {props.sponsoredReport.rows.length.toLocaleString('en-IN')} daily rows</small><button className="secondary" onClick={props.onViewSponsored}>View shared dates</button></div> : null}
       {props.sponsoredError ? <div className="notice-card danger" role="alert"><span>!</span><div><strong>Ads report was not imported</strong><p>{props.sponsoredError}</p></div></div> : null}
     </section>
-    {props.dataset && props.cohort ? <section className="lifecycle-coverage-card"><header><div><small>Sales-period evidence</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orders.length} orders selected</span></header><p>All known sales-period orders are included without a maturity cutoff. Pending activity is separate from released results.</p><div className="lifecycle-coverage-grid"><div><b>{props.cohort.pendingOrderCount}</b><small>orders with pending activity</small></div><div><b>{props.cohort.limitedFollowUpOrderCount}</b><small>orders with limited follow-up, still included</small></div><div><b>{props.cohort.missingSale.length}</b><small>original sale missing</small></div></div></section> : null}
+    {props.dataset && props.cohort ? <section className="lifecycle-coverage-card"><header><div><small>Sales-period evidence</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orders.length} orders selected</span></header><p>Orders are selected by verified purchase date. All recorded activity is included immediately, regardless of release status; later changes update that original period.</p><div className="lifecycle-coverage-grid"><div><b>{orderCoverage?.awaitingFinancialCount ?? 0}</b><small>orders awaiting financial details</small></div><div><b>{props.cohort.limitedFollowUpOrderCount}</b><small>orders with limited follow-up, still included</small></div><div><b>{props.cohort.missingSale.length}</b><small>purchase date not verified</small></div></div></section> : null}
     {props.needsMapping && props.rawDataset ? <MappingPanel dataset={props.rawDataset} onApply={props.onApplyMapping} /> : null}
     {props.qualityCenter ? <DataQualityCenter result={props.qualityCenter} formatMoney={props.formatMoney} onAction={props.onQualityAction} /> : null}
     {props.dataset ? <div id="classification-review"><TransactionReviewManager dataset={props.dataset} rules={props.classificationRules} formatMoney={props.formatMoney} onSaveRule={props.onSaveClassificationRule} onDeleteRule={props.onDeleteClassificationRule} /></div> : null}

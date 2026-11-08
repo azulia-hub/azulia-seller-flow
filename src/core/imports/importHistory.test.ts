@@ -27,3 +27,9 @@ describe('import history comparison', () => {
     expect(compareImports(left, right).overlap).toBeNull()
   })
 })
+
+it('profiles order-only coverage and counts each identity once without inventing financial events', () => {
+  const data = { ...dataset('orders-only', []), orders: [{ orderId: 'A', purchaseDate: '2026-11-08', status: 'Unshipped', fulfillmentType: null, orderValue: '1180.00', currency: 'INR' }] }
+  expect(profileDataset(data)).toMatchObject({ fromDate: '2026-11-08', toDate: '2026-11-08', orderCount: 1, datedEventCount: 0, undatedEventCount: 0 })
+  expect(data.events).toEqual([])
+})

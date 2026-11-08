@@ -48,10 +48,10 @@ export function buildAuditWorkbook(spec: AuditWorkbookSpec): AuditWorkbook {
 
   const sheets: WorkbookSheet[] = [
     { name: 'Read me', headers: ['Field', 'Value'], rows: [
-      ['Calculation view', spec.cohort ? 'Orders sold in selected period: released/available activity' : 'Posted activity'], ['Activity observed through', spec.cohort?.observationThrough ?? 'Selected posting dates'],
+      ['Calculation view', spec.cohort ? spec.cohort.inclusion === 'ALL_RECORDED' ? 'Orders by purchase date: all recorded activity' : 'Orders sold in selected period: released/available activity' : 'Posted activity'], ['Activity observed through', spec.cohort?.observationThrough ?? 'Selected posting dates'],
       ['Report', spec.fileName], ['Source adapter', dataset.source], ['Selected from', spec.fromDate ?? 'All available dates'], ['Selected to', spec.toDate ?? 'All available dates'], ['Fulfillment filter', spec.fulfillmentType ?? 'All'], ['Selected canonical events', events.length], ['Cost policy', missingCostPolicy],
       ['Important', 'Source reconciliation applies to the complete imported report. Selected-period totals are canonical event totals after active filters.'],
-      ['Order attribution', spec.cohort ? 'Original sales select orders. Later linked activity uses the entire active report. Deferred amounts are separate; unknown release statuses remain included. Account activity uses posting dates.' : 'Every selected posted source event is retained, including deferred activity.'],
+      ['Order attribution', spec.cohort ? spec.cohort.inclusion === 'ALL_RECORDED' ? 'Verified purchase dates select orders. All recorded linked activity, including deferred entries, updates that purchase period. Account activity uses posting dates.' : 'Original sales select orders. Later linked activity uses the entire active report. Deferred amounts are separate; unknown release statuses remain included. Account activity uses posting dates.' : 'Every selected posted source event is retained, including deferred activity.'],
       ['Profit rule', 'Operating net excludes settlement transfers. Returned resellable units reverse COGS.'],
     ] },
     { name: 'Summary', headers: ['Metric', 'Value', 'Status or formula'], rows: [
@@ -75,7 +75,7 @@ export function buildAuditWorkbook(spec: AuditWorkbookSpec): AuditWorkbook {
   ]
   if (spec.cohort) {
     const evidenceSheet = (name: string, activity: readonly CanonicalFinancialEvent[]): WorkbookSheet => ({ name, headers: ['Date', 'Order ID', 'SKU', 'Source label', 'Amount type', 'Status', 'Signed amount', 'Source row'], rows: activity.map(e => [e.date, e.orderId, e.sku, e.rawType, e.amountType, e.status, e.amount, e.sourceRow]) })
-    sheets.push(evidenceSheet('Pending activity', spec.cohort.pendingEvents), evidenceSheet('Original sale missing', spec.cohort.missingSale.flatMap(o => o.events)), evidenceSheet('Superseded deferred', spec.cohort.supersededEvents))
+    sheets.push(evidenceSheet(spec.cohort.inclusion === 'ALL_RECORDED' ? 'Deferred included evidence' : 'Pending activity', spec.cohort.pendingEvents), evidenceSheet('Original sale missing', spec.cohort.missingSale.flatMap(o => o.events)), evidenceSheet('Superseded deferred', spec.cohort.supersededEvents))
   }
   return { fileStem: spec.fileName.replace(/\.[^.]+$/, '').replace(/[^a-z0-9_-]+/gi, '-'), sheets }
 }

@@ -57,3 +57,13 @@ describe('cost calculation', () => {
     expect(result.appliedCosts.map((item) => item.unitCost)).toEqual([20, 20])
   })
 })
+
+it('uses verified purchase-date cost for a later release and refund', () => {
+  const history = [{ sku: 'A', unitCost: 20, effectiveFrom: '2026-08-01', updatedAt: '' }, { sku: 'A', unitCost: 40, effectiveFrom: '2026-09-01', updatedAt: '' }]
+  const sale: CanonicalFinancialEvent = { ...base, id: 'sale', event: 'SALE', orderId: 'order', date: '2026-09-05', orderPurchaseDate: '2026-08-30', quantity: 1, amount: 100 }
+  const refund: CanonicalFinancialEvent = { ...sale, id: 'refund', event: 'REFUND', date: '2026-10-10', amount: -100 }
+  expect(calculateCosts([sale], history).netCogs).toBe(20)
+  const result = calculateCosts([sale, refund], history)
+  expect(result.netCogs).toBe(0)
+  expect(result.appliedCosts.map(row => row.unitCost)).toEqual([20, 20])
+})

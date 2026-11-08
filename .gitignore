@@ -12,3 +12,21 @@ vite.config.d.ts
 /report
 
 pwa-test-results/
+
+# Connection credentials and local backend runtime files
+.env
+.env.*
+!.env.example
+!**/.env.example
+supabase/.temp/
+supabase/.branches/
+
+# Cloudflare local secrets, emulator state and build output
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+.local/
+
+# Netlify local account/project linking metadata
+.netlify/

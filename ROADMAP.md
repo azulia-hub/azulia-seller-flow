@@ -403,3 +403,86 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 - [x] Optional matching packing-list PDF/CSV, duplicate/layout/quantity validation, cancellation and local downloads.
 - [x] Self-hosted fonts/WASM with on-demand offline caching (first run online), avoiding an approximately 11.9 MB mandatory shell download; no PDF uploads or backend.
 - [x] Synthetic unsafe-input/layout tests, desktop/mobile browser flows and private original-output comparison at 72/203/300 DPI.
+
+## Current owner direction (2026-11-07)
+
+Restore the report/PDF app at `34f5eac`, preserving local hosting and connection checks. Later connected API implementation is removed. Future rebuild decisions await the owner; previous API feature plans no longer apply. Tests/builds remain deferred.
+
+## Automatic delivery checkpoint — ADR-066
+
+Owner authorizes replacing manual delivery with local automatic record ingestion, not a new analytics application. Initial/missing-window reads, upserted activity, backend background scheduling, source cache, normalizer bridge and live existing-app updates are source-implemented. Advertising/manual uploads remain fallback. Tests/builds/live and responsive verification are deferred; actual source-field parity and arbitrary historical change detection are not claimed.
+
+### Purchase-period order-cycle correction (ADR-067)
+
+- [x] Trace CSV grouping, deferred activity, missing origins and original-sale cost reversal.
+- [x] Separate verified purchase date from posting date and enforce original-period attribution for API activity.
+- [x] Discover requested purchase windows, cache minimal order dates, fetch/revisit linked financial histories and publish changes through existing deltas.
+- [x] Keep unreleased money pending; exclude other-period and missing-origin order activity from realized purchase-period totals.
+- [x] Align cohort trends and dated product costs; prevent posting-date API dashboard preferences from reintroducing the error.
+- [x] Author regression cases and document source/history/access limitations.
+- [ ] Execute tests/build/mobile/live verification after owner requests testing. Do not claim comparison-total parity beforehand.
+
+### Owner CSV/API reconciliation (ADR-068)
+
+- [x] Download missing February–October reference history, reusing existing completed cache windows.
+- [x] Compare nine monthly sales totals and matched-order financial categories through production code, with explicit date/cutoff scope.
+- [x] Confirm/fix S01 order-ID pagination failure; quarantine unsupported metadata without blocking other orders.
+- [x] Correct closing fees, FBA shipping chargeback, India Easy Ship postage/delivery components and explicit reversals from matched CSV evidence.
+- [x] Rebuild older normalized readings with mapping version 4; disclose incomplete purchase-date/history coverage.
+- [x] Execute focused regression checks; store private comparison artifacts without publishing seller data.
+- [ ] Finish ongoing production purchase-date backfill before claiming every historical dashboard period is complete. Remaining pending/newer activity is reported separately from CSV snapshots.
+
+### Calculation responsiveness (ADR-069)
+
+- [x] Eliminate repeated header scans and full-history cohort rebuilding on each date selection.
+- [x] Retain CSV replacement semantics; bypass repeated fuzzy identity work only for adapter-resolved sources.
+- [x] Batch arriving revisions and retain the last completed reading during updates.
+- [x] Separate Results ready from background sync/coverage and expose bounded calculation failures.
+- [x] Verify financial equivalence on frozen private input and execute focused financial/status regressions.
+- [ ] Validate end-to-end latency on representative mobile devices before claiming device-independent responsiveness.
+
+### Seller-facing scope and product identity (ADR-070)
+
+- [x] Restore both explicit calculation modes and align desktop/mobile filter controls.
+- [x] Compact coverage summary and reason-filtered, bounded native exclusion dialog.
+- [x] Real cached item titles and genuine Catalog image support; preserve financial labels as evidence only.
+- [x] Separate token rejection from network/service failures and reuse already covered order history.
+- [x] Confirm healthy financial/order sync and verify focused core/auth/catalog/cache and desktop/mobile flows.
+- [ ] Owner grants Product Listing access before live Catalog photos can be retrieved; current 403 is surfaced without stopping financial ingestion.
+
+
+### Dashboard loading presentation — 2026-11-08
+
+Implemented a compact header sync indicator with expandable diagnostics and responsive dashboard skeletons during automatic processing/date transitions. Reduced-motion preferences are respected. Verification is deferred at the owner's explicit request; no build or tests were run for this change.
+
+### Live purchase-period orders — ADR-071
+
+- [x] Count all recorded order activity, including deferred entries, in the verified original purchase period.
+- [x] Include Orders-only records in counts/status lists without generating financial sales or fees.
+- [x] Publish order metadata updates through the existing local cache, worker and live-reading flow.
+- [x] Replace the main mode switch/release-gated labels with one purchase-date view; align product/comparison and audit semantics.
+- [x] Author core/adapter/order-reader/store regression cases and update documentation.
+- [ ] Execute tests, build and browser/live verification when the owner authorizes them. Activate the updated local backend/frontend afterward; current source changes are unverified.
+
+### Local launcher recovery — 2026-11-08
+
+Startup now acquires port 8788 before opening the source cache/background sync, preventing duplicate launchers from competing for the cache. Failures identify their startup stage and safe error code without printing credential values. The old background process was replaced with the current backend and the launcher confirmed readiness. No test suite/browser verification was executed.
+
+### Quiet background updates — ADR-072
+
+- [x] Keep dashboard content mounted during background delivery and calculations; restrict skeletons to initial preparation/user filter transitions.
+- [x] Avoid publishing Finance revisions for object-key ordering changes; preserve every unknown source value in comparisons.
+- [x] Compare merged transaction/order content before worker dispatch and skip unchanged deliveries.
+- [x] Persist unchanged revision acknowledgements without changing dataset references or calculation timestamps.
+- [x] Author content-comparison, merge, store and saved-checkpoint regressions.
+- [ ] Execute tests/build/browser verification and activate the changes when requested. No verification or restart performed for this change.
+
+### Netlify on-demand relay — ADR-073
+
+- [x] Fixed-endpoint, bounded, same-origin stateless relay with no hosted database or scheduled job.
+- [x] Transient caller-owned credentials/token session and explicit responsive Connect/Sync/Stop/Forget controls.
+- [x] Browser source cache, previous-version evidence, atomic page checkpoints, account writer lease and persisted rate cooldowns.
+- [x] Initial/missing history, bounded refresh, verified purchase dates and due linked histories; use existing calculations and quiet update flow.
+- [x] Keep local mode available and add deployment/privacy instructions and regression fixtures.
+- [ ] Execute typecheck/build, financial/cache/relay regressions and responsive browser checks when authorized.
+- [ ] Commit/push the prepared revision and publish/deploy only when authorized. The selected remote `main` does not automatically contain local work.

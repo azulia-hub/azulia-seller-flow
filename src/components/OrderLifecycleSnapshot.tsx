@@ -1,33 +1,19 @@
-import { useMemo, useState } from 'react'
-import type { CohortFinancials, OrderCohort } from '../core/analytics/orderLifecycle'
-import { isDeferred } from '../core/analytics/orderLifecycle'
-
-type Props = { readonly cohort: OrderCohort; readonly financials: CohortFinancials; readonly formatMoney: (value: number) => string; readonly onClose: () => void }
-
-export function OrderLifecycleSnapshot({ cohort, financials, formatMoney, onClose }: Props) {
-  const [tab, setTab] = useState<'PENDING' | 'MISSING'>('PENDING')
-  const [query, setQuery] = useState('')
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const orders = useMemo(() => (tab === 'PENDING' ? financials.orders.filter(o => o.pendingEvents.length) : financials.unmatched)
-    .filter(order => !query || order.orderId.toLowerCase().includes(query.trim().toLowerCase()))
-    .sort((a, b) => (b.saleDate ?? b.lastEventDate ?? '').localeCompare(a.saleDate ?? a.lastEventDate ?? '')), [financials, query, tab])
-  const globalPending = cohort.pendingEvents.filter(e => !e.orderId)
-  return <div className="drilldown-backdrop lifecycle-snapshot-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
-    <section className="order-lifecycle-snapshot" role="dialog" aria-modal="true" aria-labelledby="order-lifecycle-title">
-      <header className="drilldown-head"><div><button className="workspace-back" onClick={onClose}>← Dashboard</button><small>Orders sold in selected period</small><h2 id="order-lifecycle-title">Pending &amp; unmatched activity</h2><p>{cohort.range.from} → {cohort.range.to} · activity observed through {cohort.observationThrough ?? 'unknown'}</p></div><button className="close" aria-label="Close activity review" onClick={onClose}>×</button></header>
-      <div className="lifecycle-snapshot-body">
-        <section className="lifecycle-method-note"><strong>Known activity stays included</strong><p>Released transactions on selected orders contribute to the main results. Deferred amounts are pending. Activity without its original sale remains unmatched; its sales month is never guessed. Posted activity retains every source event for reconciliation.</p>{cohort.supersededEvents.length > 0 ? <p>{cohort.supersededEvents.length} deferred event components have identical released counterparts and are counted only once in order analysis.</p> : null}</section>
-        <div className="product-mode activity-tabs" role="tablist" aria-label="Activity review"><button role="tab" aria-selected={tab === 'PENDING'} className={tab === 'PENDING' ? 'active' : ''} onClick={() => { setTab('PENDING'); setExpanded(null) }}>Pending transactions ({cohort.pendingOrderCount} orders)</button><button role="tab" aria-selected={tab === 'MISSING'} className={tab === 'MISSING' ? 'active' : ''} onClick={() => { setTab('MISSING'); setExpanded(null) }}>Original sale missing ({cohort.missingSale.length})</button></div>
-        <div className="lifecycle-order-controls"><label>Search order<input value={query} onChange={event => setQuery(event.target.value)} placeholder="Order ID" /></label><span>{orders.length} matching orders</span></div>
-        <div role="tabpanel" aria-label={tab === 'PENDING' ? 'Pending transactions' : 'Original sale missing'} className="activity-order-list">
-          {orders.map(order => <article key={order.orderId} className="activity-order-card">
-            <button className="activity-order-toggle" aria-expanded={expanded === order.orderId} onClick={() => setExpanded(expanded === order.orderId ? null : order.orderId)}><span><strong>{order.orderId}</strong><small>Original sale: {order.saleDate ?? 'Missing'} · latest activity: {order.lastEventDate ?? 'Unknown'}</small></span><span>{tab === 'PENDING' ? `${order.pendingEvents.length} pending financial components` : 'Sales month unknown'} · {expanded === order.orderId ? 'Collapse ↑' : 'View evidence ↓'}</span></button>
-            {expanded === order.orderId ? <div className="activity-order-evidence"><div className="pending-activity-grid"><article><span>Released sales</span><strong>{formatMoney(order.released.grossSales)}</strong></article><article><span>Released profit</span><strong>{order.released.profit === null ? 'Missing costs' : formatMoney(order.released.profit)}</strong></article><article><span>Pending operating net</span><strong>{formatMoney(order.pending.operatingNet)}</strong></article><article><span>Estimated profit including pending</span><strong>{order.estimated.profit === null ? 'Missing costs' : formatMoney(order.estimated.profit)}</strong></article></div>{!order.estimated.costComplete ? <p className="pending-note">Costs are incomplete; profit follows the configured missing-cost policy.</p> : null}<p>{tab === 'MISSING' ? 'These amounts are evidence only and are excluded from the selected sales cohort.' : 'Only deferred components are excluded from the main results.'}</p><div className="table-scroll"><table><thead><tr><th>Date</th><th>Source transaction</th><th>Component</th><th>Status</th><th>Signed amount</th></tr></thead><tbody>{order.events.map(event => <tr key={event.id}><td>{event.date}</td><td>{event.rawType || event.rawDescription || event.event}</td><td>{event.amountType}</td><td><span className={isDeferred(event) ? 'pending-note' : ''}>{event.status || 'Not provided'}</span></td><td>{formatMoney(event.amount)}</td></tr>)}</tbody></table></div></div> : null}
-          </article>)}
-          {!orders.length ? <p className="empty-state">No matching orders.</p> : null}
-          {tab === 'PENDING' && globalPending.length > 0 ? <section className="activity-order-card"><h3>Pending account-level activity</h3><p>Uses posting dates in the selected period; no order attribution is invented.</p><div className="table-scroll"><table><thead><tr><th>Date</th><th>Source label</th><th>Status</th><th>Amount</th></tr></thead><tbody>{globalPending.map(e => <tr key={e.id}><td>{e.date}</td><td>{e.rawType}</td><td>{e.status}</td><td>{formatMoney(e.amount)}</td></tr>)}</tbody></table></div></section> : null}
-        </div>
-      </div>
-    </section>
-  </div>
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { cohortExcludedRecords, type OrderCohort } from '../core/analytics/orderLifecycle'
+type Props = { cohort: OrderCohort; formatMoney: (value: number) => string; onClose: () => void }
+const reasons = { PENDING: 'Release not confirmed', MISSING_DATE: 'Purchase date not verified', OUTSIDE_PERIOD: 'Purchased outside this period' }
+export function OrderLifecycleSnapshot({ cohort, formatMoney, onClose }: Props) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  const [query, setQuery] = useState(''), [reason, setReason] = useState('ALL'), [page, setPage] = useState(0)
+  const records = useMemo(() => cohortExcludedRecords(cohort), [cohort])
+  const matches = useMemo(() => records.filter(record => (reason === 'ALL' || record.reason === reason) && (!query.trim() || record.orderId?.toLowerCase().includes(query.trim().toLowerCase()))), [records, query, reason])
+  const current = Math.min(page, Math.max(0, Math.ceil(matches.length / 15) - 1))
+  useEffect(() => { const element = dialog.current; element?.showModal(); return () => { element?.close() } }, [])
+  return <dialog ref={dialog} className="excluded-records-dialog" aria-labelledby="excluded-records-title" onCancel={onClose} onClick={event => { const box = event.currentTarget.getBoundingClientRect(); if (event.target === event.currentTarget && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) onClose() }}>
+    <header><div><h2 id="excluded-records-title">Excluded financial records <small>{records.length}</small></h2><p>{cohort.range.from} – {cohort.range.to} · Orders by purchase date</p></div><button className="text-btn" aria-label="Close excluded records" onClick={onClose}>✕</button></header>
+    <p>Orders outside the selected purchase dates are excluded. Unverified purchase dates need review. Recorded activity on selected orders is included without waiting for release.</p>
+    <div className="exclusion-controls"><input type="search" aria-label="Find excluded order" placeholder="Find order ID" value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} /><select aria-label="Exclusion reason" value={reason} onChange={event => { setReason(event.target.value); setPage(0) }}><option value="ALL">All reasons</option>{Object.entries(reasons).filter(([key]) => cohort.inclusion !== 'ALL_RECORDED' || key !== 'PENDING').map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div>
+    <div className="excluded-records-list">{matches.slice(current * 15, (current + 1) * 15).map(record => <article key={record.key}><div><strong>{record.orderId ?? 'Account entry'}</strong><small>{record.purchaseDate ? `Purchased ${record.purchaseDate}` : 'Purchase date unavailable'} · {record.components} financial components</small></div><div><span>{reasons[record.reason]}</span><strong>{formatMoney(record.amount)}</strong></div></article>)}{!matches.length ? <p>No excluded records match these filters.</p> : null}</div>
+    <footer><small>{matches.length} records · Page {current + 1} of {Math.max(1, Math.ceil(matches.length / 15))}</small><button className="secondary" disabled={!current} onClick={() => setPage(current - 1)}>Previous</button><button className="secondary" disabled={(current + 1) * 15 >= matches.length} onClick={() => setPage(current + 1)}>Next</button></footer>
+  </dialog>
 }

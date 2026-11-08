@@ -1,0 +1,45 @@
+import { expect, it, vi } from 'vitest'
+import { handleAmazonRelay } from '../../server/relay/handler'
+const origin = 'https://azulia-fixture.netlify.app'
+const make = (body: unknown, extra: Record<string, string> = {}) => new Request(`${origin}/.netlify/functions/amazon`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Azulia-Intent': 'amazon-relay', ...extra }, body: JSON.stringify(body) })
+it('rejects cross-origin requests, unsupported actions and arbitrary URL proxying before any upstream call', async () => {
+  const upstream = vi.fn<typeof fetch>()
+  expect((await handleAmazonRelay(make({ action: 'finance', accessToken: 'fixture' }, { Origin: 'https://other.invalid' }), upstream)).status).toBe(403)
+  expect((await handleAmazonRelay(make({ action: 'fetch', url: 'https://other.invalid', accessToken: 'fixture' }), upstream)).status).toBe(400)
+  expect(upstream).not.toHaveBeenCalled()
+})
+it('exchanges caller-provided credentials only for that request and never caches the response', async () => {
+  const upstream = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ access_token: 'fixture-access', token_type: 'bearer', expires_in: 3600 }))
+  const response = await handleAmazonRelay(make({ action: 'connect', clientId: 'fixture-client', clientSecret: 'fixture-secret', refreshToken: 'fixture-refresh' }), upstream)
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toContain('no-store')
+  expect(response.headers.get('netlify-cdn-cache-control')).toBe('no-store')
+  expect(await response.json()).toMatchObject({ accessToken: 'fixture-access' })
+  expect(String(upstream.mock.calls[0][0])).toBe('https://api.amazon.com/auth/o2/token')
+  const second = await handleAmazonRelay(make({ action: 'finance', from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' }), upstream)
+  expect(second.status).toBe(400)
+  expect(upstream).toHaveBeenCalledTimes(1)
+})
+it('relays financial money as exact strings without a second token exchange or shared state', async () => {
+  const upstream = vi.fn<typeof fetch>().mockResolvedValue(new Response('{"payload":{"transactions":[{"transactionId":"fixture-tx","postedDate":"2026-01-01T00:00:00Z","totalAmount":{"currencyCode":"INR","currencyAmount":0.10}}]}}', { headers: { 'Content-Type': 'application/json' } }))
+  const response = await handleAmazonRelay(make({ action: 'finance', accessToken: 'fixture-access', from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' }), upstream)
+  expect(response.status).toBe(200)
+  expect((await response.json()).records[0].totalAmount.currencyAmount).toBe('0.10')
+  expect(upstream).toHaveBeenCalledTimes(1)
+  expect(String(upstream.mock.calls[0][0])).toContain('https://sellingpartnerapi-eu.amazon.com/finances/')
+})
+it('returns only minimal order metadata and excludes buyer/address information', async () => {
+  const upstream = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ payload: { AmazonOrderId: '111-1234567-1234567', PurchaseDate: '2026-01-01T00:00:00Z', OrderStatus: 'Unshipped', OrderTotal: { CurrencyCode: 'INR', Amount: '1180.00' }, BuyerInfo: { BuyerEmail: 'private@example.invalid' }, ShippingAddress: { Name: 'private' } } }))
+  const response = await handleAmazonRelay(make({ action: 'order', accessToken: 'fixture-access', orderId: '111-1234567-1234567' }), upstream)
+  const data = await response.json()
+  expect(data.summary.orderValue).toBe('1180.00')
+  expect(JSON.stringify(data)).not.toContain('private')
+})
+it('validates date windows and sanitizes unexpected upstream failures without leaking request credentials', async () => {
+  const upstream = vi.fn<typeof fetch>().mockRejectedValue(new Error('fixture-secret fixture-refresh must not be returned'))
+  const invalid = await handleAmazonRelay(make({ action: 'finance', accessToken: 'fixture-access', from: '2026-01-01T00:00:00Z', to: '2026-03-01T00:00:00Z' }), upstream)
+  expect(invalid.status).toBe(400)
+  expect(upstream).not.toHaveBeenCalled()
+  const response = await handleAmazonRelay(make({ action: 'finance', accessToken: 'fixture-access', from: '2026-01-01T00:00:00Z', to: '2026-01-02T00:00:00Z' }), upstream)
+  expect(await response.text()).not.toContain('fixture-secret')
+})

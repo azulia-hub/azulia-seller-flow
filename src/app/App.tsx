@@ -1,4 +1,12 @@
+import '../components/sellerRefinements.css'
+import { hostedDelivery } from '../adapters/amazon-hosted/client'
+import { HostedAmazonConnection } from '../components/HostedAmazonConnection'
+import { useAutomaticReport } from './useAutomaticReport'
+import { DashboardSkeleton } from '../components/DashboardSkeleton'
+import { AutomaticReportStatus } from '../components/AutomaticReportStatus'
+import { deliveryVersion, type AutomaticReading } from '../adapters/amazon-report-sync/readingStore'
 import { lazy, Suspense } from 'react'
+import { LiveOrderList } from '../components/LiveOrderList'
 import { OrderCohortSummary } from '../components/OrderCohortSummary'
 import { OrderActivityContext } from '../components/OrderActivityContext'
 import { FocusPriorities } from '../components/FocusPriorities'
@@ -55,7 +63,7 @@ import { FeeAuditPanel } from '../features/fees/FeeAuditPanel'
 import { buildAuditWorkbook } from '../core/export/auditWorkbook'
 import { downloadWorkbook } from '../adapters/browser/downloadWorkbook'
 import { downloadBackup, restoreBackup } from '../adapters/browser/backupStore'
-import { buildOrderCohort, buildCohortFinancials } from '../core/analytics/orderLifecycle'
+import { countFinancialRecords, indexOrderHistory, selectOrderCohort, buildCohortFinancials } from '../core/analytics/orderLifecycle'
 import { OrderLifecycleSnapshot } from '../components/OrderLifecycleSnapshot'
 import type { SponsoredProductsReport } from '../core/advertising/types'
 import { buildSponsoredProductsAttribution, intersectAdvertisingRange } from '../core/advertising/sponsoredProducts'
@@ -78,6 +86,10 @@ function money(n: number) {
 }
 
 export function App() {
+  const [automaticEnabled, setAutomaticEnabled] = useState(() => { try { return localStorage.getItem('azulia.report-delivery') !== 'manual' } catch { return true } })
+  const [automaticIssues, setAutomaticIssues] = useState<string[]>([])
+  const automaticIdentity = useRef<string | null>(null)
+  function deliveryMode(enabled: boolean) { setAutomaticEnabled(enabled); try { localStorage.setItem('azulia.report-delivery', enabled ? 'automatic' : 'manual') } catch { /* Mode still works for this visit. */ } }
   const [active, setActive] = useState<AppPage>('Home')
   const [mobileNav, setMobileNav] = useState(false)
   const [fileName, setFileName] = useState('August 2026 Amazon report')
@@ -86,9 +98,17 @@ export function App() {
   const [needsMapping, setNeedsMapping] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
-  const [fulfillmentFilter, setFulfillmentFilter] = useState('')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const [requestedFulfillmentFilter, setFulfillmentFilter] = useState('')
+  const fulfillmentFilter = useDeferredValue(requestedFulfillmentFilter)
+  const [filterUpdatePending, setFilterUpdatePending] = useState(false)
+  const [requestedFromDate, setFromDate] = useState('')
+  const fromDate = useDeferredValue(requestedFromDate)
+  const [requestedToDate, setToDate] = useState('')
+  const toDate = useDeferredValue(requestedToDate)
+  const filtersUpdating = filterUpdatePending && (requestedFromDate !== fromDate || requestedToDate !== toDate || requestedFulfillmentFilter !== fulfillmentFilter)
+  useEffect(() => {
+    if (filterUpdatePending && !filtersUpdating) setFilterUpdatePending(false)
+  }, [filterUpdatePending, filtersUpdating])
   const [periodChoice, setPeriodChoice] = useState<PeriodChoice | ''>('')
   const [costs, setCosts] = useState<ProductCost[]>(() => loadProductCosts())
   const userSelectedReport = useRef(false)
@@ -109,7 +129,8 @@ export function App() {
   const [adAccountType, setAdAccountType] = useState('')
   const [adFulfillmentType, setAdFulfillmentType] = useState('')
   const [feeAuditOpen, setFeeAuditOpen] = useState(false)
-  const [calculationBasis, setCalculationBasis] = useState<CalculationBasis>('SALE_PERIOD_ORDERS')
+  // A single seller-facing purchase-date view; saved legacy posting-mode preferences cannot override it.
+  const calculationBasis = useMemo<CalculationBasis>(() => 'SALE_PERIOD_ORDERS', [])
   const [cohortSnapshotOpen, setCohortSnapshotOpen] = useState(false)
   const [advertisingDateUndo, setAdvertisingDateUndo] = useState<{
     fromDate: string; toDate: string; periodChoice: PeriodChoice | ''; fulfillmentFilter: string;
@@ -121,6 +142,19 @@ export function App() {
   const [sponsoredImporting, setSponsoredImporting] = useState(false)
   const [sponsoredError, setSponsoredError] = useState<string | null>(null)
 
+  const applyAutomaticReading = useCallback((reading: AutomaticReading) => {
+    userSelectedReport.current = true
+    const changedIdentity = automaticIdentity.current !== reading.connectionKey
+    automaticIdentity.current = reading.connectionKey
+    setDataset(reading.dataset); setRawDataset(reading.raw); setNeedsMapping(false); setFileName(reading.fileName); setCurrentImportId(reading.id); setAutomaticIssues(reading.issues)
+    saveActiveReportId(reading.id)
+    setImports(previous => [reading, ...previous.filter(item => item.id !== reading.id)])
+    if (changedIdentity) {
+      const saved = loadAnalysisView(reading.id), today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+      setFromDate(saved?.from ?? new Date(Date.parse(today) - 29 * 86400000).toISOString().slice(0, 10)); setToDate(saved?.to ?? today); setPeriodChoice(saved?.period ?? 'CUSTOM'); setFulfillmentFilter(saved?.fulfillment ?? '')
+    }
+  }, [])
+  const automaticDelivery = useAutomaticReport({ enabled: automaticEnabled, visibleConnectionKey: currentImportId?.startsWith('api:') ? currentImportId.slice(4) : undefined, range: currentImportId?.startsWith('api:') && fromDate && toDate ? { from: fromDate, to: toDate } : null, onReading: applyAutomaticReading, onIdentityChange: () => { setDataset(null); setRawDataset(null); setCurrentImportId(null); automaticIdentity.current = null } })
   useEffect(() => {
     loadImports().then((saved) => {
       setImports(saved)
@@ -141,22 +175,26 @@ export function App() {
   const analyticsCosts = useMemo(() => appliedCostDraft ? setProductCost(costs, appliedCostDraft, skuNormalizer) : costs, [costs, appliedCostDraft, skuNormalizer])
   const periodScopeEvents = useMemo(() => filterEvents(allEvents, { fulfillmentType: fulfillmentFilter || undefined }), [allEvents, fulfillmentFilter])
   const postedEvents = useMemo(() => filterEvents(periodScopeEvents, { fromDate: fromDate || undefined, toDate: toDate || undefined }), [periodScopeEvents, fromDate, toDate])
-  const orderCohort = useMemo(() => fromDate && toDate ? buildOrderCohort(periodScopeEvents, { from: fromDate, to: toDate }) : null, [periodScopeEvents, fromDate, toDate])
-  const filteredEvents = calculationBasis === 'SALE_PERIOD_ORDERS' && orderCohort ? orderCohort.events : postedEvents
+  const postedRecordCount = useMemo(() => countFinancialRecords(postedEvents), [postedEvents])
+  const sourceOrders = effectiveDataset?.orders
+  const scopedOrders = useMemo(() => sourceOrders?.filter(order => !fulfillmentFilter || !order.fulfillmentType || order.fulfillmentType === fulfillmentFilter), [sourceOrders, fulfillmentFilter])
+  const orderHistory = useMemo(() => indexOrderHistory(periodScopeEvents, scopedOrders), [periodScopeEvents, scopedOrders])
+  const orderCohort = useMemo(() => fromDate && toDate ? selectOrderCohort(orderHistory, { from: fromDate, to: toDate }, 'ALL_RECORDED') : null, [orderHistory, fromDate, toDate])
+  const filteredEvents = orderCohort?.events ?? []
   const cohortFinancials = useMemo(() => {
     if (!orderCohort) return null
-    const details = cohortSnapshotOpen || (productSelection?.scope === 'CURRENT' && calculationBasis === 'SALE_PERIOD_ORDERS')
-    if (!(active === 'Home' && !productSelection) && !details) return null
+    const details = (productSelection?.scope === 'CURRENT' && calculationBasis === 'SALE_PERIOD_ORDERS')
+    if (!details) return null
     return buildCohortFinancials(orderCohort, analyticsCosts, missingCostPolicy, skuNormalizer, details)
-  }, [orderCohort, analyticsCosts, missingCostPolicy, skuNormalizer, active, productSelection, cohortSnapshotOpen, calculationBasis])
-  const business = useMemo(() => buildBusinessOverview(filteredEvents, analyticsCosts, missingCostPolicy, skuNormalizer), [filteredEvents, analyticsCosts, missingCostPolicy, skuNormalizer])
+  }, [orderCohort, analyticsCosts, missingCostPolicy, skuNormalizer, productSelection, calculationBasis])
+  const business = useMemo(() => buildBusinessOverview(filteredEvents, analyticsCosts, missingCostPolicy, skuNormalizer, orderCohort?.orders.map(order => order.orderId)), [filteredEvents, analyticsCosts, missingCostPolicy, skuNormalizer, orderCohort])
   const { summary, costStatus, profitAfterAds, profitBeforeAds, profitMargin, roi, unitEconomics, otherOperating } = business
-  const trend = useMemo(() => dailySales(filteredEvents), [filteredEvents])
-  const fulfillmentTypes = useMemo(() => [...new Set(allEvents.flatMap((event) => event.fulfillmentType ? [event.fulfillmentType] : []))].sort(), [allEvents])
+  const trend = useMemo(() => dailySales(filteredEvents, calculationBasis === 'SALE_PERIOD_ORDERS' ? 'ORDER_PURCHASE' : 'POSTED'), [filteredEvents, calculationBasis])
+  const fulfillmentTypes = useMemo(() => [...new Set([...allEvents.flatMap((event) => event.fulfillmentType ? [event.fulfillmentType] : []), ...(sourceOrders ?? []).flatMap(order => order.fulfillmentType ? [order.fulfillmentType] : [])])].sort(), [allEvents, sourceOrders])
   const dateExtent = useMemo(() => {
-    const dates = allEvents.flatMap((event) => { const date = canonicalDateKey(event.date); return date ? [date] : [] }).sort()
+    const dates = [...allEvents.flatMap((event) => [canonicalDateKey(event.date), canonicalDateKey(event.orderPurchaseDate ?? null)].filter((date): date is string => Boolean(date))), ...(sourceOrders ?? []).map(order => order.purchaseDate)].sort()
     return { min: dates[0], max: dates.at(-1) }
-  }, [allEvents])
+  }, [allEvents, sourceOrders])
   const comparisonPeriods = useMemo(() => {
     if (!dateExtent.min || !dateExtent.max) return []
     return TIME_PERIOD_OPTIONS.filter(option => {
@@ -167,6 +205,10 @@ export function App() {
   useEffect(() => {
     if (!dateExtent.min || !dateExtent.max) return
     if (periodChoice === 'CUSTOM') return
+    if (automaticEnabled && currentImportId?.startsWith('api:') && periodChoice && periodChoice !== 'ALL') {
+      const current = resolveTimePeriod(periodChoice, new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)).current
+      setFromDate(current.from); setToDate(current.to); return
+    }
     if (periodChoice === 'ALL') {
       setFromDate(dateExtent.min)
       setToDate(dateExtent.max)
@@ -183,7 +225,7 @@ export function App() {
       ? periodChoice as TimePeriodPreset
       : comparisonPeriods.find(option => option.id === recommended)?.id ?? comparisonPeriods.at(-1)?.id
     if (next) {
-      const current = resolveTimePeriod(next, dateExtent.max).current
+      const current = resolveTimePeriod(next, automaticEnabled && currentImportId?.startsWith('api:') ? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10) : dateExtent.max).current
       setPeriodChoice(next)
       setFromDate(current.from)
       setToDate(current.to)
@@ -192,44 +234,45 @@ export function App() {
       setFromDate(dateExtent.min)
       setToDate(dateExtent.max)
     }
-  }, [dateExtent.min, dateExtent.max, comparisonPeriods, periodChoice])
+  }, [dateExtent.min, dateExtent.max, comparisonPeriods, periodChoice, automaticEnabled, currentImportId])
 
   useEffect(() => {
     if (currentImportId && fromDate && toDate && fromDate <= toDate && periodChoice) saveAnalysisView(currentImportId, { from:fromDate, to:toDate, period:periodChoice, basis:calculationBasis, fulfillment:fulfillmentFilter })
   }, [currentImportId, fromDate, toDate, periodChoice, calculationBasis, fulfillmentFilter])
 
   function applyPeriod(next: PeriodChoice) {
+    setFilterUpdatePending(true)
     setPeriodChoice(next)
     if (next === 'ALL' && dateExtent.min && dateExtent.max) {
       setFromDate(dateExtent.min)
       setToDate(dateExtent.max)
     } else if (next !== 'CUSTOM' && next !== 'ALL' && dateExtent.max) {
-      const current = resolveTimePeriod(next, dateExtent.max).current
+      const current = resolveTimePeriod(next, automaticEnabled && currentImportId?.startsWith('api:') ? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10) : dateExtent.max).current
       setFromDate(current.from)
       setToDate(current.to)
     }
   }
   const orders = useMemo(() => summarizeOrders(feeAuditOpen ? filteredEvents : [], analyticsCosts, missingCostPolicy, skuNormalizer), [filteredEvents, analyticsCosts, missingCostPolicy, skuNormalizer, feeAuditOpen])
   const returnSummary = useMemo(() => summarizeReturns(active === 'Returns' || (active === 'Home' && !productSelection) ? filteredEvents : [], analyticsCosts, skuNormalizer), [filteredEvents, analyticsCosts, skuNormalizer, active, productSelection])
-  const needsProducts = active === 'Home' || active === 'Products' || Boolean(homeMetric) || productSelection?.scope === 'CURRENT'
+  const needsProducts = active === 'Home' || active === 'Products' || active === 'Advertising' || Boolean(homeMetric) || productSelection?.scope === 'CURRENT'
   const savedProductProfitability = useMemo(() => summarizeProductProfitability(needsProducts ? filteredEvents : [], costs, missingCostPolicy, skuNormalizer), [needsProducts, filteredEvents, costs, missingCostPolicy, skuNormalizer])
   const productProfitability = useMemo(() => appliedCostDraft ? previewProductProfitability(savedProductProfitability, filteredEvents, analyticsCosts, missingCostPolicy, appliedCostDraft.sku, skuNormalizer) : savedProductProfitability, [savedProductProfitability, filteredEvents, analyticsCosts, missingCostPolicy, appliedCostDraft, skuNormalizer])
-  const comparisonProductProfitability = useMemo(() => summarizeProductProfitability(homeMetric ? (calculationBasis === 'SALE_PERIOD_ORDERS' && dateExtent.min && dateExtent.max ? buildOrderCohort(periodScopeEvents, { from:dateExtent.min, to:dateExtent.max }).events : periodScopeEvents) : [], analyticsCosts, missingCostPolicy, skuNormalizer), [periodScopeEvents, analyticsCosts, missingCostPolicy, skuNormalizer, homeMetric, calculationBasis, dateExtent.min, dateExtent.max])
+  const comparisonProductProfitability = useMemo(() => summarizeProductProfitability(homeMetric ? (calculationBasis === 'SALE_PERIOD_ORDERS' && dateExtent.min && dateExtent.max ? selectOrderCohort(orderHistory, { from:dateExtent.min, to:dateExtent.max }, 'ALL_RECORDED').events : periodScopeEvents) : [], analyticsCosts, missingCostPolicy, skuNormalizer), [periodScopeEvents, orderHistory, analyticsCosts, missingCostPolicy, skuNormalizer, homeMetric, calculationBasis, dateExtent.min, dateExtent.max])
   const previousRange = useMemo(() => {
     if ((periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate) return previousEqualRange({ from: fromDate, to: toDate })
     return periodChoice && periodChoice !== 'CUSTOM' && periodChoice !== 'ALL' && dateExtent.max ? resolveTimePeriod(periodChoice, dateExtent.max).previous : undefined
   }, [periodChoice, fromDate, toDate, dateExtent.max])
   const previousEvents = useMemo(() => {
     if (!previousRange) return []
-    return calculationBasis === 'SALE_PERIOD_ORDERS' ? buildOrderCohort(periodScopeEvents, previousRange).events : filterEvents(periodScopeEvents, { fromDate: previousRange.from, toDate: previousRange.to })
-  }, [periodScopeEvents, previousRange, calculationBasis])
+    return calculationBasis === 'SALE_PERIOD_ORDERS' ? selectOrderCohort(orderHistory, previousRange, 'ALL_RECORDED').events : filterEvents(periodScopeEvents, { fromDate: previousRange.from, toDate: previousRange.to })
+  }, [periodScopeEvents, orderHistory, previousRange, calculationBasis])
   const previousProductProfitability = useMemo(() => summarizeProductProfitability(homeMetric ? previousEvents : [], analyticsCosts, missingCostPolicy, skuNormalizer), [previousEvents, analyticsCosts, missingCostPolicy, skuNormalizer, homeMetric])
   const previousOrders = useMemo(() => summarizeOrders(feeAuditOpen ? previousEvents : [], analyticsCosts, missingCostPolicy, skuNormalizer), [previousEvents, analyticsCosts, missingCostPolicy, skuNormalizer, feeAuditOpen])
   const feeAudit = useMemo(() => buildFeeAudit(orders, previousOrders), [orders, previousOrders])
   const customComparisonRange = useMemo(() => (periodChoice === 'CUSTOM' || periodChoice === 'ALL') && fromDate && toDate ? { current: { from: fromDate, to: toDate }, previous: previousEqualRange({ from: fromDate, to: toDate }) } : undefined, [periodChoice, fromDate, toDate])
   const homeMetricResult = useMemo(() => homeMetric ? buildMetricSkuDrilldown(homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange) : null, [homeMetric, productProfitability, filteredEvents, comparisonProductProfitability, customComparisonRange])
   const accountCharges = useMemo(() => listAccountCharges(filteredEvents), [filteredEvents])
-  const advertisingEvents = useMemo(() => !adAccountType && !adFulfillmentType ? postedEvents : filterAdvertisingScope(postedEvents, { accountType: adAccountType || undefined, fulfillmentType: adFulfillmentType || undefined }), [postedEvents, adAccountType, adFulfillmentType])
+  const advertisingEvents = useMemo(() => !adAccountType && !adFulfillmentType ? filteredEvents : filterAdvertisingScope(filteredEvents, { accountType: adAccountType || undefined, fulfillmentType: adFulfillmentType || undefined }), [filteredEvents, adAccountType, adFulfillmentType])
   const baseAdvertisingSummary = useMemo(() => summarizeAdvertising(advertisingEvents), [advertisingEvents])
   const sharedAdvertisingDates = intersectAdvertisingRange(sponsoredReport, { from: dateExtent.min ?? '', to: dateExtent.max ?? '' })
   function viewSponsoredProducts() {
@@ -239,19 +282,18 @@ export function App() {
       reportId: sponsoredReport.id, financialId: currentImportId, appliedFrom: sharedAdvertisingDates.from, appliedTo: sharedAdvertisingDates.to })
     setPeriodChoice('CUSTOM'); setFromDate(sharedAdvertisingDates.from); setToDate(sharedAdvertisingDates.to)
     setFulfillmentFilter(''); setAdAccountType(''); setAdFulfillmentType('')
-    setCalculationBasis('POSTED_ACTIVITY')
-    if (productSelection) openProductPage({ sku: productSelection.sku, scope: 'POSTED' }, { page: active, metric: null })
+    if (productSelection) openProductPage({ sku: productSelection.sku, scope: 'CURRENT' }, { page: active, metric: null })
     setActive(current => current === 'Reports' ? 'Advertising' : current)
   }
   function undoAdvertisingDates() {
     if (!advertisingDateUndo) return
     setFromDate(advertisingDateUndo.fromDate); setToDate(advertisingDateUndo.toDate); setPeriodChoice(advertisingDateUndo.periodChoice)
     setFulfillmentFilter(advertisingDateUndo.fulfillmentFilter); setAdAccountType(advertisingDateUndo.adAccountType); setAdFulfillmentType(advertisingDateUndo.adFulfillmentType)
-    setCalculationBasis(advertisingDateUndo.calculationBasis); setAdvertisingDateUndo(null)
+    setAdvertisingDateUndo(null)
   }
   const showAdvertisingDateUndo = advertisingDateUndo && advertisingDateUndo.reportId === sponsoredReport?.id && advertisingDateUndo.financialId === currentImportId
     && fromDate === advertisingDateUndo.appliedFrom && toDate === advertisingDateUndo.appliedTo && periodChoice === 'CUSTOM'
-    && !fulfillmentFilter && !adAccountType && !adFulfillmentType && calculationBasis === 'POSTED_ACTIVITY'
+    && !fulfillmentFilter && !adAccountType && !adFulfillmentType 
 
   const sponsoredAttribution = useMemo(() => buildSponsoredProductsAttribution(
     advertisingEvents, sponsoredReport,
@@ -291,7 +333,7 @@ export function App() {
   }, [allEvents, searchDetail])
   const searchOrders = useMemo(() => summarizeOrders(searchEvidenceEvents, analyticsCosts, missingCostPolicy, skuNormalizer), [searchEvidenceEvents, analyticsCosts, missingCostPolicy, skuNormalizer])
   function openSearchProduct(sku: string) {
-    openProductPage({ sku, scope: periodChoice === 'ALL' ? 'REPORT' : sponsoredAttribution.status === 'AVAILABLE' ? 'POSTED' : 'CURRENT' }, { page: active, metric: homeMetric }); setSearchDetail(null); setHomeMetric(null)
+    openProductPage({ sku, scope: 'CURRENT' }, { page: active, metric: homeMetric }); setSearchDetail(null); setHomeMetric(null)
   }
   const selectedProduct = useMemo(() => {
     if (!productSelection) return null
@@ -308,7 +350,7 @@ export function App() {
   }, [active, imports, comparisonLeftId, comparisonRightId, analyticsCosts, missingCostPolicy])
   const qualityCenter = useMemo(() => effectiveDataset && active === 'Reports' ? buildDataQualityCenter(effectiveDataset, costs, imports, currentImportId, skuNormalizer) : null, [active, effectiveDataset, costs, imports, currentImportId, skuNormalizer])
   const openOrders = (sku?: string) => { if (sku) { openProductPage({ sku, scope: 'CURRENT' }, { page: active, metric: homeMetric }); setHomeMetric(null) } }
-  const openSellerProduct = (sku: string) => { openProductPage({ sku, scope: sponsoredAttribution.status === 'AVAILABLE' ? 'POSTED' : 'CURRENT' }, { page: active, metric: homeMetric }); setHomeMetric(null) }
+  const openSellerProduct = (sku: string) => { openProductPage({ sku, scope: 'CURRENT' }, { page: active, metric: homeMetric }); setHomeMetric(null) }
 
   async function rememberImport(nextDataset: CanonicalDataset, nextFileName: string) {
     const item: StoredImport = { id: nextDataset.events[0]?.sourceDatasetId ?? crypto.randomUUID(), fileName: nextFileName, importedAt: new Date().toISOString(), dataset: nextDataset, profile: profileDataset(nextDataset) }
@@ -321,6 +363,12 @@ export function App() {
   }
 
   function openImport(item: StoredImport, navigate = true) {
+    if (navigate) deliveryMode(item.id.startsWith('api:'))
+    if (item.id.startsWith('api:') && (item as Partial<AutomaticReading>).deliveryVersion !== deliveryVersion) {
+      // Old saved API totals used release dates. Rebuild from source before displaying them.
+      setDataset(null); setRawDataset(null); setCurrentImportId(item.id)
+      return
+    }
     userSelectedReport.current = true
     saveActiveReportId(item.id)
     if (navigate) clearProductPage(); setHomeMetric(null); setSearchDetail(null); cancelCostPreview()
@@ -330,11 +378,11 @@ export function App() {
     setFileName(item.fileName)
     setCurrentImportId(item.id)
     const view = loadAnalysisView(item.id)
-    setFulfillmentFilter(view?.fulfillment ?? ''); setFromDate(view?.from ?? ''); setToDate(view?.to ?? ''); setPeriodChoice(view?.period ?? ''); setAdAccountType(''); setAdFulfillmentType(''); setCalculationBasis(view?.basis ?? 'SALE_PERIOD_ORDERS')
-    if (navigate) setActive('Home')
+    setFulfillmentFilter(view?.fulfillment ?? ''); setFromDate(view?.from ?? ''); setToDate(view?.to ?? ''); setPeriodChoice(view?.period ?? ''); setAdAccountType(''); setAdFulfillmentType(''); if (navigate) setActive('Home')
   }
 
   async function onFile(file: File) {
+    deliveryMode(false)
     clearProductPage(); setHomeMetric(null); setSearchDetail(null)
     userSelectedReport.current = true
     setImporting(true)
@@ -351,7 +399,6 @@ export function App() {
       setPeriodChoice('')
       setAdAccountType('')
       setAdFulfillmentType('')
-      setCalculationBasis('SALE_PERIOD_ORDERS')
       if (detected) {
         const normalized = detected.adapter.normalize(raw)
         setDataset(normalized)
@@ -435,41 +482,44 @@ export function App() {
   }
 
   return (
-    <OrderActivityContext.Provider value={calculationBasis === 'SALE_PERIOD_ORDERS' && (!productSelection || productSelection.scope === 'CURRENT') ? cohortFinancials?.orders ?? [] : []}><ProductCostEditorContext.Provider value={{ costs, normalizeSku: skuNormalizer, pending: costDraft !== appliedCostDraft, manageCosts: () => navigateWorkspace('Costs'), preview: setCostDraft, cancelPreview: cancelCostPreview, save: record => { const next = setProductCost(costs, record, skuNormalizer); updateCosts(next); setCostDraft(null) } }}><AdvertisingRecoveryContext.Provider value={{ shared: sharedAdvertisingDates, financial: { from: dateExtent.min ?? '', to: dateExtent.max ?? '' }, onUseDates: viewSponsoredProducts, onOpenReports: () => navigateWorkspace('Reports') }}><AppShell search={dataset ? <ReportSearch key={currentImportId ?? fileName} productScopeLabel={periodChoice === 'ALL' ? 'all report dates' : `selected dates: ${advertisingDateRange(fromDate, toDate)}`} documents={searchDocuments} onSelect={result => result.kind === 'PRODUCT' && result.sku ? openSearchProduct(result.sku) : setSearchDetail(result)} /> : null} active={productSelection ? 'Products' : active} mobileNavOpen={mobileNav} reportName={fileName} reportLoaded={Boolean(effectiveDataset)} onToggleMobileNav={() => setMobileNav((value) => !value)} onNavigate={navigateWorkspace}><Suspense fallback={<p className="workspace-loading" role="status">Opening workspace…</p>}>
+    <OrderActivityContext.Provider value={calculationBasis === 'SALE_PERIOD_ORDERS' && (!productSelection || productSelection.scope === 'CURRENT') ? cohortFinancials?.orders ?? [] : []}><ProductCostEditorContext.Provider value={{ costs, normalizeSku: skuNormalizer, pending: costDraft !== appliedCostDraft, manageCosts: () => navigateWorkspace('Costs'), preview: setCostDraft, cancelPreview: cancelCostPreview, save: record => { const next = setProductCost(costs, record, skuNormalizer); updateCosts(next); setCostDraft(null) } }}><AdvertisingRecoveryContext.Provider value={{ shared: sharedAdvertisingDates, financial: { from: dateExtent.min ?? '', to: dateExtent.max ?? '' }, onUseDates: viewSponsoredProducts, onOpenReports: () => navigateWorkspace('Reports') }}><AppShell syncStatus={<AutomaticReportStatus orderCycle={calculationBasis === 'SALE_PERIOD_ORDERS'} delivery={automaticDelivery} enabled={automaticEnabled} issues={automaticIssues} onAutomatic={() => { automaticIdentity.current = null; deliveryMode(true) }} onManual={() => { deliveryMode(false); setActive('Reports') }} />} search={dataset ? <ReportSearch key={currentImportId ?? fileName} productScopeLabel={periodChoice === 'ALL' ? 'all report dates' : `selected dates: ${advertisingDateRange(fromDate, toDate)}`} documents={searchDocuments} onSelect={result => result.kind === 'PRODUCT' && result.sku ? openSearchProduct(result.sku) : setSearchDetail(result)} /> : null} active={productSelection ? 'Products' : active} mobileNavOpen={mobileNav} reportName={fileName} reportLoaded={Boolean(effectiveDataset)} onToggleMobileNav={() => setMobileNav((value) => !value)} onNavigate={navigateWorkspace}><Suspense fallback={<p className="workspace-loading" role="status">Opening workspace…</p>}>
 
 
-      {selectedProduct && productSelection ? <ProductPage key={`${productSelection.scope}:${productSelection.sku}`} product={selectedProduct} backLabel={active === 'Home' ? 'Dashboard' : active === 'Data & Settings' ? 'Settings' : active === 'Costs' ? 'Product costs' : active} advertisingProduct={selectedAdProduct} sponsored={reportAdvertising} title={searchDocuments.find(document => document.kind === 'PRODUCT' && document.sku === selectedProduct.sku)?.label} basis={productSelection.scope === 'REPORT' ? 'All report dates · Transactions by posting date' : `${advertisingDateRange(fromDate, toDate)} · ${productSelection.scope === 'POSTED' || calculationBasis === 'POSTED_ACTIVITY' ? 'Transactions by posting date' : 'Sales-period view'}`} formatMoney={money} onBack={closeProductPage} /> : null}
+      {selectedProduct && productSelection ? <ProductPage key={`${productSelection.scope}:${productSelection.sku}`} product={selectedProduct} backLabel={active === 'Home' ? 'Dashboard' : active === 'Data & Settings' ? 'Settings' : active === 'Costs' ? 'Product costs' : active} advertisingProduct={selectedAdProduct} sponsored={reportAdvertising} title={searchDocuments.find(document => document.kind === 'PRODUCT' && document.sku === selectedProduct.sku)?.label} basis={productSelection.scope === 'REPORT' ? 'All report dates · Transactions by posting date' : `${advertisingDateRange(fromDate, toDate)} · ${productSelection.scope === 'POSTED' || calculationBasis === 'POSTED_ACTIVITY' ? 'Transactions by posting date' : 'Orders by purchase date'}`} formatMoney={money} onBack={closeProductPage} /> : null}
       {productSelection && !selectedProduct ? <section className="product-page" aria-label="Product profile"><button className="text-btn" onClick={closeProductPage}>← Back to products</button><h1>{productSelection.sku}</h1><p>{dataset ? 'This product is not available in the selected financial view. Search the whole report or choose another period.' : 'Loading your saved report…'}</p></section> : null}
       <div className="workspace-list-view" hidden={Boolean(productSelection)}>
+      {hostedDelivery ? <HostedAmazonConnection onUseAutomatic={() => deliveryMode(true)} range={requestedFromDate && requestedToDate ? { from: requestedFromDate, to: requestedToDate } : null} /> : null}
       {costDraft ? <div className="cost-preview-banner" role="status">Live cost preview · Changes are not saved yet.</div> : null}
-      {active !== 'Tools' && active !== 'Reports'  && active !== 'Data & Settings' && active !== 'Costs' && dataset ? <GlobalFilters source={dataset.source} fulfillmentTypes={fulfillmentTypes} fulfillmentType={fulfillmentFilter} fromDate={fromDate} toDate={toDate} minDate={dateExtent.min} maxDate={dateExtent.max} period={periodChoice} periods={comparisonPeriods} calculationBasis={calculationBasis} onFulfillmentTypeChange={setFulfillmentFilter} onFromDateChange={setFromDate} onToDateChange={setToDate} onPeriodChange={applyPeriod} onCalculationBasisChange={setCalculationBasis} onClear={() => { setFulfillmentFilter(''); setAdAccountType(''); setAdFulfillmentType(''); setPeriodChoice('ALL'); setFromDate(dateExtent.min ?? ''); setToDate(dateExtent.max ?? ''); setCalculationBasis('SALE_PERIOD_ORDERS'); setAdvertisingDateUndo(null) }} /> : null}
-      {active === 'Tools' ? <ToolsPage /> : active === 'Costs' ? <><PageHeader eyebrow="Workspace" title="Product costs" description="Set unit costs once and reuse them across reports." /><CostMaster events={allEvents} costs={costs} onSave={updateCosts} missingCostPolicy={missingCostPolicy} onMissingCostPolicyChange={setMissingCostPolicy} normalizeSku={skuNormalizer} /></> : active === 'Advertising' ? <><PageHeader eyebrow="Analytics" title="Advertising" description="Reported spend and sales credited to ads, with source evidence for every product." /><DashboardAdvertising report={sponsoredAttribution} postedGrossSales={baseAdvertisingSummary.grossSales} formatMoney={advertisingMoney} />{showAdvertisingDateUndo ? <div className="advertising-date-confirmation" role="status"><span>Showing business and advertising results for {advertisingDateRange(fromDate, toDate)}.</span><button className="text-btn" onClick={undoAdvertisingDates}>Undo</button></div> : null}<ProductPerformanceList full rows={sellerProducts} mode="ADVERTISING" basis="Transactions by posting date" dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} /></> : active === 'Products' ? dataset ? <><PageHeader eyebrow="Analytics" title="Products" description="Compare performance, find the product, and manage its costs in one place." /><ProductPerformanceList full rows={sellerProducts} mode={sponsoredAttribution.status === 'AVAILABLE' ? 'ADVERTISING' : 'FINANCIAL'} basis={sponsoredAttribution.status === 'AVAILABLE' || calculationBasis === 'POSTED_ACTIVITY' ? 'Transactions by posting date' : 'Sales-period view'} dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} /></> : <ReportRequired area="Products" onOpenReports={() => setActive('Reports')}>Upload a sales report to understand the profit, costs, fees, and returns for each product.</ReportRequired> : active === 'Returns' ? dataset ? <ReturnAnalysis summary={returnSummary} formatMoney={money} onSelectSku={openOrders} fileName={fileName} /> : <ReportRequired area="Returns" onOpenReports={() => setActive('Reports')}>Upload a report to separate RTO from customer returns and find products or locations with return problems.</ReportRequired> : active === 'Reports' ? <ReportsPage dataset={effectiveDataset} rawDataset={rawDataset} needsMapping={needsMapping} importing={importing} importError={importError} fileName={fileName} imports={imports} currentImportId={currentImportId} leftId={comparisonLeftId} rightId={comparisonRightId} comparison={importComparison} qualityCenter={qualityCenter} cohort={orderCohort} reportMinDate={dateExtent.min} reportMaxDate={dateExtent.max} formatMoney={money} classificationRules={classificationRules} sponsoredAttribution={sponsoredAttribution} sponsoredReport={sponsoredReport} sponsoredImporting={sponsoredImporting} sponsoredError={sponsoredError} onViewSponsored={viewSponsoredProducts} onSponsoredFile={onSponsoredFile} onFile={onFile} onApplyMapping={applyMapping} onLeftChange={setComparisonLeftId} onRightChange={setComparisonRightId} onOpen={openImport} onSaveClassificationRule={saveRule} onDeleteClassificationRule={deleteRule} onQualityAction={handleQualityAction} /> : active === 'Data & Settings' ? <DataSettingsPage events={allEvents} costs={costs} missingCostPolicy={missingCostPolicy} normalizeSku={skuNormalizer} importCount={imports.length} ruleCount={classificationRules.length} onSaveCosts={updateCosts} onMissingCostPolicyChange={setMissingCostPolicy} onExportBackup={() => downloadBackup({ imports, costs, classificationRules })} onRestoreBackup={importBackup} /> : <>
-          <PageHeader eyebrow="Business overview" title="Business overview" description="Sales, profit and product performance for your selected period." action={<>{dataset ? <button className="secondary" onClick={exportAuditWorkbook}>Export audit workbook</button> : null}<button className="secondary" onClick={() => setActive('Reports')}>{dataset ? 'Change report' : 'Upload report'}</button></>} />
+      {active !== 'Tools' && active !== 'Reports'  && active !== 'Data & Settings' && active !== 'Costs' && dataset ? <GlobalFilters source={dataset.source} fulfillmentTypes={fulfillmentTypes} fulfillmentType={requestedFulfillmentFilter} fromDate={requestedFromDate} toDate={requestedToDate} minDate={automaticEnabled && currentImportId?.startsWith('api:') ? undefined : dateExtent.min} maxDate={automaticEnabled && currentImportId?.startsWith('api:') ? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10) : dateExtent.max} period={periodChoice} periods={comparisonPeriods} onFulfillmentTypeChange={value => { setFilterUpdatePending(true); setFulfillmentFilter(value) }} onFromDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setFromDate(value) }} onToDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setToDate(value) }} onPeriodChange={applyPeriod} onClear={() => { setFilterUpdatePending(true); setFulfillmentFilter(''); setAdAccountType(''); setAdFulfillmentType(''); setPeriodChoice('ALL'); setFromDate(dateExtent.min ?? ''); setToDate(dateExtent.max ?? ''); setAdvertisingDateUndo(null) }} /> : null}
+      {active === 'Tools' ? <ToolsPage /> : active === 'Costs' ? <><PageHeader eyebrow="Workspace" title="Product costs" description="Set unit costs once and reuse them across reports." /><CostMaster events={allEvents} costs={costs} onSave={updateCosts} missingCostPolicy={missingCostPolicy} onMissingCostPolicyChange={setMissingCostPolicy} normalizeSku={skuNormalizer} /></> : active === 'Advertising' ? <><PageHeader eyebrow="Analytics" title="Advertising" description="Reported spend and sales credited to ads, with source evidence for every product." /><DashboardAdvertising report={sponsoredAttribution} postedGrossSales={baseAdvertisingSummary.grossSales} formatMoney={advertisingMoney} />{showAdvertisingDateUndo ? <div className="advertising-date-confirmation" role="status"><span>Showing business and advertising results for {advertisingDateRange(fromDate, toDate)}.</span><button className="text-btn" onClick={undoAdvertisingDates}>Undo</button></div> : null}<ProductPerformanceList full rows={sellerProducts} mode="ADVERTISING" basis="Orders by purchase date · ads by report date" dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} /></> : active === 'Products' ? dataset ? <><PageHeader eyebrow="Analytics" title="Products" description="Compare performance, find the product, and manage its costs in one place." /><ProductPerformanceList full rows={sellerProducts} mode={sponsoredAttribution.status === 'AVAILABLE' ? 'ADVERTISING' : 'FINANCIAL'} basis={sponsoredAttribution.status === 'AVAILABLE' ? 'Orders by purchase date · ads by report date' : 'Orders by purchase date'} dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} /></> : <ReportRequired area="Products" onOpenReports={() => setActive('Reports')}>Upload a sales report to understand the profit, costs, fees, and returns for each product.</ReportRequired> : active === 'Returns' ? dataset ? <ReturnAnalysis summary={returnSummary} formatMoney={money} onSelectSku={openOrders} fileName={fileName} /> : <ReportRequired area="Returns" onOpenReports={() => setActive('Reports')}>Upload a report to separate RTO from customer returns and find products or locations with return problems.</ReportRequired> : active === 'Reports' ? <ReportsPage dataset={effectiveDataset} rawDataset={rawDataset} needsMapping={needsMapping} importing={importing} importError={importError} fileName={fileName} imports={imports} currentImportId={currentImportId} leftId={comparisonLeftId} rightId={comparisonRightId} comparison={importComparison} qualityCenter={qualityCenter} cohort={orderCohort} reportMinDate={dateExtent.min} reportMaxDate={dateExtent.max} formatMoney={money} classificationRules={classificationRules} sponsoredAttribution={sponsoredAttribution} sponsoredReport={sponsoredReport} sponsoredImporting={sponsoredImporting} sponsoredError={sponsoredError} onViewSponsored={viewSponsoredProducts} onSponsoredFile={onSponsoredFile} onFile={onFile} onApplyMapping={applyMapping} onLeftChange={setComparisonLeftId} onRightChange={setComparisonRightId} onOpen={openImport} onSaveClassificationRule={saveRule} onDeleteClassificationRule={deleteRule} onQualityAction={handleQualityAction} /> : active === 'Data & Settings' ? <DataSettingsPage events={allEvents} costs={costs} missingCostPolicy={missingCostPolicy} normalizeSku={skuNormalizer} importCount={imports.length} ruleCount={classificationRules.length} onSaveCosts={updateCosts} onMissingCostPolicyChange={setMissingCostPolicy} onExportBackup={() => downloadBackup({ imports, costs, classificationRules })} onRestoreBackup={importBackup} /> : <>
+          <PageHeader eyebrow="Business overview" title="Business overview" description="Sales, profit and product performance for your selected period." action={<>{dataset ? <button className="secondary" onClick={exportAuditWorkbook}>Export audit workbook</button> : null}<button className="secondary" onClick={() => setActive('Reports')}>{dataset ? 'Upload fallback report' : 'Upload report'}</button></>} />
+          {(automaticEnabled && !dataset && !automaticDelivery.error && automaticDelivery.status?.configured !== false && (!hostedDelivery || automaticDelivery.calculating || automaticDelivery.status?.state === 'syncing')) || filtersUpdating ? <DashboardSkeleton /> : <>
           {!dataset ? <section className="welcome-empty"><img className="welcome-logo" src={`${import.meta.env.BASE_URL}brand/azulia-logo.webp`} alt="Azulia" width="112" height="112" /><h2>Get your first trustworthy profit view</h2><ol className="welcome-steps"><li><b>Upload</b><span>Choose your marketplace CSV or TSV report.</span></li><li><b>Review</b><span>Confirm reconciliation and unfamiliar transactions.</span></li><li><b>Add costs</b><span>Complete or explicitly estimate product costs.</span></li><li><b>Analyze</b><span>Trace Dashboard → SKU → order evidence.</span></li></ol><button className="primary" onClick={() => setActive('Reports')}>Upload your first report</button><small>Your data stays in this browser. Profit remains an estimate until cost coverage is complete.</small></section> : null}
           {dataset ? <>
-          {orderCohort && cohortFinancials ? <OrderCohortSummary cohort={orderCohort} financials={cohortFinancials} salePeriodView={calculationBasis === 'SALE_PERIOD_ORDERS'} postedCount={postedEvents.length} formatMoney={money} onReview={() => setCohortSnapshotOpen(true)} /> : null}
+          {orderCohort ? <OrderCohortSummary cohort={orderCohort} salePeriodView={calculationBasis === 'SALE_PERIOD_ORDERS'} postedCount={postedRecordCount} onReview={() => setCohortSnapshotOpen(true)} /> : null}
           <div className="section-label"><span>Business snapshot</span><small>Primary metrics</small></div>
           {!costStatus.complete ? <div className="profit-status" role="status"><span>{missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated profit · missing product costs are assumed ₹0.' : 'Profit is incomplete until product costs are added.'}</span><button className="text-btn" onClick={() => setActive('Costs')}>Add missing costs →</button></div> : null}
           <section className="kpi-grid primary-kpis">
-            <KpiCard label="Business profit" value={dataset && costStatus.profitReady ? money(profitAfterAds) : '—'} tone={profitAfterAds >= 0 ? 'positive' : 'negative'} note="Uses booked advertising expense; excludes settlements." hint={costStatus.complete ? 'Includes booked advertising expense' : missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated · missing costs assumed ₹0' : 'Add missing product costs'} onClick={() => setHomeMetric('PROFIT')} />
-            <KpiCard pendingNote={calculationBasis === 'SALE_PERIOD_ORDERS' && cohortFinancials?.pending.grossSales ? `Pending sales: ${money(cohortFinancials.pending.grossSales)}` : undefined} label="Gross sales" value={dataset ? money(summary.grossSales) : '—'} tone="positive" hint="Positive product-sale events" onClick={() => setHomeMetric('GROSS_SALES')} />
+            <KpiCard label="Profit so far" value={dataset && costStatus.profitReady ? money(profitAfterAds) : '—'} tone={profitAfterAds >= 0 ? 'positive' : 'negative'} note="Recorded activity, including deferred amounts; excludes settlements." hint={costStatus.complete ? 'Includes booked advertising expense' : missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated · missing costs assumed ₹0' : 'Add missing product costs'} onClick={() => setHomeMetric('PROFIT')} />
+            <KpiCard label="Gross sales" value={dataset ? money(summary.grossSales) : '—'} tone="positive" hint="Positive product-sale events" onClick={() => setHomeMetric('GROSS_SALES')} />
             <KpiCard label="Profit margin" value={dataset && costStatus.profitReady ? `${profitMargin.toFixed(2)}%` : '—'} tone={profitMargin >= 0 ? 'positive' : 'negative'} hint="Business profit ÷ gross sales" onClick={() => setHomeMetric('PROFIT_MARGIN')} />
 
             <KpiCard label="Return rate" value={dataset ? `${summary.returnRate.toFixed(2)}%` : '—'} tone={summary.returnRate > 15 ? 'negative' : 'neutral'} hint={`${summary.returnQuantity.toLocaleString('en-IN')} returned units`} onClick={() => setHomeMetric('RETURN_RATE')} />
 
           </section>
 
-          {focusAnalysis ? <FocusPriorities area={focusArea} onAreaChange={setFocusArea} analysis={focusAnalysis} dateLabel={advertisingDateRange(fromDate, toDate)} financialBasis={calculationBasis === 'POSTED_ACTIVITY' ? 'Transactions by posting date' : 'Sales-period view'} sponsored={sponsoredAttribution} formatMoney={advertisingMoney} onOpenProduct={(sku,posted) => { openProductPage({ sku, scope:posted ? 'POSTED' : 'CURRENT' }, { page:active, metric:null }); setHomeMetric(null) }} /> : null}
+          {focusAnalysis ? <FocusPriorities area={focusArea} onAreaChange={setFocusArea} analysis={focusAnalysis} dateLabel={advertisingDateRange(fromDate, toDate)} financialBasis={calculationBasis === 'POSTED_ACTIVITY' ? 'Transactions by posting date' : 'Orders by purchase date'} sponsored={sponsoredAttribution} formatMoney={advertisingMoney} onOpenProduct={(sku) => { openProductPage({ sku, scope: 'CURRENT' }, { page:active, metric:null }); setHomeMetric(null) }} /> : null}
 
           <section className="dashboard-checks" aria-label="Report checks"><span className={costStatus.complete ? 'check-ready' : 'check-review'}>{costStatus.coveragePercent.toFixed(0)}% cost coverage</span><button onClick={() => setActive('Reports')}>{effectiveDataset?.quality.unclassifiedEventCount ?? 0} transactions need review →</button><span title="Complete imported report; not a guarantee of classification or cost accuracy">{effectiveDataset?.quality.reconciliation.reconciled ? 'Source totals reconciled' : 'Review source totals'}</span></section>
-          <section className="workspace-overview-grid"><LineChart data={trend} onSelectPoint={date => { setFromDate(date); setToDate(date); setPeriodChoice('CUSTOM'); setHomeMetric('GROSS_SALES') }} /><FinancialSummary rows={business.financialRows} profit={costStatus.profitReady ? profitAfterAds : null} estimated={!costStatus.complete} formatMoney={money} /></section>
+          <section className="workspace-overview-grid"><LineChart data={trend} onSelectPoint={date => { setFilterUpdatePending(true); setFromDate(date); setToDate(date); setPeriodChoice('CUSTOM'); setHomeMetric('GROSS_SALES') }} /><FinancialSummary rows={business.financialRows} profit={costStatus.profitReady ? profitAfterAds : null} estimated={!costStatus.complete} formatMoney={money} /></section>
 
-          <ProductPerformanceList mode={sponsoredAttribution.status === 'AVAILABLE' ? 'ADVERTISING' : 'FINANCIAL'} onViewAll={() => setActive('Products')} rows={sellerProducts} basis={sponsoredAttribution.status === 'AVAILABLE' ? 'Transactions by posting date' : calculationBasis === 'SALE_PERIOD_ORDERS' ? 'Sales-period view' : 'Transactions by posting date'} dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} />
+          {orderCohort ? <LiveOrderList cohort={orderCohort} /> : null}
+          <ProductPerformanceList mode={sponsoredAttribution.status === 'AVAILABLE' ? 'ADVERTISING' : 'FINANCIAL'} onViewAll={() => setActive('Products')} rows={sellerProducts} basis={sponsoredAttribution.status === 'AVAILABLE' ? 'Orders by purchase date · ads by report date' : 'Orders by purchase date'} dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} />
           {showAdvertisingDateUndo ? <div className="advertising-date-confirmation" role="status"><span>Showing business and advertising results for {advertisingDateRange(fromDate, toDate)}.</span><button className="text-btn" onClick={undoAdvertisingDates}>Undo</button></div> : null}
           <DashboardAdvertising report={sponsoredAttribution} postedGrossSales={baseAdvertisingSummary.grossSales} formatMoney={advertisingMoney} />
 
           <details className="more-metrics"><summary><span><strong>More financial details</strong><small>Revenue, costs, fees and advertising</small></span><b>Show details</b></summary><section className="kpi-grid secondary-kpis">
-            <KpiCard label="Orders" value={business.orderCount.toLocaleString('en-IN')} tone="accent" hint="Click to compare orders by SKU" onClick={() => setHomeMetric('ORDERS')} />
+            <KpiCard label="Orders" value={business.orderCount.toLocaleString('en-IN')} tone="accent" hint="All known orders purchased in this period, including those awaiting financial details" note="See the order list for status and financial availability." />
             <KpiCard label="Net product revenue" value={money(summary.netProductRevenue)} tone="positive" hint="Sales less product refunds" onClick={() => setHomeMetric('NET_REVENUE')} />
             <KpiCard label="Net COGS" value={costStatus.profitReady ? money(costStatus.netCogs) : '—'} tone="negative" hint={costStatus.complete ? 'Good returns reverse COGS' : `${costStatus.missingSkus.length} product costs missing`} onClick={() => setHomeMetric('NET_COGS')} />
             <KpiCard label="Booked advertising expense" value={money(summary.adsSpend)} tone="accent" hint={`Total sales / booked ad expense: ${summary.roas.toFixed(2)}× · Not attributed Ad ROAS`} onClick={() => setHomeMetric('ADS')} />
@@ -502,13 +552,14 @@ export function App() {
 
           </> : null}
           </>}
+          </>}
       </div>
       </Suspense></AppShell>
       {searchDetail ? <ReportSearchDetail key={`${searchDetail.kind}:${searchDetail.id}`} document={searchDetail} events={allEvents} orders={searchOrders} formatMoney={money} onOpenProduct={openSearchProduct} onClose={() => { setSearchDetail(null); cancelCostPreview() }} /> : null}
 
-      {homeMetricResult ? <MetricSkuDrilldown result={homeMetricResult} products={productProfitability} previousProducts={previousProductProfitability} sponsored={sponsoredAttribution} advertisingProducts={advertisingProducts} comparisonPeriod={periodChoice} onSelectProduct={sku => openOrders(sku)} financialBasis={calculationBasis === 'SALE_PERIOD_ORDERS' ? 'Sales-period view' : 'Transactions by posting date'} formatMoney={money} onClose={() => setHomeMetric(null)} /> : null}
+      {homeMetricResult ? <MetricSkuDrilldown result={homeMetricResult} products={productProfitability} previousProducts={previousProductProfitability} sponsored={sponsoredAttribution} advertisingProducts={advertisingProducts} comparisonPeriod={periodChoice} onSelectProduct={sku => openOrders(sku)} financialBasis={calculationBasis === 'SALE_PERIOD_ORDERS' ? 'Orders by purchase date' : 'Transactions by posting date'} formatMoney={money} onClose={() => setHomeMetric(null)} /> : null}
       {feeAuditOpen ? <FeeAuditPanel result={feeAudit} orders={orders} formatMoney={money} onClose={() => setFeeAuditOpen(false)} /> : null}
-      {cohortSnapshotOpen && orderCohort && cohortFinancials ? <OrderLifecycleSnapshot financials={cohortFinancials} cohort={orderCohort} formatMoney={money} onClose={() => setCohortSnapshotOpen(false)} /> : null}
+      {cohortSnapshotOpen && orderCohort && cohortFinancials ? <OrderLifecycleSnapshot cohort={orderCohort} formatMoney={money} onClose={() => setCohortSnapshotOpen(false)} /> : null}
     </AdvertisingRecoveryContext.Provider></ProductCostEditorContext.Provider></OrderActivityContext.Provider>
   )
 }

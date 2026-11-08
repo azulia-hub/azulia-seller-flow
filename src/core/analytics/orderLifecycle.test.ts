@@ -126,3 +126,136 @@ describe('sale-period order analysis', () => {
     expect(buildCohortFinancials(result,history,'BLOCK').estimated.netCogs).toBe(0)
   })
 })
+
+it('assigns next-month releases and later refunds to the verified purchase month only', () => {
+  const purchase = { orderPurchaseDate: '2026-08-30', releaseState: 'RELEASED' as const }
+  const sale = { ...event('released', '2026-09-10', 'A', 'SALE', 1000), ...purchase }
+  const refund = { ...event('refund', '2026-10-05', 'A', 'REFUND', -1000), ...purchase }
+  const reimbursement = { ...event('claim', '2026-11-05', 'A', 'REIMBURSEMENT', 100, 'OTHER'), ...purchase }
+  const pendingFee = { ...event('pending-fee', '2026-11-06', 'A', 'FEE', -10, 'COMMISSION', 'Deferred'), ...purchase, releaseState: 'PENDING' as const }
+  const rows = [sale, refund, reimbursement, pendingFee]
+  const result = buildOrderCohort(rows, august)
+  expect(result.events.map(row => row.id)).toEqual(['released', 'refund', 'claim'])
+  expect(result.pendingEvents.map(row => row.id)).toEqual(['pending-fee'])
+  expect(buildCohortFinancials(result, costs, 'BLOCK').released).toMatchObject({ grossSales: 1000, refundValue: 1000, reimbursements: 100, netCogs: 0, profit: 100 })
+  expect(buildOrderCohort(rows, { from: '2026-09-01', to: '2026-11-30' }).observedEvents).toEqual([])
+  expect(sale.date).toBe('2026-09-10')
+})
+it('keeps purchase-month sales pending until confirmed released and excludes unknown purchase dates', () => {
+  const pending = { ...event('pending', '2026-09-10', 'A', 'SALE', 1000, 'PRODUCT_REVENUE', 'Deferred'), orderPurchaseDate: '2026-08-30', releaseState: 'PENDING' as const }
+  const unresolved = { ...event('unknown-date', '2026-08-10', 'B', 'SALE', 500), orderPurchaseDate: null }
+  const unknownRelease = { ...event('unknown-release', '2026-08-11', 'C', 'SALE', 200), orderPurchaseDate: '2026-08-09', releaseState: 'UNKNOWN' as const }
+  const result = buildOrderCohort([pending, unresolved, unknownRelease], august)
+  expect(result.events).toEqual([])
+  expect(result.pendingEvents.map(row => row.id)).toEqual(['pending', 'unknown-release'])
+  expect(result.missingSale.map(order => order.orderId)).toEqual(['B'])
+  const released = buildOrderCohort([{ ...pending, status: 'Released', releaseState: 'RELEASED' }], august)
+  expect(summarizeDashboard(released.events).grossSales).toBe(1000)
+})
+it('keeps conflicting explicit purchase dates in missing-origin review instead of guessing', () => {
+  const rows = [{ ...event('sale', '2026-09-10', 'A', 'SALE', 1000), orderPurchaseDate: '2026-08-30' }, { ...event('fee', '2026-09-10', 'A', 'FEE', -10, 'COMMISSION'), orderPurchaseDate: '2026-09-01' }]
+  const result = buildOrderCohort(rows, { from: '2026-08-01', to: '2026-09-30' })
+  expect(result.events).toEqual([])
+  expect(result.missingSale).toHaveLength(1)
+})
+it('does not treat order-linked activity lacking identity as a current-period account charge', () => {
+  const orphan = { ...event('orphan-sale', '2026-08-10', null, 'SALE', 1000), orderPurchaseDate: null, orderOriginRequired: true }
+  const charge = event('account', '2026-08-10', null, 'FEE', -20, 'OTHER_FEE')
+  const result = buildOrderCohort([orphan, charge], august)
+  expect(result.events.map(row => row.id)).toEqual(['account'])
+  expect(result.globalPostedEvents).toEqual([charge])
+  expect(filterEvents([orphan, charge], { fromDate: august.from, toDate: august.to })).toHaveLength(2)
+})
+it('reuses one order-history index for distinct periods without changing linked follow-up or pending results', async () => {
+  const { indexOrderHistory, selectOrderCohort } = await import('./orderLifecycle')
+  const sale = { ...event('sale', '2026-09-10', 'A', 'SALE', 1000), orderPurchaseDate: '2026-08-30', sourceIdentityResolved: true }
+  const refund = { ...event('refund', '2026-10-01', 'A', 'REFUND', -1000, 'PRODUCT_REVENUE', 'Deferred'), orderPurchaseDate: '2026-08-30', sourceIdentityResolved: true }
+  const index = indexOrderHistory([sale, refund])
+  const selected = selectOrderCohort(index, august)
+  expect(selected.events.map(row => row.id)).toEqual(['sale'])
+  expect(selected.pendingEvents.map(row => row.id)).toEqual(['refund'])
+  expect(selectOrderCohort(index, { from: '2026-09-01', to: '2026-10-31' }).events).toEqual([])
+  expect(selectOrderCohort(index, august)).toEqual(selected)
+})
+it('does not apply CSV fuzzy replacement matching to source identities already resolved by their adapter', () => {
+  const pending = { ...event('pending', '2026-08-30', 'A', 'SALE', 1000, 'PRODUCT_REVENUE', 'Deferred'), sourceIdentityResolved: true }
+  const released = { ...pending, id: 'released', sourceRow: pending.sourceRow + 1, status: 'Released' }
+  const cohort = buildOrderCohort([pending, released], august)
+  expect(cohort.events).toEqual([released])
+  expect(cohort.pendingEvents).toEqual([pending])
+  expect(cohort.supersededEvents).toEqual([])
+})
+it('groups excluded source transactions and distinguishes pending, missing date and other-period purchases', async () => {
+  const { cohortExcludedRecords } = await import('./orderLifecycle')
+  const pending = { ...event('pending', '2026-09-01', 'A', 'SALE', 100, 'PRODUCT_REVENUE', 'Deferred'), sourceTransactionId: 'tx', orderPurchaseDate: '2026-08-01' }
+  const fee = { ...pending, id: 'fee', sourceRow: pending.sourceRow + 1, amountType: 'COMMISSION' as const, event: 'FEE' as const, amount: -10 }
+  const missing = { ...event('missing', '2026-08-10', 'B', 'SALE', 200), orderPurchaseDate: null }
+  const outside = { ...event('outside', '2026-08-15', 'C', 'SALE', 300), orderPurchaseDate: '2026-07-10' }
+  const result = cohortExcludedRecords(buildOrderCohort([pending, fee, missing, outside], august))
+  expect(result).toHaveLength(3)
+  expect(result.find(row => row.reason === 'PENDING')).toMatchObject({ amount: 90, components: 2, orderId: 'A' })
+  expect(result.find(row => row.reason === 'MISSING_DATE')?.orderId).toBe('B')
+  expect(result.find(row => row.reason === 'OUTSIDE_PERIOD')?.orderId).toBe('C')
+})
+
+// Authored for the live purchase-period model; execution deferred by owner.
+describe('all recorded purchase-period recognition', () => {
+  it('includes deferred sales, charges, refunds and reimbursements immediately in the purchase month', () => {
+    const origin = { orderPurchaseDate: '2026-08-30', sourceIdentityResolved: true, releaseState: 'PENDING' as const }
+    const rows = [
+      { ...event('sale-live', '2026-09-01', 'A', 'SALE', 1000, 'PRODUCT_REVENUE', 'Deferred'), ...origin },
+      { ...event('fee-live', '2026-09-02', 'A', 'FEE', -50, 'COMMISSION', 'Deferred'), ...origin },
+      { ...event('refund-live', '2026-10-01', 'A', 'REFUND', -1000, 'PRODUCT_REVENUE', 'Deferred'), ...origin },
+      { ...event('claim-live', '2026-11-01', 'A', 'REIMBURSEMENT', 150, 'OTHER', 'Deferred'), ...origin },
+    ]
+    const before = JSON.stringify(rows)
+    const cohort = buildOrderCohort(rows, august, 'ALL_RECORDED')
+    expect(cohort.events).toEqual(rows)
+    expect(buildCohortFinancials(cohort, costs, 'BLOCK').recorded).toMatchObject({ grossSales: 1000, refundValue: 1000, reimbursements: 150, netCogs: 0, profit: 100 })
+    expect(buildOrderCohort(rows, { from: '2026-09-01', to: '2026-11-30' }, 'ALL_RECORDED').events).toEqual([])
+    expect(JSON.stringify(rows)).toBe(before)
+  })
+
+  it('does not exclude deferred records but still reviews unknown and outside-period purchase dates', async () => {
+    const { cohortExcludedRecords } = await import('./orderLifecycle')
+    const rows = [
+      { ...event('pending-included', '2026-08-10', 'A', 'SALE', 100, 'PRODUCT_REVENUE', 'Deferred'), orderPurchaseDate: '2026-08-01' },
+      { ...event('missing-date', '2026-08-10', 'B', 'SALE', 200), orderPurchaseDate: null },
+      { ...event('old-purchase', '2026-08-15', 'C', 'SALE', 300), orderPurchaseDate: '2026-07-10' },
+    ]
+    const cohort = buildOrderCohort(rows, august, 'ALL_RECORDED')
+    expect(cohort.events.map(row => row.id)).toEqual(['pending-included'])
+    expect(cohortExcludedRecords(cohort).map(row => row.reason).sort()).toEqual(['MISSING_DATE', 'OUTSIDE_PERIOD'])
+  })
+
+  it('lists an order before any financial entries without fabricating revenue, fees or costs', async () => {
+    const { summarizeCohortOrders } = await import('./orderLifecycle')
+    const cohort = buildOrderCohort([], august, 'ALL_RECORDED', [{ orderId: 'A', purchaseDate: '2026-08-31', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }])
+    expect(summarizeCohortOrders(cohort)).toMatchObject({ count: 1, awaitingFinancialCount: 1 })
+    expect(cohort.events).toEqual([])
+    expect(buildCohortFinancials(cohort, [], 'BLOCK').recorded).toMatchObject({ grossSales: 0, netCogs: 0, charges: 0 })
+    expect(buildOrderCohort([], { from: '2026-09-01', to: '2026-09-30' }, 'ALL_RECORDED', [cohort.orders[0].order!]).orders).toEqual([])
+  })
+
+  it('counts one order when financial activity arrives and keeps unknown money and settlements separate', async () => {
+    const { summarizeCohortOrders } = await import('./orderLifecycle')
+    const order = { orderId: 'A', purchaseDate: '2026-08-31', status: 'Shipped', fulfillmentType: 'MFN', orderValue: '1000.00', currency: 'INR' }
+    const sale = { ...event('new-finance', '2026-09-02', 'A', 'SALE', 1000, 'PRODUCT_REVENUE', 'Deferred'), orderPurchaseDate: '2026-08-31' }
+    const unknown = { ...event('new-unknown', '2026-09-03', 'A', 'UNKNOWN', -13, 'UNKNOWN', 'New status'), classified: false }
+    const bank = { ...event('new-bank', '2026-08-31', null, 'SETTLEMENT', -900, 'OTHER', 'Deferred'), amountClass: 'SETTLEMENT' as const }
+    const cohort = buildOrderCohort([sale, unknown, bank], august, 'ALL_RECORDED', [order])
+    expect(summarizeCohortOrders(cohort)).toMatchObject({ count: 1, awaitingFinancialCount: 0 })
+    expect(cohort.events).toContain(unknown)
+    expect(buildCohortFinancials(cohort, costs, 'BLOCK').recorded).toMatchObject({ profit: 687, settlementNet: -900 })
+    expect(buildCohortFinancials(cohort, [], 'BLOCK').recorded.profit).toBeNull()
+  })
+
+  it('replaces matching deferred source rows instead of counting both lifecycle versions', () => {
+    const pending = event('waiting-version', '2026-08-31', 'A', 'SALE', 1000, 'PRODUCT_REVENUE', 'Deferred')
+    const released = { ...pending, id: 'released-version', sourceRow: pending.sourceRow + 1, status: 'Released' }
+    const cohort = buildOrderCohort([pending, released], august, 'ALL_RECORDED')
+    expect(cohort.events).toEqual([released])
+    expect(cohort.supersededEvents).toEqual([pending])
+    expect(buildCohortFinancials(cohort, costs, 'BLOCK').recorded.grossSales).toBe(1000)
+  })
+})

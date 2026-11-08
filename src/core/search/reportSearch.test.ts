@@ -71,3 +71,9 @@ describe('report search', () => {
     expect(searchReport(index, ' ')).toEqual({ total: 0, results: [] })
   })
 })
+it('uses explicit product titles and keeps technical financial descriptions out of title search', () => {
+  const rows = [event('api', { descriptionIsProductTitle: false, rawDescription: 'ProductCharges / OurPricePrincipal', raw: { 'product title': 'Oak wall shelf' } })]
+  const index = buildReportSearchIndex(rows)
+  expect(index.find(document => document.kind === 'PRODUCT')?.label).toBe('Oak wall shelf')
+  expect(searchReport(index, 'OurPricePrincipal', 30, 'TITLE').results).toHaveLength(0)
+})

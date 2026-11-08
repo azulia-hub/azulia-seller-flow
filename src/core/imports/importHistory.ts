@@ -47,12 +47,13 @@ export interface ImportComparison {
 
 export function profileDataset(dataset: CanonicalDataset): ImportProfile {
   const dates = dataset.events.flatMap((event) => { const date = canonicalDateKey(event.date); return date ? [date] : [] }).sort()
+  const coverageDates = [...dates, ...(dataset.orders ?? []).map(order => order.purchaseDate)].sort()
   return {
-    fromDate: dates[0] ?? null,
-    toDate: dates.at(-1) ?? null,
+    fromDate: coverageDates[0] ?? null,
+    toDate: coverageDates.at(-1) ?? null,
     datedEventCount: dates.length,
     undatedEventCount: dataset.events.length - dates.length,
-    orderCount: new Set(dataset.events.flatMap((event) => event.orderId ? [event.orderId] : [])).size,
+    orderCount: new Set([...dataset.events.flatMap((event) => event.orderId ? [event.orderId] : []), ...(dataset.orders ?? []).map(order => order.orderId)]).size,
   }
 }
 

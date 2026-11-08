@@ -37,3 +37,10 @@ describe('dashboard summary', () => {
     expect(filterEvents(dated, { fromDate: '2026-08-01', toDate: '2026-08-05' }).map((event) => event.id)).toEqual(['from', 'to'])
   })
 })
+
+it('plots purchase-period sales on their purchase date while retaining posted-date reconciliation', async () => {
+  const { dailySales } = await import('./dashboardSummary')
+  const sale = { ...events[0], date: '2026-09-10', orderPurchaseDate: '2026-08-30' }
+  expect(dailySales([sale], 'ORDER_PURCHASE')).toEqual([{ label: '2026-08-30', value: 100 }])
+  expect(dailySales([sale])).toEqual([{ label: '2026-09-10', value: 100 }])
+})

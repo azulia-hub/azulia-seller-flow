@@ -38,3 +38,11 @@ describe('generic mapping normalization', () => {
     expect(unknown.reduce((sum, event) => sum + event.amount, 0)).toBe(45)
   })
 })
+it('retains first matching header, transformations and reconciliation when row headers are indexed', () => {
+  const input = createRawDataset({ id: 'headers', name: 'headers', rows: [{ ' WHEN ': '2026-09-01', When: 'ignored', Reference: 'A', Item: 'SKU-MFN', Kind: 'Purchase', REVENUE: '100', Revenue: '999', Charges: '-12', Balance: '88' }] })
+  const result = normalizeDataset(input, { ...mapping, fieldTransforms: [{ field: 'sku', operation: 'stripSuffix', value: '-MFN' }] })
+  expect(result.events[0]).toMatchObject({ date: '2026-09-01', sku: 'SKU', amount: 100 })
+  expect(result.quality.missingKeys).toEqual({ orderId: 0, sku: 0, date: 0 })
+  expect(result.quality.reconciliation).toMatchObject({ sourceTotal: 88, normalizedTotal: 88, reconciled: true })
+  expect(result.events[0].raw.Revenue).toBe('999')
+})

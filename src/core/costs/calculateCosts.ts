@@ -41,12 +41,13 @@ export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs
   const inventoryEvents = events.filter((event) => event.sku && event.amountType === 'PRODUCT_REVENUE' && (event.event === 'SALE' || event.event === 'REFUND'))
   const requiredSkus = [...new Set(inventoryEvents.flatMap((event) => event.sku ? [event.sku] : []))].sort()
   const saleDates = new Map<string, string>()
-  inventoryEvents.filter(event => event.event === 'SALE' && event.orderId && event.sku).forEach(event => { const date = canonicalDateKey(event.date); if (date) saleDates.set(`${event.orderId}\u001f${skuKey(event.sku!)}`, date) })
+  inventoryEvents.filter(event => event.event === 'SALE' && event.orderId && event.sku).forEach(event => { const date = canonicalDateKey(event.orderPurchaseDate === undefined ? event.date : event.orderPurchaseDate); if (date) saleDates.set(`${event.orderId}\u001f${skuKey(event.sku!)}`, date) })
   const appliedCosts: AppliedProductCost[] = []
   const missingEvents: CanonicalFinancialEvent[] = []
   const netCogs = inventoryEvents.reduce((total, event) => {
     const eventDate = canonicalDateKey(event.date)
-    const costDate = event.event === 'REFUND' && event.orderId && event.sku ? saleDates.get(`${event.orderId}\u001f${skuKey(event.sku)}`) ?? eventDate : eventDate
+    const originDate = event.orderPurchaseDate === undefined ? eventDate : canonicalDateKey(event.orderPurchaseDate)
+    const costDate = event.event === 'REFUND' && event.orderId && event.sku ? saleDates.get(`${event.orderId}\u001f${skuKey(event.sku)}`) ?? originDate : originDate
     const cost = event.sku ? resolveCost(event.sku, costDate) : undefined
     if (!cost) { missingEvents.push(event); return total }
     const quantity = event.quantity ?? 0

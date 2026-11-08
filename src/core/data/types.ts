@@ -41,8 +41,17 @@ export interface CanonicalFinancialEvent {
   readonly id: string
   readonly source: string
   readonly sourceDatasetId: string
+  readonly sourceTransactionId?: string | null
+  readonly descriptionIsProductTitle?: boolean
   readonly sourceRow: number
   readonly date: string | null
+  /** Original order date. Undefined retains legacy file inference; null means explicitly unknown. */
+  readonly orderPurchaseDate?: string | null
+  /** Source identifies this as order activity, even if its order identity is unavailable. */
+  readonly orderOriginRequired?: boolean
+  /** Adapter already resolved explicit source replacement identities. */
+  readonly sourceIdentityResolved?: boolean
+  readonly releaseState?: 'RELEASED' | 'PENDING' | 'UNKNOWN'
   readonly orderId: string | null
   readonly sku: string | null
   readonly event: CanonicalEventKind
@@ -81,7 +90,19 @@ export interface DataQualitySummary {
   readonly reconciliation: FinancialReconciliation
 }
 
+/** Order identity/status is independent of financial recognition. No synthetic money events. */
+export interface CanonicalOrder {
+  readonly orderId: string
+  readonly purchaseDate: string
+  readonly status: string | null
+  readonly fulfillmentType: string | null
+  /** Source-reported order total, which may include tax/shipping; never product revenue. */
+  readonly orderValue: string | null
+  readonly currency: string | null
+}
+
 export interface CanonicalDataset {
+  readonly orders?: readonly CanonicalOrder[]
   readonly source: string
   readonly events: readonly CanonicalFinancialEvent[]
   readonly quality: DataQualitySummary

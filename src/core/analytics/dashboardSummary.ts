@@ -86,11 +86,12 @@ export function summarizeProducts(events: readonly CanonicalFinancialEvent[]): P
   }).sort((a, b) => b.grossSales - a.grossSales)
 }
 
-export function dailySales(events: readonly CanonicalFinancialEvent[]) {
+export function dailySales(events: readonly CanonicalFinancialEvent[], basis: 'POSTED' | 'ORDER_PURCHASE' = 'POSTED') {
   const totals = new Map<string, number>()
   events.filter((event) => event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0).forEach((event) => {
-    const label = event.date?.replace(/\s+\d{1,2}:\d{2}:\d{2}.*$/, '') ?? 'Unknown date'
+    const date = basis === 'ORDER_PURCHASE' && event.orderPurchaseDate !== undefined ? event.orderPurchaseDate : event.date
+    const label = date?.replace(/\s+\d{1,2}:\d{2}:\d{2}.*$/, '') ?? 'Unknown date'
     totals.set(label, (totals.get(label) ?? 0) + event.amount)
   })
-  return [...totals].map(([label, value]) => ({ label, value: rounded(value) }))
+  return [...totals].map(([label, value]) => ({ label, value: rounded(value) })).sort((a, b) => (canonicalDateKey(a.label) ?? a.label).localeCompare(canonicalDateKey(b.label) ?? b.label))
 }
