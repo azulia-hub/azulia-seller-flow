@@ -1,20 +1,24 @@
+export { hostedDelivery } from './deliveryMode'
 import { saveAnalysisView } from '../browser/activeReportStore'
 import { object, text } from '../amazon-report-sync/money'
 import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
 import { missingRanges, type SyncRange } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncStatus } from '../amazon-report-sync/protocol'
-
-export const hostedDelivery = import.meta.env.VITE_AZULIA_DELIVERY === 'netlify'
 interface Credentials { clientId: string; clientSecret: string; refreshToken: string }
 interface Session extends Credentials { account: string; accessToken: string; until: number }
-export interface HostedView { account: string | null; connected: boolean; busy: boolean; connecting: boolean; error: string; progress: string; records: number; state: CacheMeta | null }
+export interface HostedView { account: string | null; connected: boolean; busy: boolean; connecting: boolean; error: string; progress: string; records: number; state: CacheMeta | null; percent?: number }
+const STORAGE_ACCOUNT_KEY = 'azulia.hosted-account'
+const STORAGE_CREDS_KEY = 'azulia.hosted-creds'
 let view: HostedView = { account: null, connected: false, busy: false, connecting: false, error: '', progress: '', records: 0, state: null }
-// Credentials and tokens are deliberately kept only in this page's memory.
 let session: Session | null = null, run: AbortController | null = null, connecting: AbortController | null = null, initializing: Promise<void> | undefined
 const listeners = new Set<() => void>()
 export const hostedView = () => view
 export const subscribeHosted = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 function publish(update: Partial<HostedView>) { view = { ...view, ...update }; listeners.forEach(listener => listener()) }
+async function digestAccount(clientId: string, refreshToken: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify({ clientId, refreshToken })))
+  return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+}
 class RelayError extends Error { constructor(message: string, readonly status: number, readonly retryAfter: number) { super(message) } }
 async function relay(body: Record<string, unknown>, signal: AbortSignal) {
   const response = await fetch('/.netlify/functions/amazon', { method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(50000)]), headers: { 'Content-Type': 'application/json', 'X-Azulia-Intent': 'amazon-relay' }, body: JSON.stringify(body) })
@@ -33,11 +37,44 @@ async function refreshView() {
 export function initializeHosted() {
   return initializing ??= (async () => {
     let account: string | null = null
-    try { const stored = localStorage.getItem('azulia.hosted-account'); if (stored && /^[a-f0-9]{64}$/.test(stored)) account = stored } catch { /* Cache selection can still be made by connecting. */ }
-    if (account) { publish({ account }); await refreshView() }
+    try { const stored = localStorage.getItem(STORAGE_ACCOUNT_KEY); if (stored && /^[a-f0-9]{64}$/.test(stored)) account = stored } catch { /* Cache selection can still be made by connecting. */ }
+    let creds: Credentials | null = null
+    try {
+      const storedCreds = localStorage.getItem(STORAGE_CREDS_KEY)
+      if (storedCreds) {
+        const parsed = JSON.parse(storedCreds)
+        if (typeof parsed?.clientId === 'string' && typeof parsed?.clientSecret === 'string' && typeof parsed?.refreshToken === 'string') {
+          creds = { clientId: parsed.clientId.trim(), clientSecret: parsed.clientSecret.trim(), refreshToken: parsed.refreshToken.trim() }
+        }
+      }
+    } catch { /* Storage disabled or data invalid */ }
+    if (creds && creds.clientId && creds.clientSecret && creds.refreshToken) {
+      account = await digestAccount(creds.clientId, creds.refreshToken)
+      session = { ...creds, account, accessToken: '', until: 0 }
+      publish({ account, connected: true, progress: '' })
+      void (async () => {
+        try {
+          const auth = await relay({ action: 'connect', ...creds }, AbortSignal.timeout(12000))
+          const token = text(auth.accessToken)
+          if (token && session && session.account === account) {
+            session.accessToken = token
+            session.until = Date.now() + 45 * 60000
+          }
+        } catch (cause) {
+          if (cause instanceof RelayError && (cause.status === 400 || cause.status === 401)) {
+            session = null
+            try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}
+            publish({ connected: false, error: 'Saved Amazon credentials expired or were revoked. Reconnect to continue.' })
+          }
+        }
+      })()
+    } else if (account) {
+      publish({ account })
+    }
+    if (account) await refreshView()
   })().catch(() => { initializing = undefined; publish({ error: 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
 }
-export async function connectHosted(credentials: Credentials) {
+export async function connectHosted(credentials: Credentials, remember = true) {
   await initializeHosted()
   if (run) throw new Error('Stop the current sync before changing accounts.')
   connecting?.abort(); const abort = new AbortController(); connecting = abort
@@ -45,12 +82,15 @@ export async function connectHosted(credentials: Credentials) {
   try {
     const value = await relay({ action: 'connect', ...credentials }, abort.signal), token = text(value.accessToken)
     if (!token) throw new Error('Amazon did not return an access token.')
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify({ clientId: credentials.clientId, refreshToken: credentials.refreshToken })))
-    const account = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+    const account = await digestAccount(credentials.clientId, credentials.refreshToken)
     if (abort.signal.aborted || connecting !== abort) return
     await updateMeta(account, () => {})
     session = { ...credentials, account, accessToken: token, until: Date.now() + 45 * 60000 }
-    try { localStorage.setItem('azulia.hosted-account', account) } catch { /* This page's session remains usable. */ }
+    try {
+      localStorage.setItem(STORAGE_ACCOUNT_KEY, account)
+      if (remember) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
+      else localStorage.removeItem(STORAGE_CREDS_KEY)
+    } catch { /* This page's session remains usable. */ }
     publish({ account, connected: true, records: 0, state: null, progress: 'Connected. Choose dates and press Sync now.' })
     await refreshView()
   } catch (cause) { if (!abort.signal.aborted) { publish({ error: cause instanceof Error ? cause.message : 'Connection failed.' }); throw cause } }
@@ -58,7 +98,7 @@ export async function connectHosted(credentials: Credentials) {
 }
 export function cancelHostedConnection() { connecting?.abort(); connecting = null; publish({ connecting: false }) }
 export function stopHosted() { run?.abort(); publish({ progress: 'Stopping after the current request. Saved pages can be resumed.' }) }
-export function disconnectHosted() { connecting?.abort(); stopHosted(); session = null; publish({ connected: false, connecting: false, progress: 'Session forgotten. Cached results remain on this device.' }) }
+export function disconnectHosted() { connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
 async function authorized(action: string, body: Record<string, unknown>, signal: AbortSignal, retry = true): Promise<Record<string, unknown>> {
   const current = session
   if (!current) throw new Error('Connect Amazon to start a sync. Cached results remain available.')
@@ -116,6 +156,7 @@ export async function syncHosted(days: { from: string; to: string }) {
       }
     })
     const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 3000, purchases: 60000, order: 3000, catalog: 3000 }
+    let totalPlanned = 0, completedCount = 0
     while (!abort.signal.aborted) {
       const state = await meta(account)
       const jobs = state.jobs.filter(job => job.scope === scope)
@@ -140,10 +181,16 @@ export async function syncHosted(days: { from: string; to: string }) {
         if (!planned.jobs.some(job => job.scope === scope)) break
         continue
       }
+      totalPlanned = Math.max(totalPlanned, completedCount + jobs.length)
+      const percent = totalPlanned > 0 ? Math.min(95, Math.max(5, Math.round((completedCount / totalPlanned) * 100))) : 10
       jobs.sort((a, b) => (next[bucket(a)] ?? 0) - (next[bucket(b)] ?? 0) || (a.kind === 'purchases' ? 0 : 1) - (b.kind === 'purchases' ? 0 : 1) || a.id.localeCompare(b.id))
       const job = jobs[0], operation = bucket(job), pause = (next[operation] ?? 0) - Date.now()
-      if (pause > 0) { publish({ progress: `Waiting for Amazon's allowance · ${jobs.length} pages/checks remaining` }); await wait(Math.min(pause, 3000), abort.signal); continue }
-      publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : 'Verifying order dates'} · ${jobs.length} pages/checks remaining` })
+      if (pause > 0) {
+        const seconds = Math.ceil(pause / 1000)
+        publish({ progress: `Waiting for Amazon allowance (${seconds}s) · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
+        await wait(Math.min(pause, 1000), abort.signal); continue
+      }
+      publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : 'Verifying order dates'} · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
       next[operation] = Date.now() + delays[operation]
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
       try {
@@ -157,6 +204,7 @@ export async function syncHosted(days: { from: string; to: string }) {
         const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
         const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
         await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined })
+        completedCount++
         await refreshView()
       } catch (cause) {
         if (abort.signal.aborted) break
@@ -166,13 +214,13 @@ export async function syncHosted(days: { from: string; to: string }) {
         throw cause
       }
     }
-    publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.' })
-  } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; publish({ connected: false }) } publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } }
+    publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.', percent: 100 })
+  } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, error: 'Amazon credentials expired or were revoked. Reconnect to continue.' }) } else { publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } } }
   finally {
     if (heartbeat) clearInterval(heartbeat)
     await updateMeta(account, state => { if (state.leaseOwner === owner) { state.leaseOwner = null; state.leaseUntil = 0 } }).catch(() => {})
     if (run === abort) run = null
-    publish({ busy: false }); await refreshView().catch(() => {})
+    publish({ busy: false, percent: undefined }); await refreshView().catch(() => {})
   }
 }
 export async function hostedFetch(input: string, init?: RequestInit): Promise<Response> {
