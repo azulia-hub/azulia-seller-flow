@@ -49,15 +49,40 @@ export function filterEvents(events: readonly CanonicalFinancialEvent[], filters
   })
 }
 
+export function isWithholdingTax(event: CanonicalFinancialEvent): boolean {
+  if (event.rawType === 'Tax Withheld') return true
+  const text = `${event.id} ${event.rawDescription ?? ''}`
+  return /tcs-[a-z]+|section\s*194-o|itemtds|tdssection/i.test(text)
+}
+
+export function isCustomerSale(event: CanonicalFinancialEvent): boolean {
+  if (event.amount <= 0 || event.event === 'REFUND' || event.rawType === 'Refund') return false
+  if (event.event === 'SALE' && (event.amountType === 'PRODUCT_REVENUE' || event.amountType === 'SHIPPING_REVENUE' || event.amountType === 'GIFT_WRAP_REVENUE')) return true
+  if (event.amountType === 'TAX' && !isWithholdingTax(event)) return true
+  return false
+}
+
+export function isCustomerRefund(event: CanonicalFinancialEvent): boolean {
+  if (event.amount >= 0) return false
+  if (event.event === 'REFUND' || event.rawType === 'Refund' || event.amountType === 'PRODUCT_REVENUE') {
+    if (event.amountType === 'PRODUCT_REVENUE' || event.amountType === 'SHIPPING_REVENUE' || event.amountType === 'GIFT_WRAP_REVENUE') return true
+    if (event.amountType === 'TAX' && !isWithholdingTax(event)) return true
+  }
+  return false
+}
+
 export function summarizeDashboard(events: readonly CanonicalFinancialEvent[]) {
   const product = events.filter((event) => event.amountType === 'PRODUCT_REVENUE')
-  const sales = product.filter((event) => event.event === 'SALE' && event.amount > 0)
-  const refunds = product.filter((event) => event.event === 'REFUND' || event.amount < 0)
+  const sales = events.filter(isCustomerSale)
+  const refunds = events.filter(isCustomerRefund)
+  const productSales = product.filter((event) => event.event === 'SALE' && event.amount > 0)
+  const productRefunds = product.filter((event) => event.event === 'REFUND' || event.amount < 0)
+
   const grossSales = rounded(sum(sales.map((event) => event.amount)))
   const netProductRevenue = rounded(sum(product.map((event) => event.amount)))
   const refundValue = rounded(-sum(refunds.map((event) => event.amount)))
-  const soldQuantity = sum(sales.map((event) => event.quantity ?? 0))
-  const returnQuantity = sum(refunds.map((event) => event.quantity ?? 0))
+  const soldQuantity = sum(productSales.map((event) => event.quantity ?? 0))
+  const returnQuantity = sum(productRefunds.map((event) => event.quantity ?? 0))
   const operatingNet = rounded(sum(events.filter((event) => event.amountClass === 'OPERATING').map((event) => event.amount)))
   const adsSpend = rounded(-sum(events.filter((event) => event.amountClass === 'OPERATING' && event.amountType === 'ADVERTISING_FEE').map((event) => event.amount)))
   const netEasyShipFee = rounded(-sum(events.filter((event) => event.amountClass === 'OPERATING' && event.amountType === 'SHIPPING_FEE').map((event) => event.amount)))
@@ -88,7 +113,7 @@ export function summarizeProducts(events: readonly CanonicalFinancialEvent[]): P
 
 export function dailySales(events: readonly CanonicalFinancialEvent[], basis: 'POSTED' | 'ORDER_PURCHASE' = 'POSTED') {
   const totals = new Map<string, number>()
-  events.filter((event) => event.event === 'SALE' && event.amountType === 'PRODUCT_REVENUE' && event.amount > 0).forEach((event) => {
+  events.filter(isCustomerSale).forEach((event) => {
     const date = basis === 'ORDER_PURCHASE' && event.orderPurchaseDate !== undefined ? event.orderPurchaseDate : event.date
     const label = date?.replace(/\s+\d{1,2}:\d{2}:\d{2}.*$/, '') ?? 'Unknown date'
     totals.set(label, (totals.get(label) ?? 0) + event.amount)

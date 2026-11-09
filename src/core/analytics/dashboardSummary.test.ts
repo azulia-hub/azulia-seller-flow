@@ -18,12 +18,14 @@ const events: CanonicalFinancialEvent[] = [
 
 describe('dashboard summary', () => {
   it('uses canonical events and excludes settlements from operating net', () => {
-    expect(summarizeDashboard(events)).toMatchObject({
-      grossSales: 100, netProductRevenue: 70, soldQuantity: 2, returnQuantity: 1,
-      returnRate: 50, operatingNet: 49, adsSpend: 20, tacos: 20,
-      averageSellingPrice: 50, reimbursements: 8, netEasyShipFee: 10, marketplaceCharges: 17,
-      refundValue: 30, taxNet: 18, netDeliveredQuantity: 1, roas: 5,
+    const summary = summarizeDashboard(events)
+    expect(summary).toMatchObject({
+      grossSales: 118, netProductRevenue: 70, soldQuantity: 2, returnQuantity: 1,
+      returnRate: 50, operatingNet: 49, adsSpend: 20,
+      averageSellingPrice: 59, reimbursements: 8, netEasyShipFee: 10, marketplaceCharges: 17,
+      refundValue: 30, taxNet: 18, netDeliveredQuantity: 1, roas: 5.9,
     })
+    expect(summary.tacos).toBeCloseTo(16.95, 1)
   })
 
   it('filters named and ISO dates using inclusive boundaries', () => {

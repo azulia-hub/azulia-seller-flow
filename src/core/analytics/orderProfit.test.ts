@@ -17,7 +17,8 @@ const events: CanonicalFinancialEvent[] = [
 describe('order profit summary', () => {
   it('includes all operating components, nets shipping reversals, and excludes settlements', () => {
     const [order] = summarizeOrders(events, [{ sku: 'SKU-1', unitCost: 40, updatedAt: '' }], 'BLOCK')
-    expect(order).toMatchObject({ grossSales: 100, marketplaceCharges: 10, shippingFees: 10, tax: 18, operatingNet: 98, netCogs: 40, profit: 58, profitPerDeliveredUnit: 58, breakEvenTacos: 58, profitReady: true, returnType: null })
+    expect(order).toMatchObject({ grossSales: 118, marketplaceCharges: 10, shippingFees: 10, tax: 18, operatingNet: 98, netCogs: 40, profit: 58, profitPerDeliveredUnit: 58, profitReady: true, returnType: null })
+    expect(order.breakEvenTacos).toBeCloseTo(49.15, 1)
   })
 
   it('nets fulfillment fees and reversals without mixing shipping or settlement', () => {
@@ -42,8 +43,10 @@ describe('order profit summary', () => {
   it('scopes SKU metrics and orders before calculating profit', () => {
     const otherSku = { ...base, id: 'other-sku', sku: 'SKU-2', event: 'SALE' as const, amount: 200, amountType: 'PRODUCT_REVENUE' as const }
     const result = summarizeSkuProfit([...events, otherSku], 'SKU-1', [{ sku: 'SKU-1', unitCost: 40, updatedAt: '' }], 'BLOCK')
-    expect(result).toMatchObject({ sku: 'SKU-1', grossSales: 100, netDeliveredQuantity: 1, profit: 58, profitMargin: 58, profitPerDeliveredUnit: 58, breakEvenTacos: 58 })
-    expect(result.orders[0].grossSales).toBe(100)
+    expect(result).toMatchObject({ sku: 'SKU-1', grossSales: 118, netDeliveredQuantity: 1, profit: 58, profitPerDeliveredUnit: 58 })
+    expect(result.profitMargin).toBeCloseTo(49.15, 1)
+    expect(result.breakEvenTacos).toBeCloseTo(49.15, 1)
+    expect(result.orders[0].grossSales).toBe(118)
   })
 
   it('attributes blank-SKU order fees to a single product without losing them', () => {
@@ -67,7 +70,7 @@ describe('order profit summary', () => {
     const profit = buildMetricSkuDrilldown('PROFIT', products, all)
     expect(profit.rows.reduce((sum, row) => sum + (row.value ?? 0), 0)).toBe(profit.total)
     expect(buildMetricSkuDrilldown('PROFIT_PER_DELIVERED_UNIT', products, all)).toMatchObject({ total: -11 })
-    expect(buildMetricSkuDrilldown('BREAK_EVEN_TACOS', products, all).total).toBeCloseTo(8 / 300 * 100)
+    expect(buildMetricSkuDrilldown('BREAK_EVEN_TACOS', products, all).total).toBeCloseTo(8 / 318 * 100)
   })
 
   it('composes SKU order filters across canonical dimensions and activity', () => {
@@ -81,13 +84,13 @@ describe('order profit summary', () => {
   it('aggregates sales, profit, shipping, and return types by geography', () => {
     const refund = { ...base, id: 'refund', event: 'REFUND' as const, amount: -100, amountType: 'PRODUCT_REVENUE' as const, returnType: 'RTO' as const }
     const orders = summarizeOrders([...events, refund], [{ sku: 'SKU-1', unitCost: 40, updatedAt: '' }], 'BLOCK')
-    expect(summarizeOrderGeography(orders, 'STATE')[0]).toMatchObject({ location: 'Delhi', orderCount: 1, grossSales: 100, easyShipFees: 10, marketplaceCharges: 10, refundValue: 100, rtoQuantity: 1, customerReturnQuantity: 0, returnQuantity: 1, returnRate: 100 })
+    expect(summarizeOrderGeography(orders, 'STATE')[0]).toMatchObject({ location: 'Delhi', orderCount: 1, grossSales: 118, easyShipFees: 10, marketplaceCharges: 10, refundValue: 100, rtoQuantity: 1, customerReturnQuantity: 0, returnQuantity: 1, returnRate: 100 })
   })
 
   it('builds the full SKU workspace and composes advanced order filters', () => {
     const refund = { ...base, id: 'refund', event: 'REFUND' as const, amount: -100, amountType: 'PRODUCT_REVENUE' as const, returnType: 'RTO' as const }
     const product = summarizeSkuProfit([...events, refund], 'SKU-1', [{ sku: 'SKU-1', unitCost: 40, updatedAt: '' }], 'BLOCK')
-    const workspace = buildSkuWorkspace(product, { sku: 'SKU-1', grossSales: 100, directAdsSpend: 0, tacos: 0, roas: 0, attribution: 'UNATTRIBUTED' })
+    const workspace = buildSkuWorkspace(product, { sku: 'SKU-1', grossSales: 118, directAdsSpend: 0, tacos: 0, roas: 0, attribution: 'UNATTRIBUTED' })
     expect(workspace.advertising).toMatchObject({ tacos: null, profitAfterAds: null, breakEvenTacos: 0 })
     expect(workspace.returns).toMatchObject({ rtoRate: 100, recoveredCogs: 40 })
     expect(workspace.waterfall.at(-1)?.label).toBe('Profit before ads')

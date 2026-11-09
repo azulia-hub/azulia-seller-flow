@@ -304,6 +304,9 @@ export function App() {
         purchaseDate: order.purchaseDate,
         status: order.status,
         orderValue: order.orderValue,
+        fulfillmentType: order.fulfillmentType,
+        sku: (order as { sku?: string }).sku,
+        title: (order as { title?: string }).title,
       })),
       anchorDate: periodAnchor,
     })

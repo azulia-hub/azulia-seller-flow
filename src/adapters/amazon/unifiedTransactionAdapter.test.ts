@@ -184,7 +184,7 @@ describe('Amazon Unified Transaction adapter', () => {
     const result = buildCohortFinancials(cohort, costs, 'BLOCK')
     // Direct source-row totals: 964 - 120 = 844. The bank transfer is not an expense.
     expect(normalized.quality.reconciliation).toMatchObject({ sourceTotal: 0, normalizedTotal: 0, difference: 0 })
-    expect(result.released).toMatchObject({ grossSales: 1000, marketplaceCharges: 160, netEasyShipFee: 120, operatingNet: 844, netCogs: 400, profit: 444 })
+    expect(result.released).toMatchObject({ grossSales: 1180, marketplaceCharges: 160, netEasyShipFee: 120, operatingNet: 844, netCogs: 400, profit: 444 })
     expect(result.orders[0].released.profit).toBe(444)
     expect(result.released.profit).not.toBe(284) // Would incorrectly deduct the embedded 160 fee twice.
   })
@@ -199,7 +199,7 @@ describe('Amazon Unified Transaction adapter', () => {
     const result = buildCohortFinancials(cohort, [{ sku: 'TEST-SKU', unitCost: 200, updatedAt: '' }], 'BLOCK')
     // 964 - 120 - 1044 = -200; recovered stock cancels the original 400 COGS.
     expect(normalized.quality.reconciliation).toMatchObject({ sourceTotal: -200, normalizedTotal: -200, difference: 0 })
-    expect(result.released).toMatchObject({ grossSales: 1000, refundValue: 1000, marketplaceCharges: 80, operatingNet: -200, netCogs: 0, profit: -200 })
+    expect(result.released).toMatchObject({ grossSales: 1180, refundValue: 1180, marketplaceCharges: 80, operatingNet: -200, netCogs: 0, profit: -200 })
   })
 
 })

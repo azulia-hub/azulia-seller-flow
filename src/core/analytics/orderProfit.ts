@@ -151,7 +151,7 @@ export function summarizeOrders(
   return [...grouped].map(([orderId, orderEvents]) => {
     const summary = summarizeDashboard(orderEvents)
     const cost = calculateCosts(orderEvents, costs, policy, normalizeSku, resolveCost)
-    const explained = summary.grossSales - summary.refundValue - summary.marketplaceCharges
+    const explained = summary.netProductRevenue - summary.marketplaceCharges
       - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements + summary.taxNet
     const profit = round(summary.operatingNet - cost.netCogs)
     const orderUnitEconomics = calculateUnitEconomics({ grossSales: summary.grossSales, netDeliveredQuantity: summary.netDeliveredQuantity, profitAfterAds: profit, adsSpend: summary.adsSpend, profitReady: cost.profitReady })
@@ -236,7 +236,7 @@ function summarizeSkuEvents(skuEvents: readonly CanonicalFinancialEvent[], sku: 
   }).sort((a, b) => a.date.localeCompare(b.date))
 
   const shippingEvents = skuEvents.filter(event => event.amountClass === 'OPERATING' && event.amountType === 'SHIPPING_FEE')
-  const explained = summary.grossSales - summary.refundValue - summary.marketplaceCharges - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements + summary.taxNet
+  const explained = summary.netProductRevenue - summary.marketplaceCharges - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements + summary.taxNet
   const skuReturns = returns.skuSummaries.find(item => item.sku === sku)
   return {
     sku,

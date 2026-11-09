@@ -12,14 +12,15 @@ export function buildBusinessOverview(events: readonly CanonicalFinancialEvent[]
   const profitMargin = summary.grossSales ? profitAfterAds / summary.grossSales * 100 : 0
   const roi = costStatus.netCogs ? profitAfterAds / costStatus.netCogs * 100 : 0
   const unitEconomics = calculateUnitEconomics({ grossSales: summary.grossSales, netDeliveredQuantity: summary.netDeliveredQuantity, profitAfterAds, adsSpend: summary.adsSpend, profitReady: costStatus.profitReady })
-  const explained = summary.grossSales - summary.refundValue - summary.marketplaceCharges - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements + summary.taxNet
-  return { summary, costStatus, profitAfterAds, profitBeforeAds, profitMargin, roi, unitEconomics, otherOperating: summary.operatingNet - explained,
+  const directOperating = summary.grossSales - summary.refundValue - summary.marketplaceCharges - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements
+  const adjustments = Math.round((summary.operatingNet - directOperating) * 100) / 100
+  return { summary, costStatus, profitAfterAds, profitBeforeAds, profitMargin, roi, unitEconomics, otherOperating: adjustments,
     orderCount: new Set(orderIds ?? events.flatMap(event => event.orderId ? [event.orderId] : [])).size,
     financialRows: [
-      { label: 'Product sales', value: summary.grossSales }, { label: 'Product refunds', value: -summary.refundValue },
+      { label: 'Customer sales (incl. tax)', value: summary.grossSales }, { label: 'Customer refunds', value: -summary.refundValue },
       { label: 'Marketplace charges', value: -summary.marketplaceCharges }, { label: 'Shipping fees', value: -summary.netEasyShipFee },
       { label: 'Booked advertising', value: -summary.adsSpend }, { label: 'Product costs', value: costStatus.profitReady ? -costStatus.netCogs : null },
-      { label: 'Reimbursements', value: summary.reimbursements }, { label: 'Tax and other adjustments', value: summary.taxNet + summary.operatingNet - explained },
+      { label: 'Reimbursements', value: summary.reimbursements }, { label: 'Tax withholding & adjustments', value: adjustments },
     ],
   }
 }
