@@ -1,10 +1,8 @@
 import type { SponsoredProductsAttribution } from '../../core/advertising/sponsoredProducts'
 import type { CanonicalDataset, RawDataset } from '../../core/data/types'
-import type { MappingSpec } from '../../core/normalize/types'
 import type { ImportComparison, StoredImport } from '../../core/imports/importHistory'
 import { PageHeader } from '../../components/PageHeader'
 import { UploadZone } from '../upload/UploadZone'
-import { MappingPanel } from '../upload/MappingPanel'
 import { ImportHistory } from '../imports/ImportHistory'
 import type { ClassificationRule } from '../../core/classification/types'
 import { TransactionReviewManager } from '../data-quality/TransactionReviewManager'
@@ -14,7 +12,7 @@ import { summarizeCohortOrders, type OrderCohort } from '../../core/analytics/or
 import type { SponsoredProductsReport } from '../../core/advertising/types'
 
 type Props = {
-  readonly dataset: CanonicalDataset | null; readonly rawDataset: RawDataset | null; readonly needsMapping: boolean
+  readonly dataset: CanonicalDataset | null; readonly rawDataset: RawDataset | null
   readonly importing: boolean; readonly importError: string | null; readonly fileName: string
   readonly imports: readonly StoredImport[]; readonly currentImportId: string | null; readonly leftId: string; readonly rightId: string
   readonly comparison: ImportComparison | null; readonly formatMoney: (value: number) => string; readonly classificationRules: readonly ClassificationRule[]
@@ -24,7 +22,7 @@ type Props = {
   readonly sponsoredReport: SponsoredProductsReport | null; readonly sponsoredImporting: boolean; readonly sponsoredError: string | null
   readonly onViewSponsored: () => void
   readonly onSponsoredFile: (file: File) => void | Promise<void>
-  readonly onFile: (file: File) => void | Promise<void>; readonly onApplyMapping: (spec: MappingSpec) => void | Promise<void>
+  readonly onFile: (file: File) => void | Promise<void>
   readonly onLeftChange: (id: string) => void; readonly onRightChange: (id: string) => void; readonly onOpen: (item: StoredImport) => void
   readonly onSaveClassificationRule: (rule: ClassificationRule) => void; readonly onDeleteClassificationRule: (id: string) => void
 }
@@ -48,7 +46,7 @@ export function ReportsPage(props: Props) {
       {props.sponsoredError ? <div className="notice-card danger" role="alert"><span>!</span><div><strong>Ads report was not imported</strong><p>{props.sponsoredError}</p></div></div> : null}
     </section>
     {props.dataset && props.cohort ? <section className="lifecycle-coverage-card"><header><div><small>Sales-period evidence</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orders.length} orders selected</span></header><p>Orders are selected by verified purchase date. All recorded activity is included immediately, regardless of release status; later changes update that original period.</p><div className="lifecycle-coverage-grid"><div><b>{orderCoverage?.awaitingFinancialCount ?? 0}</b><small>orders awaiting financial details</small></div><div><b>{props.cohort.limitedFollowUpOrderCount}</b><small>orders with limited follow-up, still included</small></div><div><b>{props.cohort.missingSale.length}</b><small>purchase date not verified</small></div></div></section> : null}
-    {props.needsMapping && props.rawDataset ? <MappingPanel dataset={props.rawDataset} onApply={props.onApplyMapping} /> : null}
+
     {props.qualityCenter ? <DataQualityCenter result={props.qualityCenter} formatMoney={props.formatMoney} onAction={props.onQualityAction} /> : null}
     {props.dataset ? <div id="classification-review"><TransactionReviewManager dataset={props.dataset} rules={props.classificationRules} formatMoney={props.formatMoney} onSaveRule={props.onSaveClassificationRule} onDeleteRule={props.onDeleteClassificationRule} /></div> : null}
     <div className="section-heading"><div><small>Saved in this browser</small><h2>Previous reports</h2></div><p>Reopen an earlier report or compare two reports without mixing their date ranges.</p></div>

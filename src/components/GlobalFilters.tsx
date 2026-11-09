@@ -1,7 +1,6 @@
 import { advertisingDateRange } from './AdvertisingRecovery'
 import type { TimePeriodPreset } from '../core/analytics/timePeriods'
 type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
-export type CalculationBasis = 'SALE_PERIOD_ORDERS' | 'POSTED_ACTIVITY'
 
 type Props = {
   readonly source: string
