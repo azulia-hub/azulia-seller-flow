@@ -11,6 +11,29 @@ const STORAGE_ACCOUNT_KEY = 'azulia.hosted-account'
 const STORAGE_CREDS_KEY = 'azulia.hosted-creds'
 let view: HostedView = { account: null, connected: false, busy: false, connecting: false, error: '', progress: '', records: 0, state: null }
 let session: Session | null = null, run: AbortController | null = null, connecting: AbortController | null = null, initializing: Promise<void> | undefined
+let wakeLock: { release: () => Promise<void> } | null = null
+async function acquireWakeLock() {
+  try {
+    if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && typeof (navigator as any).wakeLock?.request === 'function') {
+      wakeLock = await (navigator as any).wakeLock.request('screen')
+    }
+  } catch {}
+}
+function releaseWakeLock() {
+  try {
+    if (wakeLock) {
+      void wakeLock.release()
+      wakeLock = null
+    }
+  } catch {}
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && run) {
+      void acquireWakeLock()
+    }
+  })
+}
 const listeners = new Set<() => void>()
 export const hostedView = () => view
 export const subscribeHosted = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
@@ -141,10 +164,13 @@ export async function syncHosted(days: { from: string; to: string }) {
   const checkedUpdate = (update: (state: CacheMeta) => void) => updateMeta(account, state => { assertLease(state, owner); update(state) })
   const makeJob = (kind: BrowserJob['kind'], range: SyncRange, extra: Partial<BrowserJob> = {}): BrowserJob => ({ id: JSON.stringify([kind, range.from, range.to, extra.orderId ?? extra.asin ?? '']), scope, kind, ...range, nextToken: null, createdAt: Date.now(), ...extra })
   try {
+    await acquireWakeLock()
     await updateMeta(account, state => { if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('Another tab is syncing this account. Stop that sync or wait two minutes after closing the tab.'); state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000 })
     heartbeat = setInterval(() => { void checkedUpdate(state => { state.leaseUntil = Date.now() + 120000 }).catch(() => abort.abort()) }, 20000)
     await checkedUpdate(state => {
       state.catalogError = null
+      // Purge any runaway / residual order or history checks from earlier versions
+      state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog')
       for (const job of state.jobs) if (job.scope === scope && Date.now() - job.createdAt > 23 * 3600000) { job.nextToken = null; job.createdAt = Date.now() }
       for (const kind of ['purchases', 'finance'] as const) {
         const coverage = kind === 'purchases' ? state.purchaseCoverage : state.coverage
@@ -155,7 +181,7 @@ export async function syncHosted(days: { from: string; to: string }) {
         if (coverage.length && !pending.length && !gaps.length) appendJob(state, makeJob(kind, { from: new Date(Math.max(start, stop - 3 * 86400000)).toISOString(), to: wanted.to }))
       }
     })
-    const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 3000, purchases: 60000, order: 3000, catalog: 3000 }
+    const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 2000, purchases: 3000, order: 2000, catalog: 2000 }
     let totalPlanned = 0, completedCount = 0
     while (!abort.signal.aborted) {
       const state = await meta(account)
@@ -171,19 +197,28 @@ export async function syncHosted(days: { from: string; to: string }) {
             const issue = `Unsupported order reference: ${id}. Its raw financial activity is retained for review.`
             if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ }
           }
-          for (const id of references) if (/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id) && !known.has(id) && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000) appendJob(current, makeJob('order', wanted, { orderId: id }))
-          for (const order of cache.orders) if (Date.parse(order.purchased) >= start && Date.parse(order.purchased) < stop) {
-            if (syncStarted - (current.orderChecked[order.id] ?? 0) > 6 * 3600000) appendJob(current, makeJob('order', wanted, { orderId: order.id }))
-            if (syncStarted - (current.historyChecked[order.id] ?? 0) > 6 * 3600000 && missingRanges({ from: order.purchased, to: new Date(requestCutoff).toISOString() }, current.coverage).length) appendJob(current, makeJob('history', wanted, { orderId: order.id }))
-          }
-          for (const asin of asins) if (syncStarted - (current.catalogChecked[asin] ?? 0) > 7 * 86400000 && !current.catalogError) appendJob(current, makeJob('catalog', wanted, { asin }))
+          // Cap missing order reference lookups to at most 10 per sync
+          const missingIds = [...references].filter(id => id && /^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id) && !known.has(id) && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000).slice(0, 10)
+          for (const id of missingIds) appendJob(current, makeJob('order', wanted, { orderId: id }))
+
+          // Cap missing catalog lookups to at most 10 per sync
+          const missingAsins = [...asins].filter(asin => syncStarted - (current.catalogChecked[asin] ?? 0) > 7 * 86400000 && !current.catalogError).slice(0, 10)
+          for (const asin of missingAsins) appendJob(current, makeJob('catalog', wanted, { asin }))
         })
         if (!planned.jobs.some(job => job.scope === scope)) break
         continue
       }
       totalPlanned = Math.max(totalPlanned, completedCount + jobs.length)
       const percent = totalPlanned > 0 ? Math.min(95, Math.max(5, Math.round((completedCount / totalPlanned) * 100))) : 10
-      jobs.sort((a, b) => (next[bucket(a)] ?? 0) - (next[bucket(b)] ?? 0) || (a.kind === 'purchases' ? 0 : 1) - (b.kind === 'purchases' ? 0 : 1) || a.id.localeCompare(b.id))
+      // Sort newest dates first so recent data appears immediately, and interleave
+      jobs.sort((a, b) => {
+        const pauseDiff = (next[bucket(a)] ?? 0) - (next[bucket(b)] ?? 0)
+        if (pauseDiff !== 0) return pauseDiff
+        const dateDiff = (b.to || '').localeCompare(a.to || '')
+        if (dateDiff !== 0) return dateDiff
+        if (a.kind !== b.kind) return a.kind === 'finance' ? -1 : 1
+        return a.id.localeCompare(b.id)
+      })
       const job = jobs[0], operation = bucket(job), pause = (next[operation] ?? 0) - Date.now()
       if (pause > 0) {
         const seconds = Math.ceil(pause / 1000)
@@ -193,30 +228,63 @@ export async function syncHosted(days: { from: string; to: string }) {
       publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : 'Verifying order dates'} · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
       next[operation] = Date.now() + delays[operation]
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
-      try {
-        const action = job.kind === 'history' ? 'finance' : job.kind
-        const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, nextToken: job.nextToken }, abort.signal)
-        if (abort.signal.aborted) break
-        const nextToken = text(page.nextToken) || null
-        if (nextToken && nextToken === job.nextToken) throw new Error('Amazon repeated a page token. Resume the saved checkpoint later.')
-        if ((job.kind === 'finance' || job.kind === 'history') && !Array.isArray(page.records)) throw new Error('Unsupported financial page; the checkpoint was not advanced.')
-        if (job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Unsupported orders page; the checkpoint was not advanced.')
-        const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
-        const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
-        await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined })
-        completedCount++
-        await refreshView()
-      } catch (cause) {
-        if (abort.signal.aborted) break
-        if (cause instanceof RelayError && cause.status === 429) { next[operation] = Date.now() + cause.retryAfter * 1000; await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] }); continue }
-        if (cause instanceof RelayError && job.kind === 'catalog') { await checkedUpdate(current => { current.catalogError = cause.message; current.jobs = current.jobs.filter(value => value.kind !== 'catalog') }); await refreshView(); continue }
-        if (cause instanceof RelayError && job.kind === 'order' && [400, 404, 422].includes(cause.status)) { await checkedUpdate(current => { current.dateFailures[job.orderId!] = Date.now(); const issue = `${job.orderId}: ${cause.message}`; if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ } current.jobs = current.jobs.filter(value => value.id !== job.id) }); await refreshView(); continue }
-        throw cause
+      let retried = 0, succeeded = false
+      while (!succeeded && !abort.signal.aborted) {
+        try {
+          const action = job.kind === 'history' ? 'finance' : job.kind
+          const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, nextToken: job.nextToken }, abort.signal)
+          if (abort.signal.aborted) break
+          const nextToken = text(page.nextToken) || null
+          if (nextToken && nextToken === job.nextToken) throw new Error('Amazon repeated a page token. Resume the saved checkpoint later.')
+          if ((job.kind === 'finance' || job.kind === 'history') && !Array.isArray(page.records)) throw new Error('Unsupported financial page; the checkpoint was not advanced.')
+          if (job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Unsupported orders page; the checkpoint was not advanced.')
+          const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
+          const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
+          await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined })
+          completedCount++
+          succeeded = true
+          await refreshView()
+        } catch (cause) {
+          if (abort.signal.aborted) break
+          if (cause instanceof RelayError && cause.status === 429) {
+            next[operation] = Date.now() + cause.retryAfter * 1000
+            await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
+            break
+          }
+          if (cause instanceof RelayError && job.kind === 'catalog') {
+            await checkedUpdate(current => { current.catalogError = cause.message; current.jobs = current.jobs.filter(value => value.kind !== 'catalog') })
+            await refreshView()
+            succeeded = true
+            break
+          }
+          if (cause instanceof RelayError && job.kind === 'order' && [400, 404, 422].includes(cause.status)) {
+            await checkedUpdate(current => { current.dateFailures[job.orderId!] = Date.now(); const issue = `${job.orderId}: ${cause.message}`; if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ } current.jobs = current.jobs.filter(value => value.id !== job.id) })
+            await refreshView()
+            succeeded = true
+            break
+          }
+          const isTransient = !(cause instanceof RelayError && [400, 401, 403].includes(cause.status))
+          if (isTransient && retried < 3) {
+            retried++
+            const backoff = retried * 3000
+            publish({ progress: `Connection blip; retrying in ${backoff / 1000}s (attempt ${retried}/3)… (${percent}%)`, percent })
+            await wait(backoff, abort.signal)
+            continue
+          }
+          const issueMsg = `Window ${job.from.slice(0, 10)} to ${job.to.slice(0, 10)} (${job.kind}): ${cause instanceof Error ? cause.message : 'Temporarily unavailable'}`
+          await checkedUpdate(current => {
+            if (!current.issues.includes(issueMsg)) current.issues.push(issueMsg)
+            current.jobs = current.jobs.filter(j => j.id !== job.id)
+          })
+          await refreshView()
+          break
+        }
       }
     }
     publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.', percent: 100 })
   } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, error: 'Amazon credentials expired or were revoked. Reconnect to continue.' }) } else { publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } } }
   finally {
+    releaseWakeLock()
     if (heartbeat) clearInterval(heartbeat)
     await updateMeta(account, state => { if (state.leaseOwner === owner) { state.leaseOwner = null; state.leaseUntil = 0 } }).catch(() => {})
     if (run === abort) run = null
