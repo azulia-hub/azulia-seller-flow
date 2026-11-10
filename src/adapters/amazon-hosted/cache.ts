@@ -3,18 +3,18 @@ import { mergeCoverage, type SyncRange } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncSnapshot } from '../amazon-report-sync/protocol'
 import { object, text } from '../amazon-report-sync/money'
 
-export interface BrowserJob extends SyncRange { id: string; scope: string; kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog'; orderId?: string; asin?: string; nextToken: string | null; createdAt: number }
+export interface BrowserJob extends SyncRange { id: string; scope: string; kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'; orderId?: string; asin?: string; nextToken: string | null; createdAt: number }
 export interface CacheMeta {
   account: string; revision: number; updatedAt: string | null; lastSync: string | null
   coverage: SyncRange[]; purchaseCoverage: SyncRange[]; jobs: BrowserJob[]
-  orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>
+  orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>; orderItemsChecked?: Record<string, number>
   issues: string[]; orderDateIssues: number; catalogError: string | null
   leaseOwner?: string | null; leaseUntil?: number
 }
 interface StoredValue<T> { account: string; id: string; value: T }
 export interface CatalogValue { asin: string; title: string | null; imageUrl: string | null }
 let database: Promise<IDBDatabase> | undefined
-const empty = (account: string): CacheMeta => ({ account, revision: 0, updatedAt: null, lastSync: null, coverage: [], purchaseCoverage: [], jobs: [], orderChecked: {}, historyChecked: {}, nextAllowed: {}, dateFailures: {}, catalogChecked: {}, issues: [], orderDateIssues: 0, catalogError: null })
+const empty = (account: string): CacheMeta => ({ account, revision: 0, updatedAt: null, lastSync: null, coverage: [], purchaseCoverage: [], jobs: [], orderChecked: {}, historyChecked: {}, nextAllowed: {}, dateFailures: {}, catalogChecked: {}, orderItemsChecked: {}, issues: [], orderDateIssues: 0, catalogError: null })
 function open() {
   return database ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('azulia-amazon-browser-source', 1)
@@ -102,7 +102,7 @@ export async function clearRecentHostedCache(account: string, cutoffIso?: string
   }
 }
 
-export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue }) {
+export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number }[] }) {
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite'), done = complete(tx)
   // Attach the rejection handler immediately; await the same promise after all writes.
   void done.catch(() => {})
@@ -127,6 +127,26 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       const value = { ...order, purchased: new Date(order.purchased).toISOString() }, store = tx.objectStore('orders'), old = await result(store.get([account, order.id])) as StoredValue<SourceOrderSummary> | undefined
       if (!old || !sameContent(old.value, value)) { store.put({ account, id: order.id, value }); changed = true }
     }
+    if (page.orderItems && job.orderId) {
+      const store = tx.objectStore('orders'), old = await result(store.get([account, job.orderId])) as StoredValue<SourceOrderSummary> | undefined
+      if (old?.value) {
+        const items = page.orderItems
+        const first = items[0]
+        const value: SourceOrderSummary = {
+          ...old.value,
+          sku: first?.sku ?? old.value.sku ?? null,
+          asin: first?.asin ?? old.value.asin ?? null,
+          title: first?.title ?? old.value.title ?? null,
+          items: items.length ? items : old.value.items,
+        }
+        if (!sameContent(old.value, value)) {
+          store.put({ account, id: job.orderId, value })
+          changed = true
+        }
+      }
+      state.orderItemsChecked = state.orderItemsChecked || {}
+      state.orderItemsChecked[job.orderId] = Date.now()
+    }
     if (page.catalog) {
       const item = page.catalog, store = tx.objectStore('catalog'), old = await result(store.get([account, item.asin])) as StoredValue<CatalogValue> | undefined
       if (!old || !sameContent(old.value, item)) { store.put({ account, id: item.asin, value: item }); changed = true }
@@ -139,6 +159,10 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       if (job.kind === 'finance') state.coverage = mergeCoverage([...state.coverage, { from: job.from, to: job.to }])
       if (job.kind === 'purchases') state.purchaseCoverage = mergeCoverage([...state.purchaseCoverage, { from: job.from, to: job.to }])
       if (job.kind === 'history' && job.orderId) state.historyChecked[job.orderId] = Date.now()
+      if (job.kind === 'orderItems' && job.orderId) {
+        state.orderItemsChecked = state.orderItemsChecked || {}
+        state.orderItemsChecked[job.orderId] = Date.now()
+      }
     }
     if (changed || state.revision === 0 && !page.nextToken) { state.revision++; state.updatedAt = new Date().toISOString() }
     state.lastSync = new Date().toISOString(); state.leaseUntil = Date.now() + 120000

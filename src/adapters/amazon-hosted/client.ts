@@ -192,7 +192,7 @@ function orderSummary(value: unknown): SourceOrderSummary {
     items: Array.isArray(summary.items) ? summary.items as any : Array.isArray(row.items) ? row.items as any : undefined,
   }
 }
-const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind
+const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind === 'orderItems' ? 'order' : job.kind
 function appendJob(state: CacheMeta, job: BrowserJob) {
   const old = state.jobs.find(value => value.id === job.id)
   if (old) { old.scope = job.scope; if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() } }
@@ -217,7 +217,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     await checkedUpdate(state => {
       state.catalogError = null
       // Purge any runaway / residual order or history checks from earlier versions
-      state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog')
+      state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog' || job.kind === 'orderItems' || job.kind === 'order')
       for (const job of state.jobs) if (job.scope === scope && Date.now() - job.createdAt > 23 * 3600000) { job.nextToken = null; job.createdAt = Date.now() }
       for (const kind of ['purchases', 'finance'] as const) {
         const coverage = kind === 'purchases' ? state.purchaseCoverage : state.coverage
@@ -249,6 +249,13 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           // Cap missing order reference lookups to at most 10 per sync
           const missingIds = [...references].filter(id => id && /^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id) && !known.has(id) && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000).slice(0, 10)
           for (const id of missingIds) appendJob(current, makeJob('order', wanted, { orderId: id }))
+
+          // Queue missing order line items (ASIN, SKU, Title)
+          const missingItemOrders = cache.orders.filter(order =>
+            (!order.asin || !order.title)
+            && Date.now() - ((current.orderItemsChecked ?? {})[order.id] ?? 0) > 60000
+          ).slice(0, 10)
+          for (const order of missingItemOrders) appendJob(current, makeJob('orderItems', wanted, { orderId: order.id }))
 
           // Cap missing catalog lookups to at most 10 per sync.
           // If an item already has an image, cache it for 7 days.
@@ -282,7 +289,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         publish({ progress: `Waiting for Amazon allowance (${seconds}s) · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
         await wait(Math.min(pause, 1000), abort.signal); continue
       }
-      publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : 'Verifying order dates'} · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
+      publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : job.kind === 'orderItems' ? 'Fetching order products' : 'Verifying order dates'} · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
       next[operation] = Date.now() + delays[operation]
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
       let retried = 0, succeeded = false
@@ -296,8 +303,9 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           if ((job.kind === 'finance' || job.kind === 'history') && !Array.isArray(page.records)) throw new Error('Unsupported financial page; the checkpoint was not advanced.')
           if (job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Unsupported orders page; the checkpoint was not advanced.')
           const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
+          const orderItems = job.kind === 'orderItems' && Array.isArray(page) ? (page as unknown[]).map(object).map(item => ({ asin: text(item.asin) || null, sku: text(item.sku) || null, title: text(item.title) || null, quantity: Number(item.quantity) || 1 })) : undefined
           const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
-          await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined })
+          await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined, orderItems })
           completedCount++
           succeeded = true
           await refreshView()
@@ -314,8 +322,18 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
             succeeded = true
             break
           }
-          if (cause instanceof RelayError && job.kind === 'order' && [400, 404, 422].includes(cause.status)) {
-            await checkedUpdate(current => { current.dateFailures[job.orderId!] = Date.now(); const issue = `${job.orderId}: ${cause.message}`; if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ } current.jobs = current.jobs.filter(value => value.id !== job.id) })
+          if (cause instanceof RelayError && (job.kind === 'order' || job.kind === 'orderItems') && [400, 404, 422].includes(cause.status)) {
+            await checkedUpdate(current => {
+              if (job.kind === 'orderItems' && job.orderId) {
+                current.orderItemsChecked = current.orderItemsChecked || {}
+                current.orderItemsChecked[job.orderId] = Date.now()
+              } else if (job.orderId) {
+                current.dateFailures[job.orderId] = Date.now()
+                const issue = `${job.orderId}: ${cause.message}`
+                if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ }
+              }
+              current.jobs = current.jobs.filter(value => value.id !== job.id)
+            })
             await refreshView()
             succeeded = true
             break
