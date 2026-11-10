@@ -293,10 +293,10 @@ export function App() {
       normalizeSku: skuNormalizer,
       sourceOrders: sourceOrders?.map(order => {
         const matched = allEvents.find(e => e.orderId === order.orderId)
-        const sku = (order as { sku?: string }).sku || matched?.sku
-        const asin = (order as { asin?: string }).asin || (matched?.raw?.['asin'] as string)
-        const title = (order as { title?: string }).title || (matched?.raw?.['product title'] as string)
-        const imageUrl = (order as { imageUrl?: string }).imageUrl || (matched?.raw?.['product image'] as string)
+        const sku = order.sku || matched?.sku
+        const asin = order.asin || (matched?.raw?.['asin'] as string)
+        const title = order.title || (matched?.raw?.['product title'] as string)
+        const imageUrl = order.imageUrl || (matched?.raw?.['product image'] as string)
         return {
           orderId: order.orderId,
           purchaseDate: order.purchaseDate,

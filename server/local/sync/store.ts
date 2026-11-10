@@ -121,14 +121,17 @@ export async function openSyncStore(directory: string, key: string) {
     discardJob(id: number) { db.prepare('DELETE FROM jobs WHERE id=?').run(id) },
     orders() {
       const catalog = new Map((db.prepare('SELECT asin,title,image_url FROM catalog_items').all() as { asin: string; title: string | null; image_url: string | null }[]).map(item => [item.asin, item]))
+      const orderAsins = new Map((db.prepare('SELECT r.order_id, ra.asin FROM records r JOIN record_asins ra ON ra.record_id=r.id WHERE r.order_id IS NOT NULL GROUP BY r.order_id').all() as { order_id: string; asin: string }[]).map(r => [r.order_id, r.asin]))
       return (db.prepare('SELECT o.id,o.purchased,s.raw FROM order_dates o LEFT JOIN order_summaries s ON s.id=o.id WHERE o.purchased IS NOT NULL ORDER BY o.purchased,o.id').all() as { id: string; purchased: string; raw: string | null }[]).map(order => {
         if (!order.raw) return { id: order.id, purchased: order.purchased, status: null, fulfillmentType: null, orderValue: null, currency: null }
         const parsed = JSON.parse(order.raw) as SourceOrderSummary
-        const cat = parsed.asin ? catalog.get(parsed.asin) : undefined
+        const asin = parsed.asin ?? orderAsins.get(order.id)
+        const cat = asin ? catalog.get(asin) : undefined
         const title = parsed.title ?? cat?.title
         const imageUrl = parsed.imageUrl ?? cat?.image_url
         return {
           ...parsed,
+          ...(asin && !parsed.asin ? { asin } : {}),
           purchased: order.purchased,
           ...(title ? { title } : {}),
           ...(imageUrl ? { imageUrl } : {}),

@@ -64,7 +64,15 @@ export async function snapshot(account: string): Promise<SyncSnapshot> {
     const asins = [...new Set((Array.isArray(record.items) ? record.items : []).map(object).flatMap(item => (Array.isArray(item.contexts) ? item.contexts : []).map(object).map(context => text(context.asin))).filter(Boolean))]
     return { ...record, azuliaOrderPurchaseDate: ids.length === 1 ? orders.get(ids[0])?.purchased ?? null : null, azuliaCatalogImages: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.imageUrl ?? null])), azuliaCatalogTitles: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.title ?? null])) }
   }).sort((a, b) => text(a.postedDate).localeCompare(text(b.postedDate)) || text(a.transactionId).localeCompare(text(b.transactionId)))
-  return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: cache.orders, coverage: cache.meta.coverage }
+  const enrichedOrders = cache.orders.map(order => {
+    const cat = order.asin ? catalog.get(order.asin) : undefined
+    return {
+      ...order,
+      title: order.title || cat?.title || null,
+      imageUrl: order.imageUrl || cat?.imageUrl || null,
+    }
+  })
+  return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: enrichedOrders, coverage: cache.meta.coverage }
 }
 export function assertLease(state: CacheMeta, owner: string) { if (state.leaseOwner !== owner || (state.leaseUntil ?? 0) < Date.now()) throw new Error('This sync session lost its browser lock. Resume from the saved checkpoint.') }
 export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue }) {

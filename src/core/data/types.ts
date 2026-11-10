@@ -91,6 +91,14 @@ export interface DataQualitySummary {
 }
 
 /** Order identity/status is independent of financial recognition. No synthetic money events. */
+export interface CanonicalOrderItem {
+  readonly asin?: string | null
+  readonly sku?: string | null
+  readonly title?: string | null
+  readonly imageUrl?: string | null
+  readonly quantity?: number | null
+}
+
 export interface CanonicalOrder {
   readonly orderId: string
   readonly purchaseDate: string
@@ -99,6 +107,11 @@ export interface CanonicalOrder {
   /** Source-reported order total, which may include tax/shipping; never product revenue. */
   readonly orderValue: string | null
   readonly currency: string | null
+  readonly sku?: string | null
+  readonly asin?: string | null
+  readonly title?: string | null
+  readonly imageUrl?: string | null
+  readonly items?: readonly CanonicalOrderItem[]
 }
 
 export interface CanonicalDataset {

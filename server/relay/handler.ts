@@ -35,11 +35,12 @@ export async function handleAmazonRelay(request: Request, upstream: typeof fetch
       const token = await requirePilotAccessToken({ AMAZON_SP_CLIENT_ID: value(body.clientId, 1024), AMAZON_SP_CLIENT_SECRET: value(body.clientSecret, 2048), AMAZON_SP_REFRESH_TOKEN: value(body.refreshToken) }, upstream)
       return json({ accessToken: token, expiresIn: 2700 })
     }
-    if (!['finance', 'purchases', 'order', 'catalog'].includes(action)) return json({ error: 'Unsupported operation.' }, 400)
+    if (!['finance', 'purchases', 'order', 'orderItems', 'catalog'].includes(action)) return json({ error: 'Unsupported operation.' }, 400)
     const token = value(body.accessToken), credentials = {}, nextToken = body.nextToken === undefined || body.nextToken === null ? null : value(body.nextToken)
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)])
     if (action === 'catalog') return json(await createCatalogReader(credentials, upstream, token)(value(body.asin, 10), signal))
     if (action === 'order') return json(await createOrderDateReader(credentials, upstream, token).one(value(body.orderId, 19), signal))
+    if (action === 'orderItems') return json(await createOrderDateReader(credentials, upstream, token).items(value(body.orderId, 19), signal))
     const range = action === 'finance' && body.orderId ? { from: new Date(0).toISOString(), to: new Date(0).toISOString() } : dates(body)
     const orderId = action === 'finance' && body.orderId ? value(body.orderId, 19) : null
     if (orderId && !/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(orderId)) return json({ error: 'Unsupported order reference.' }, 400)

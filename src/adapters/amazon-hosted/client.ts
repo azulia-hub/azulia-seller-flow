@@ -143,7 +143,19 @@ function wait(milliseconds: number, signal: AbortSignal) {
 }
 function orderSummary(value: unknown): SourceOrderSummary {
   const row = object(value), summary = object(row.summary)
-  return { id: text(row.id), purchased: text(row.purchased), status: text(summary.status) || null, fulfillmentType: text(summary.fulfillmentType) || null, orderValue: text(summary.orderValue) || null, currency: text(summary.currency) || null }
+  return {
+    id: text(row.id),
+    purchased: text(row.purchased),
+    status: text(summary.status) || text(row.status) || null,
+    fulfillmentType: text(summary.fulfillmentType) || text(row.fulfillmentType) || null,
+    orderValue: text(summary.orderValue) || text(row.orderValue) || null,
+    currency: text(summary.currency) || text(row.currency) || null,
+    sku: text(summary.sku) || text(row.sku) || null,
+    asin: text(summary.asin) || text(row.asin) || null,
+    title: text(summary.title) || text(row.title) || null,
+    imageUrl: text(summary.imageUrl) || text(row.imageUrl) || null,
+    items: Array.isArray(summary.items) ? summary.items as any : Array.isArray(row.items) ? row.items as any : undefined,
+  }
 }
 const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind
 function appendJob(state: CacheMeta, job: BrowserJob) {

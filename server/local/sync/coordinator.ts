@@ -65,22 +65,22 @@ export async function createReportSync(options: { directory: string; connectionK
         if (now - job.createdAt > 23 * 3600000) store.discardJob(job.id)
         else { const page = await orderReader.page(job, abort.signal); store.commitOrderPage(job, page.orders, page.nextToken, page.issues) }
       } else {
-        const missingDate = store.missingOrderDates()
-        if (missingDate) {
-          lookupId = missingDate.id
-          const order = await orderReader.one(missingDate.id, abort.signal)
-          store.saveOrderDate(order.id, order.purchased, order.summary)
+        const missingItems = store.missingOrderItems()
+        if (missingItems) {
+          lookupId = missingItems.id
+          try {
+            const items = await orderReader.items(missingItems.id, abort.signal)
+            store.saveOrderItems(missingItems.id, items)
+          } catch (cause) {
+            store.deferOrderItems(missingItems.id)
+            throw cause
+          }
         } else {
-          const missingItems = store.missingOrderItems()
-          if (missingItems) {
-            lookupId = missingItems.id
-            try {
-              const items = await orderReader.items(missingItems.id, abort.signal)
-              store.saveOrderItems(missingItems.id, items)
-            } catch (cause) {
-              store.deferOrderItems(missingItems.id)
-              throw cause
-            }
+          const missingDate = store.missingOrderDates()
+          if (missingDate) {
+            lookupId = missingDate.id
+            const order = await orderReader.one(missingDate.id, abort.signal)
+            store.saveOrderDate(order.id, order.purchased, order.summary)
           } else {
             const stale = store.staleOrderSummary()
             if (stale) {
