@@ -17,6 +17,8 @@ describe('Order-period attribution and coverage regression cases', () => {
 
     const saleEvent: CanonicalFinancialEvent = {
       id: 'evt-1',
+      source: 'test',
+      sourceDatasetId: 'ds-1',
       date: '2026-08-15T12:00:00+05:30',
       orderId,
       orderPurchaseDate: '2026-08-15',
@@ -33,10 +35,13 @@ describe('Order-period attribution and coverage regression cases', () => {
       rawType: 'Shipment',
       rawDescription: 'Product sale',
       classified: true,
+      raw: {},
     }
 
     const refundEvent: CanonicalFinancialEvent = {
       id: 'evt-2',
+      source: 'test',
+      sourceDatasetId: 'ds-1',
       date: '2026-09-02T14:00:00+05:30', // posted in September!
       orderId,
       orderPurchaseDate: '2026-08-15', // verified August purchase date!
@@ -53,6 +58,7 @@ describe('Order-period attribution and coverage regression cases', () => {
       rawType: 'Refund',
       rawDescription: 'Customer refund',
       classified: true,
+      raw: {},
     }
 
     const events = [saleEvent, refundEvent]
@@ -61,7 +67,7 @@ describe('Order-period attribution and coverage regression cases', () => {
     const augustScoreboard = computePulseScoreboard({
       events,
       costs: [],
-      missingCostPolicy: 'ZERO',
+      missingCostPolicy: 'ASSUME_ZERO',
       sourceOrders: [
         {
           orderId,
@@ -84,7 +90,7 @@ describe('Order-period attribution and coverage regression cases', () => {
     const septemberScoreboard = computePulseScoreboard({
       events,
       costs: [],
-      missingCostPolicy: 'ZERO',
+      missingCostPolicy: 'ASSUME_ZERO',
       sourceOrders: [
         {
           orderId,
@@ -112,7 +118,7 @@ describe('Order-period attribution and coverage regression cases', () => {
     const scoreboard = computePulseScoreboard({
       events: [],
       costs: [],
-      missingCostPolicy: 'ZERO',
+      missingCostPolicy: 'ASSUME_ZERO',
       sourceOrders: [],
       anchorDate: '2026-11-10',
       purchaseCoverage: partialCoverage,
@@ -129,7 +135,7 @@ describe('Order-period attribution and coverage regression cases', () => {
     const completeScoreboard = computePulseScoreboard({
       events: [],
       costs: [],
-      missingCostPolicy: 'ZERO',
+      missingCostPolicy: 'ASSUME_ZERO',
       sourceOrders: [],
       anchorDate: '2026-11-10',
       purchaseCoverage: fullCoverage,
@@ -225,7 +231,7 @@ describe('Order-period attribution and coverage regression cases', () => {
     const scoreboard = computePulseScoreboard({
       events: result.dataset.events,
       costs: [],
-      missingCostPolicy: 'ZERO',
+      missingCostPolicy: 'ASSUME_ZERO',
       sourceOrders: result.dataset.orders.map(o => ({
         orderId: o.orderId,
         purchaseDate: o.purchaseDate,
