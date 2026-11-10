@@ -1,8 +1,8 @@
 export { hostedDelivery } from './deliveryMode'
-import { saveAnalysisView } from '../browser/activeReportStore'
 import { object, text } from '../amazon-report-sync/money'
 import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, clearRecentHostedCache, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
 import { missingRanges, type SyncRange } from '../../core/sync/ranges'
+import { toIndiaDateString, indiaDateToUtcIso, getIndiaToday, stableJobId, SyncRunTracker } from '../../core/sync/planner'
 import type { SourceOrderSummary, SyncStatus } from '../amazon-report-sync/protocol'
 interface Credentials { clientId: string; clientSecret: string; refreshToken: string }
 interface Session extends Credentials { account: string; accessToken: string; until: number }
@@ -64,8 +64,8 @@ export function triggerRecentCheck(force = false) {
   const state = view.state
   const last = state?.lastSync ? Date.parse(state.lastSync) : 0
   if (force || !last || Date.now() - last > 2 * 60000) {
-    const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
-    const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10)
+    const today = getIndiaToday()
+    const yesterday = toIndiaDateString(Date.now() - 86400000) ?? today
     void syncHosted({ from: yesterday, to: today }, { silent: true, forceRecent: force })
   }
 }
@@ -192,7 +192,7 @@ function orderSummary(value: unknown): SourceOrderSummary {
     items: Array.isArray(summary.items) ? summary.items as any : Array.isArray(row.items) ? row.items as any : undefined,
   }
 }
-const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind === 'orderItems' ? 'order' : job.kind
+const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind
 function appendJob(state: CacheMeta, job: BrowserJob) {
   const old = state.jobs.find(value => value.id === job.id)
   if (old) { old.scope = job.scope; if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() } }
@@ -202,30 +202,38 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
   await initializeHosted()
   if (run || !session || !view.account || session.account !== view.account) return
   const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000
-  const start = Date.parse(`${days.from}T00:00:00+05:30`), stop = Math.min(Date.parse(`${days.to}T00:00:00+05:30`) + 86400000, requestCutoff)
+  const start = Date.parse(indiaDateToUtcIso(days.from)), stop = Math.min(Date.parse(indiaDateToUtcIso(days.to, true)), requestCutoff)
   if (!Number.isFinite(start) || !Number.isFinite(stop) || start >= stop || stop - start > 5 * 366 * 86400000 || start < Date.UTC(2010, 0, 1)) { publish({ error: 'Choose a valid date range of at most five years.' }); return }
   const wanted = { from: new Date(start).toISOString(), to: new Date(stop).toISOString() }, scope = `${days.from}/${days.to}`, account = view.account, owner = crypto.randomUUID(), abort = new AbortController()
-  saveAnalysisView(`api:${account}`, { from: days.from, to: days.to, period: 'CUSTOM', basis: 'SALE_PERIOD_ORDERS', fulfillment: '' })
+  const tracker = new SyncRunTracker(owner)
   run = abort; publish({ busy: true, error: '', progress: options?.silent ? 'Syncing latest Amazon orders…' : 'Preparing your requested sync…' })
   let heartbeat: ReturnType<typeof setInterval> | undefined
   const checkedUpdate = (update: (state: CacheMeta) => void) => updateMeta(account, state => { assertLease(state, owner); update(state) })
-  const makeJob = (kind: BrowserJob['kind'], range: SyncRange, extra: Partial<BrowserJob> = {}): BrowserJob => ({ id: JSON.stringify([kind, range.from, range.to, extra.orderId ?? extra.asin ?? '']), scope, kind, ...range, nextToken: null, createdAt: Date.now(), ...extra })
+  const makeJob = (kind: BrowserJob['kind'], range: SyncRange, extra: Partial<BrowserJob> = {}): BrowserJob => ({
+    id: stableJobId(kind, range.from, range.to, extra.orderId ?? extra.asin ?? ''),
+    scope,
+    kind,
+    ...range,
+    nextToken: null,
+    createdAt: Date.now(),
+    state: 'pending',
+    runId: owner,
+    retries: 0,
+    ...extra,
+  })
   try {
     await acquireWakeLock()
     await updateMeta(account, state => { if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('Another tab is syncing this account. Stop that sync or wait two minutes after closing the tab.'); state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000 })
     heartbeat = setInterval(() => { void checkedUpdate(state => { state.leaseUntil = Date.now() + 120000 }).catch(() => abort.abort()) }, 20000)
     await checkedUpdate(state => {
       state.catalogError = null
-      // Purge any runaway / residual order or history checks from earlier versions
-      state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog' || job.kind === 'orderItems' || job.kind === 'order')
+      state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog' || job.kind === 'orderItems' || job.kind === 'order' || job.kind === 'history')
       for (const job of state.jobs) if (job.scope === scope && Date.now() - job.createdAt > 23 * 3600000) { job.nextToken = null; job.createdAt = Date.now() }
       for (const kind of ['purchases', 'finance'] as const) {
         const coverage = kind === 'purchases' ? state.purchaseCoverage : state.coverage
         const pending = state.jobs.filter(job => job.scope === scope && job.kind === kind)
         const gaps = missingRanges(wanted, [...coverage, ...pending])
         for (const range of gaps) appendJob(state, makeJob(kind, range))
-        // Active rolling window: purchases in the last 72 hours are volatile (cancellations, payment clearance).
-        // Always re-check the recent active window so canceled orders and status changes update immediately.
         const recentFrom = new Date(Math.max(start, stop - 3 * 86400000)).toISOString()
         if (kind === 'purchases') {
           appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }))
@@ -234,7 +242,8 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         }
       }
     })
-    const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 2000, purchases: 3000, order: 2000, catalog: 2000 }
+    const next: Record<string, number> = { ...(await meta(account)).nextAllowed }
+    const delays: Record<string, number> = { finance: 2000, purchases: 60000, order: 2000, orderItems: 2000, catalog: 2000 }
     let totalPlanned = 0, completedCount = 0
     while (!abort.signal.aborted) {
       const state = await meta(account)
@@ -247,46 +256,77 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           for (const item of (Array.isArray(record.items) ? record.items : []).map(object)) for (const context of (Array.isArray(item.contexts) ? item.contexts : []).map(object)) if (/^[A-Z0-9]{10}$/.test(text(context.asin))) asins.add(text(context.asin))
         }
         for (const order of cache.orders) if (order.asin && /^[A-Z0-9]{10}$/.test(order.asin)) asins.add(order.asin)
+
         const planned = await checkedUpdate(current => {
           for (const id of references) if (id && !/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id)) {
             const issue = `Unsupported order reference: ${id}. Its raw financial activity is retained for review.`
             if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ }
           }
-          // Cap missing order reference lookups to at most 10 per sync
-          const missingIds = [...references].filter(id => id && /^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id) && !known.has(id) && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000).slice(0, 10)
-          for (const id of missingIds) appendJob(current, makeJob('order', wanted, { orderId: id }))
-
-          // Queue missing order line items (ASIN, SKU, Title)
-          const missingItemOrders = cache.orders.filter(order =>
-            (!order.asin || !order.title)
-            && Date.now() - ((current.orderItemsChecked ?? {})[order.id] ?? 0) > 60000
+          // 1. Essential work: Missing order references (order dates for financial records)
+          const missingIds = [...references].filter(id =>
+            id && /^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id)
+            && !known.has(id)
+            && tracker.canEnqueue('order', id)
+            && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000
           ).slice(0, 10)
-          for (const order of missingItemOrders) appendJob(current, makeJob('orderItems', wanted, { orderId: order.id }))
+          for (const id of missingIds) {
+            tracker.recordEnqueued('order', id)
+            appendJob(current, makeJob('order', wanted, { orderId: id }))
+          }
 
-          // Cap missing catalog lookups to at most 10 per sync.
-          // If an item already has an image, cache it for 7 days.
-          // If an item has no image or title (fresh or recovering from earlier 403), retry after 1 minute cooldown.
-          const missingAsins = [...asins].filter(asin => {
-            if (current.catalogError) return false
-            const item = catalogMap.get(asin)
-            const hasImage = Boolean(item?.imageUrl)
-            const cooldown = hasImage ? 7 * 86400000 : 60000
-            return syncStarted - (current.catalogChecked[asin] ?? 0) > cooldown
-          }).slice(0, 10)
-          for (const asin of missingAsins) appendJob(current, makeJob('catalog', wanted, { asin }))
+          // 1. Essential work: Linked order history (orders in requested window without continuous financial coverage)
+          const continuousHigh = current.coverage.map(c => c.to).sort().at(-1)
+          const isCovered = (purchased: string) => continuousHigh && purchased <= continuousHigh && !missingRanges({ from: purchased, to: continuousHigh }, current.coverage).length
+          const dueHistoryOrders = cache.orders.filter(order =>
+            order.purchased >= wanted.from && order.purchased <= wanted.to
+            && !isCovered(order.purchased)
+            && tracker.canEnqueue('history', order.id)
+            && Date.now() - (current.historyChecked[order.id] ?? 0) > 6 * 3600000
+          ).slice(0, 10)
+          for (const order of dueHistoryOrders) {
+            tracker.recordEnqueued('history', order.id)
+            appendJob(current, makeJob('history', wanted, { orderId: order.id }))
+          }
+
+          // 2. Optional enrichment: Only queued if no pending essential jobs remain
+          const hasEssentialPending = current.jobs.some(j => j.scope === scope && (j.kind === 'finance' || j.kind === 'purchases' || j.kind === 'order' || j.kind === 'history'))
+          if (!hasEssentialPending) {
+            const missingItemOrders = cache.orders.filter(order =>
+              (!order.asin || !order.title)
+              && tracker.canEnqueue('orderItems', order.id)
+              && Date.now() - ((current.orderItemsChecked ?? {})[order.id] ?? 0) > 60000
+            ).slice(0, 10)
+            for (const order of missingItemOrders) {
+              tracker.recordEnqueued('orderItems', order.id)
+              appendJob(current, makeJob('orderItems', wanted, { orderId: order.id }))
+            }
+
+            if (!current.catalogError) {
+              const missingAsins = [...asins].filter(asin => {
+                const item = catalogMap.get(asin)
+                const hasImage = Boolean(item?.imageUrl)
+                const cooldown = hasImage ? 7 * 86400000 : 60000
+                return tracker.canEnqueue('catalog', asin) && syncStarted - (current.catalogChecked[asin] ?? 0) > cooldown
+              }).slice(0, 10)
+              for (const asin of missingAsins) {
+                tracker.recordEnqueued('catalog', asin)
+                appendJob(current, makeJob('catalog', wanted, { asin }))
+              }
+            }
+          }
         })
         if (!planned.jobs.some(job => job.scope === scope)) break
         continue
       }
       totalPlanned = Math.max(totalPlanned, completedCount + jobs.length)
-      const percent = totalPlanned > 0 ? Math.min(95, Math.max(5, Math.round((completedCount / totalPlanned) * 100))) : 10
-      // Sort newest dates first so recent data appears immediately, and interleave
+      const percent = totalPlanned > 0 ? Math.max(5, Math.min(100, Math.round((completedCount / totalPlanned) * 100))) : 100
       jobs.sort((a, b) => {
         const pauseDiff = (next[bucket(a)] ?? 0) - (next[bucket(b)] ?? 0)
         if (pauseDiff !== 0) return pauseDiff
         const dateDiff = (b.to || '').localeCompare(a.to || '')
         if (dateDiff !== 0) return dateDiff
-        if (a.kind !== b.kind) return a.kind === 'finance' ? -1 : 1
+        const order = { finance: 0, purchases: 1, history: 2, order: 3, orderItems: 4, catalog: 5 }
+        if (a.kind !== b.kind) return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
         return a.id.localeCompare(b.id)
       })
       const job = jobs[0], operation = bucket(job), pause = (next[operation] ?? 0) - Date.now()
@@ -295,8 +335,12 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         publish({ progress: `Waiting for Amazon allowance (${seconds}s) · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
         await wait(Math.min(pause, 1000), abort.signal); continue
       }
-      publish({ progress: `${job.kind === 'purchases' ? 'Fetching orders' : job.kind === 'finance' ? 'Fetching financial activity' : job.kind === 'history' ? 'Updating linked order activity' : job.kind === 'catalog' ? 'Fetching product details' : job.kind === 'orderItems' ? 'Fetching order products' : 'Verifying order dates'} · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
-      next[operation] = Date.now() + delays[operation]
+      const isEnrichment = job.kind === 'orderItems' || job.kind === 'catalog'
+      const phasePrefix = isEnrichment ? 'Enriching product details' : 'Financial sync'
+      const kindLabel = job.kind === 'purchases' ? 'orders' : job.kind === 'finance' ? 'financial activity' : job.kind === 'history' ? 'linked order history' : job.kind === 'catalog' ? 'product images' : job.kind === 'orderItems' ? 'product line items' : 'order dates'
+      publish({ progress: `${phasePrefix}: fetching ${kindLabel} (${completedCount + 1}/${totalPlanned})`, percent })
+      const opDelay = job.kind === 'purchases' ? (job.nextToken ? 3000 : 60000) : (delays[operation] ?? 2000)
+      next[operation] = Date.now() + opDelay
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
       let retried = 0, succeeded = false
       while (!succeeded && !abort.signal.aborted) {
@@ -308,22 +352,47 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           if (nextToken && nextToken === job.nextToken) throw new Error('Amazon repeated a page token. Resume the saved checkpoint later.')
           if ((job.kind === 'finance' || job.kind === 'history') && !Array.isArray(page.records)) throw new Error('Unsupported financial page; the checkpoint was not advanced.')
           if (job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Unsupported orders page; the checkpoint was not advanced.')
+          if (job.kind === 'orderItems' && !Array.isArray(page.items)) throw new Error('Unsupported orderItems page; the checkpoint was not advanced.')
           const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
-          const orderItems = job.kind === 'orderItems' && Array.isArray(page) ? (page as unknown[]).map(object).map(item => ({ asin: text(item.asin) || null, sku: text(item.sku) || null, title: text(item.title) || null, quantity: Number(item.quantity) || 1, price: text(item.price) || null, currency: text(item.currency) || null })) : undefined
+          const orderItems = job.kind === 'orderItems' && Array.isArray(page.items)
+            ? (page.items as unknown[]).map(object).map(item => ({
+                asin: text(item.asin) || null,
+                sku: text(item.sku) || null,
+                title: text(item.title) || null,
+                quantity: Number(item.quantity) || 1,
+                price: text(item.price) || null,
+                currency: text(item.currency) || null,
+              }))
+            : undefined
           const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
-          await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined, orderItems })
+          await commitPage(account, owner, job, {
+            records: Array.isArray(page.records) ? page.records.map(object) : undefined,
+            orders,
+            issues,
+            nextToken,
+            catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined,
+            orderItems,
+          })
+          if (job.kind === 'orderItems' && job.orderId) tracker.recordCompleted('orderItems', job.orderId)
+          if (job.kind === 'catalog' && job.asin) tracker.recordCompleted('catalog', job.asin)
+          if (job.kind === 'history' && job.orderId) tracker.recordCompleted('history', job.orderId)
+          if (job.kind === 'order' && job.orderId) tracker.recordCompleted('order', job.orderId)
           completedCount++
           succeeded = true
           await refreshView()
         } catch (cause) {
           if (abort.signal.aborted) break
           if (cause instanceof RelayError && cause.status === 429) {
-            next[operation] = Date.now() + cause.retryAfter * 1000
+            next[operation] = Date.now() + Math.max(cause.retryAfter, 5) * 1000
             await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
             break
           }
           if (cause instanceof RelayError && job.kind === 'catalog') {
-            await checkedUpdate(current => { current.catalogError = cause.message; current.jobs = current.jobs.filter(value => value.kind !== 'catalog') })
+            await checkedUpdate(current => {
+              current.catalogError = cause.message
+              current.jobs = current.jobs.filter(value => value.kind !== 'catalog')
+            })
+            if (job.asin) tracker.recordFailed('catalog', job.asin, cause.message)
             await refreshView()
             succeeded = true
             break
@@ -333,10 +402,12 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
               if (job.kind === 'orderItems' && job.orderId) {
                 current.orderItemsChecked = current.orderItemsChecked || {}
                 current.orderItemsChecked[job.orderId] = Date.now()
+                tracker.recordFailed('orderItems', job.orderId, cause.message)
               } else if (job.orderId) {
                 current.dateFailures[job.orderId] = Date.now()
                 const issue = `${job.orderId}: ${cause.message}`
                 if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ }
+                tracker.recordFailed('order', job.orderId, cause.message)
               }
               current.jobs = current.jobs.filter(value => value.id !== job.id)
             })
@@ -357,12 +428,22 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
             if (!current.issues.includes(issueMsg)) current.issues.push(issueMsg)
             current.jobs = current.jobs.filter(j => j.id !== job.id)
           })
+          if (job.orderId) tracker.recordFailed(job.kind, job.orderId, issueMsg)
+          else if (job.asin) tracker.recordFailed(job.kind, job.asin, issueMsg)
           await refreshView()
           break
         }
       }
     }
-    publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : options?.silent ? 'Synced with Amazon just now.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.', percent: 100 })
+    const finalIssues = (await meta(account)).issues.length
+    const doneProgress = abort.signal.aborted
+      ? 'Sync stopped. Completed pages are saved; press Sync now to resume.'
+      : finalIssues > 0
+        ? `Sync completed with ${finalIssues} item note${finalIssues === 1 ? '' : 's'}. Cached data is saved.`
+        : options?.silent
+          ? 'Synced with Amazon just now.'
+          : 'Requested sync complete. Up to date with Amazon.'
+    publish({ progress: doneProgress, percent: 100 })
   } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, error: 'Amazon credentials expired or were revoked. Reconnect to continue.' }) } else { publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } } }
   finally {
     releaseWakeLock()
@@ -376,10 +457,10 @@ export async function clearAndResyncHosted(range?: { from: string; to: string })
   await initializeHosted()
   if (!view.account) return
   if (run) stopHosted()
-  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
-  const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10)
+  const today = getIndiaToday()
+  const yesterday = toIndiaDateString(Date.now() - 86400000) ?? today
   const days = range ?? { from: yesterday, to: today }
-  const cutoff = new Date(Date.parse(`${days.from}T00:00:00+05:30`)).toISOString()
+  const cutoff = indiaDateToUtcIso(days.from)
   publish({ progress: 'Flushing cached orders and pulling fresh activity from Amazon…' })
   await clearRecentHostedCache(view.account, cutoff)
   await refreshView()
@@ -392,7 +473,8 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
       try {
         const body = JSON.parse(init.body)
         if (body.from && body.to) {
-          const from = String(body.from).slice(0, 10), to = String(body.to).slice(0, 10)
+          const from = toIndiaDateString(body.from) ?? String(body.from).slice(0, 10)
+          const to = toIndiaDateString(body.to) ?? String(body.to).slice(0, 10)
           setTimeout(() => {
             if (!run && session && view.account) void syncHosted({ from, to }, { silent: true })
           }, 400)
@@ -404,7 +486,24 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
   await refreshView()
   if (input.startsWith('/api/report-sync/status')) {
     const state = view.state
-    const status: SyncStatus = { onDemand: false, connectionKey: view.account ?? '', configured: Boolean(view.account), revision: state?.revision ?? 0, records: view.records, missingWindows: state?.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases').length ?? 0, coverage: state?.coverage ?? [], state: view.busy ? 'syncing' : view.error ? 'error' : 'idle', lastSync: state?.lastSync ?? null, nextAttempt: null, error: view.error || null, catalogError: state?.catalogError, orderDateIssues: state?.orderDateIssues, pendingOrderCycles: state?.jobs.filter(job => job.kind === 'history').length, pendingOrderDates: state?.jobs.filter(job => job.kind === 'order').length }
+    const status: SyncStatus = {
+      onDemand: false,
+      connectionKey: view.account ?? '',
+      configured: Boolean(view.account),
+      revision: state?.revision ?? 0,
+      records: view.records,
+      missingWindows: state?.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases').length ?? 0,
+      coverage: state?.coverage ?? [],
+      purchaseCoverage: state?.purchaseCoverage ?? [],
+      state: view.busy ? 'syncing' : view.error ? 'error' : 'idle',
+      lastSync: state?.lastSync ?? null,
+      nextAttempt: null,
+      error: view.error || null,
+      catalogError: state?.catalogError,
+      orderDateIssues: state?.orderDateIssues,
+      pendingOrderCycles: state?.jobs.filter(job => job.kind === 'history').length,
+      pendingOrderDates: state?.jobs.filter(job => job.kind === 'order').length,
+    }
     return Response.json(status)
   }
   if (input.startsWith('/api/report-sync/data') && view.account) {

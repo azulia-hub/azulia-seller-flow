@@ -40,7 +40,7 @@ export async function handleAmazonRelay(request: Request, upstream: typeof fetch
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)])
     if (action === 'catalog') return json(await createCatalogReader(credentials, upstream, token)(value(body.asin, 10), signal))
     if (action === 'order') return json(await createOrderDateReader(credentials, upstream, token).one(value(body.orderId, 19), signal))
-    if (action === 'orderItems') return json(await createOrderDateReader(credentials, upstream, token).items(value(body.orderId, 19), signal))
+    if (action === 'orderItems') return json(await createOrderDateReader(credentials, upstream, token).items(value(body.orderId, 19), signal, nextToken))
     const range = action === 'finance' && body.orderId ? { from: new Date(0).toISOString(), to: new Date(0).toISOString() } : dates(body)
     const orderId = action === 'finance' && body.orderId ? value(body.orderId, 19) : null
     if (orderId && !/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(orderId)) return json({ error: 'Unsupported order reference.' }, 400)

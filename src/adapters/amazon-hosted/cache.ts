@@ -3,12 +3,25 @@ import { mergeCoverage, type SyncRange } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncSnapshot } from '../amazon-report-sync/protocol'
 import { object, text } from '../amazon-report-sync/money'
 
-export interface BrowserJob extends SyncRange { id: string; scope: string; kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'; orderId?: string; asin?: string; nextToken: string | null; createdAt: number }
+export interface BrowserJob extends SyncRange {
+  id: string
+  scope: string
+  kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'
+  orderId?: string
+  asin?: string
+  nextToken: string | null
+  createdAt: number
+  state?: 'pending' | 'running' | 'completed' | 'retryLater' | 'failed'
+  runId?: string
+  failureReason?: string
+  retries?: number
+}
 export interface CacheMeta {
   account: string; revision: number; updatedAt: string | null; lastSync: string | null
   coverage: SyncRange[]; purchaseCoverage: SyncRange[]; jobs: BrowserJob[]
   orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>; orderItemsChecked?: Record<string, number>
   issues: string[]; orderDateIssues: number; catalogError: string | null
+  failedJobs?: Record<string, string>
   leaseOwner?: string | null; leaseUntil?: number
 }
 interface StoredValue<T> { account: string; id: string; value: T }
@@ -140,7 +153,8 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
     if (page.orderItems && job.orderId) {
       const store = tx.objectStore('orders'), old = await result(store.get([account, job.orderId])) as StoredValue<SourceOrderSummary> | undefined
       if (old?.value) {
-        const items = page.orderItems
+        const existingItems = Array.isArray(old.value.items) ? old.value.items : []
+        const items = job.nextToken ? [...existingItems, ...page.orderItems] : page.orderItems
         const first = items[0]
         const itemsTotal = items.reduce((sum, it) => {
           const p = Number(it.price)
@@ -169,8 +183,11 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       state.catalogChecked[item.asin] = Date.now()
     }
     if (page.issues?.length) { const before = state.issues.length; state.issues = [...new Set([...state.issues, ...page.issues])]; state.orderDateIssues += state.issues.length - before }
-    if (page.nextToken) { current.nextToken = page.nextToken }
-    else {
+    if (page.nextToken) {
+      current.nextToken = page.nextToken
+      current.state = 'running'
+    } else {
+      current.state = 'completed'
       state.jobs = state.jobs.filter(value => value.id !== job.id)
       if (job.kind === 'finance') state.coverage = mergeCoverage([...state.coverage, { from: job.from, to: job.to }])
       if (job.kind === 'purchases') state.purchaseCoverage = mergeCoverage([...state.purchaseCoverage, { from: job.from, to: job.to }])

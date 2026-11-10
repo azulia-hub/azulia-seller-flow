@@ -43,11 +43,14 @@ export function createOrderDateReader(credentials: PilotCredentials, request: ty
       if (order.id !== id) throw new SourceError('Amazon returned a different order identity; its date was not applied.', 300, 422)
       return order
     },
-    async items(id: string, signal: AbortSignal) {
+    async items(id: string, signal: AbortSignal, nextToken?: string | null) {
       if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id)) throw new SourceError('Unsupported Amazon order ID.', 21600, 400)
-      const payload = await read(`/orders/v0/orders/${encodeURIComponent(id)}/orderItems`, new URLSearchParams(), signal)
+      const params = new URLSearchParams()
+      if (nextToken) params.set('NextToken', nextToken)
+      const payload = await read(`/orders/v0/orders/${encodeURIComponent(id)}/orderItems`, params, signal)
       const itemsList = Array.isArray(payload.OrderItems) ? payload.OrderItems : []
-      return itemsList.map(value => {
+      const next = text(payload.NextToken) || null
+      const items = itemsList.map(value => {
         const item = object(value)
         const price = object(item.ItemPrice)
         return {
@@ -59,6 +62,7 @@ export function createOrderDateReader(credentials: PilotCredentials, request: ty
           currency: text(price.CurrencyCode) || null,
         }
       })
+      return { items, nextToken: next }
     },
     async page(job: Job, signal: AbortSignal) {
       const payload = await read('/orders/v0/orders', new URLSearchParams({ MarketplaceIds: 'A21TJRUUN4KGV', CreatedAfter: job.from, CreatedBefore: job.to, MaxResultsPerPage: '100', ...(job.nextToken ? { NextToken: job.nextToken } : {}) }), signal)

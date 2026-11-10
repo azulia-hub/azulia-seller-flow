@@ -2,6 +2,7 @@ import type { SyncRange } from '../../core/sync/ranges'
 export interface SyncStatus {
   onDemand?: boolean
   connectionKey: string; configured: boolean; revision: number; records: number; missingWindows: number; coverage: SyncRange[]
+  purchaseCoverage?: SyncRange[]
   state: 'idle' | 'syncing' | 'waiting' | 'error'; lastSync: string | null; nextAttempt: string | null; error: string | null
   catalogPending?: number; catalogError?: string | null
   orderDateIssues?: number; pendingOrderDates?: number; pendingOrderCycles?: number; purchaseHistoryPending?: number; orderDatesSyncing?: boolean; orderDatesError?: string | null

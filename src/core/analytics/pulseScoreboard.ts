@@ -4,6 +4,8 @@ import type { MissingCostPolicy } from '../costs/calculateCosts'
 import { canonicalDateKey, isCustomerSale } from './dashboardSummary'
 import { buildBusinessOverview } from './businessOverview'
 import { productImage, productTitles } from '../search/productTitles'
+import { toIndiaDateString, indiaDateToUtcIso, getIndiaToday } from '../sync/planner'
+import { missingRanges, type SyncRange } from '../sync/ranges'
 
 export type PulseOrderStatusCategory = 'CONFIRMED' | 'UNSHIPPED' | 'PENDING' | 'CANCELED'
 
@@ -37,6 +39,7 @@ export interface PulsePeriodMetrics {
   readonly unitsSold: number
   readonly returnUnits: number
   readonly orders: readonly PulseOrderSummary[]
+  readonly isPartialCoverage?: boolean
 }
 
 export interface PulseScoreboard {
@@ -67,6 +70,7 @@ export interface PulseScoreboardInput {
   readonly normalizeSku?: (sku: string) => string
   readonly sourceOrders?: readonly PulseSourceOrder[]
   readonly anchorDate?: string
+  readonly purchaseCoverage?: readonly SyncRange[]
 }
 
 function filterEventsByDateRange(
@@ -91,8 +95,8 @@ function filterEventsByDateRange(
 }
 
 export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreboard {
-  const anchorDate = input.anchorDate ?? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
-  const yesterdayDate = new Date(Date.parse(anchorDate) - 86400000).toISOString().slice(0, 10)
+  const anchorDate = input.anchorDate ?? getIndiaToday()
+  const yesterdayDate = toIndiaDateString(Date.parse(anchorDate) - 86400000) ?? anchorDate
   const monthStart = `${anchorDate.slice(0, 7)}-01`
 
   // Precompute product titles, images, SKU prices, and fulfillment channel AOVs
@@ -389,6 +393,13 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     const returnUnits = overview.summary.returnQuantity
     const ordersCount = confirmedOrdersCount + unshippedOrdersCount + pendingOrdersCount
 
+    let isPartialCoverage = false
+    if (input.purchaseCoverage && input.purchaseCoverage.length) {
+      const fromIso = indiaDateToUtcIso(from)
+      const toIso = indiaDateToUtcIso(to, true)
+      isPartialCoverage = missingRanges({ from: fromIso, to: toIso }, input.purchaseCoverage).length > 0
+    }
+
     return {
       label,
       from,
@@ -405,6 +416,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       unitsSold,
       returnUnits,
       orders: orderList,
+      isPartialCoverage,
     }
   }
 

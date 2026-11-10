@@ -2,7 +2,7 @@ import type { SourceOrderSummary } from './protocol'
 import { loadImports, saveImport } from '../browser/importStore'
 import { profileDataset, type StoredImport } from '../../core/imports/importHistory'
 import type { RawDataset, CanonicalDataset } from '../../core/data/types'
-export const deliveryVersion = 13
+export const deliveryVersion = 14
 export interface AutomaticReading extends StoredImport { deliveryVersion: number; connectionKey: string; revision: number; sourceRecords?: Record<string, unknown>[]; sourceOrders?: SourceOrderSummary[]; raw: RawDataset; issues: string[] }
 export function findReading(imports: readonly StoredImport[], connectionKey: string): AutomaticReading | null {
   const value = imports.find(item => item.id === `api:${connectionKey}`) as AutomaticReading | undefined

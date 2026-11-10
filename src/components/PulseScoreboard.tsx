@@ -61,6 +61,11 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
                   ) : (
                     <span className="pulse-card-date">
                       {period.from === period.to ? period.from : `${period.from.slice(5)} to ${period.to.slice(5)}`}
+                      {period.isPartialCoverage ? (
+                        <span className="pulse-badge-partial" title="Data for this period is partially synced or missing older days" style={{ marginLeft: 6, fontSize: 10, color: '#f59e0b', border: '1px solid #f59e0b', borderRadius: 4, padding: '1px 4px' }}>
+                          partial
+                        </span>
+                      ) : null}
                     </span>
                   )}
                 </div>

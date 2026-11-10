@@ -69,8 +69,14 @@ export async function createReportSync(options: { directory: string; connectionK
         if (missingItems) {
           lookupId = missingItems.id
           try {
-            const items = await orderReader.items(missingItems.id, abort.signal)
-            store.saveOrderItems(missingItems.id, items)
+            let nextToken: string | null = null
+            const allItems: { asin: string | null; sku: string | null; title: string | null; quantity: number; price?: string | null; currency?: string | null }[] = []
+            do {
+              const page = await orderReader.items(missingItems.id, abort.signal, nextToken)
+              allItems.push(...page.items)
+              nextToken = page.nextToken
+            } while (nextToken)
+            store.saveOrderItems(missingItems.id, allItems)
           } catch (cause) {
             store.deferOrderItems(missingItems.id)
             throw cause
@@ -151,7 +157,7 @@ export async function createReportSync(options: { directory: string; connectionK
   void tick(); void tickOrders(); void tickCatalog()
   return {
     want,
-    status(): SyncStatus { return { connectionKey: options.connectionKey, configured: true, revision: store.revision(), records: store.count(), catalogPending: store.catalogPending(), catalogError, orderDateIssues: store.orderDateIssues(), pendingOrderDates: store.pendingOrderDates(), pendingOrderCycles: store.pendingOrderCycles(), orderDatesSyncing: ordersRunning, orderDatesError: orderError || null, purchaseHistoryPending: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[])).length, missingWindows: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, store.coverage())).length, coverage: store.coverage(), state, lastSync: store.get('lastSync'), nextAttempt: nextAttempt ? new Date(nextAttempt).toISOString() : null, error } },
+    status(): SyncStatus { return { connectionKey: options.connectionKey, configured: true, revision: store.revision(), records: store.count(), catalogPending: store.catalogPending(), catalogError, orderDateIssues: store.orderDateIssues(), pendingOrderDates: store.pendingOrderDates(), pendingOrderCycles: store.pendingOrderCycles(), orderDatesSyncing: ordersRunning, orderDatesError: orderError || null, purchaseHistoryPending: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[])).length, missingWindows: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, store.coverage())).length, coverage: store.coverage(), purchaseCoverage: JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[], state, lastSync: store.get('lastSync'), nextAttempt: nextAttempt ? new Date(nextAttempt).toISOString() : null, error } },
     snapshot(since = -1): SyncSnapshot { const delta = Number.isSafeInteger(since) && since >= Number(store.get('deltaBase') ?? 0) && since <= store.revision(); return { delta, connectionKey: options.connectionKey, revision: store.revision(), updatedAt: store.get('updatedAt'), orders: store.orders(), records: delta ? store.changesSince(since) : store.records(), coverage: store.coverage() } },
     async close() { stopped = true; clearInterval(timer); abort.abort(); while (running || ordersRunning || catalogRunning) await new Promise(resolve => setTimeout(resolve, 20)); store.close() },
   }

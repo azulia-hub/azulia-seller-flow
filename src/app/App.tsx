@@ -13,6 +13,7 @@ import { FocusPriorities } from '../components/FocusPriorities'
 import { buildFocusAnalysis, type FocusArea } from '../core/insights/focusAnalysis'
 import { previewProductProfitability } from '../core/analytics/productCostPreview'
 import { buildBusinessOverview } from '../core/analytics/businessOverview'
+import { getIndiaToday } from '../core/sync/planner'
 import { computePulseScoreboard } from '../core/analytics/pulseScoreboard'
 import { PulseScoreboard } from '../components/PulseScoreboard'
 import { detectProfitLeaks } from '../core/insights/profitLeakDetector'
@@ -205,7 +206,7 @@ export function App() {
   }, [allEvents, sourceOrders])
   const isApiData = Boolean(automaticEnabled && currentImportId?.startsWith('api:'))
   const periodAnchor = isApiData
-    ? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+    ? getIndiaToday()
     : dateExtent.max
   const comparisonPeriods = useMemo(() => {
     if (isApiData) return TIME_PERIOD_OPTIONS
@@ -319,8 +320,9 @@ export function App() {
         }
       }),
       anchorDate: periodAnchor,
+      purchaseCoverage: automaticDelivery.status?.purchaseCoverage,
     })
-  }, [allEvents, analyticsCosts, missingCostPolicy, skuNormalizer, sourceOrders, periodAnchor])
+  }, [allEvents, analyticsCosts, missingCostPolicy, skuNormalizer, sourceOrders, periodAnchor, automaticDelivery.status?.purchaseCoverage])
   const profitLeakAlerts = useMemo(() => {
     if (!filteredEvents.length) return []
     return detectProfitLeaks({
