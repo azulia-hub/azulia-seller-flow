@@ -205,6 +205,7 @@ export async function syncHosted(days: { from: string; to: string }) {
           for (const related of (Array.isArray(record.relatedIdentifiers) ? record.relatedIdentifiers : []).map(object)) if (related.relatedIdentifierName === 'ORDER_ID') references.add(text(related.relatedIdentifierValue))
           for (const item of (Array.isArray(record.items) ? record.items : []).map(object)) for (const context of (Array.isArray(item.contexts) ? item.contexts : []).map(object)) if (/^[A-Z0-9]{10}$/.test(text(context.asin))) asins.add(text(context.asin))
         }
+        for (const order of cache.orders) if (order.asin && /^[A-Z0-9]{10}$/.test(order.asin)) asins.add(order.asin)
         const planned = await checkedUpdate(current => {
           for (const id of references) if (id && !/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id)) {
             const issue = `Unsupported order reference: ${id}. Its raw financial activity is retained for review.`
