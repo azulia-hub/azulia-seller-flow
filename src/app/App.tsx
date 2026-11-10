@@ -295,8 +295,16 @@ export function App() {
         const matched = allEvents.find(e => e.orderId === order.orderId)
         const sku = order.sku || matched?.sku
         const asin = order.asin || (matched?.raw?.['asin'] as string)
-        const title = order.title || (matched?.raw?.['product title'] as string)
-        const imageUrl = order.imageUrl || (matched?.raw?.['product image'] as string)
+        const matchedBySku = sku ? allEvents.find(e => e.sku === sku) : undefined
+        const matchedByAsin = asin ? allEvents.find(e => e.raw?.['asin'] === asin) : undefined
+        const title = order.title
+          || (matched?.raw?.['product title'] as string)
+          || (matchedBySku?.raw?.['product title'] as string)
+          || (matchedByAsin?.raw?.['product title'] as string)
+        const imageUrl = order.imageUrl
+          || (matched?.raw?.['product image'] as string)
+          || (matchedBySku?.raw?.['product image'] as string)
+          || (matchedByAsin?.raw?.['product image'] as string)
         return {
           orderId: order.orderId,
           purchaseDate: order.purchaseDate,
