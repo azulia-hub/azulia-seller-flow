@@ -224,8 +224,14 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         const pending = state.jobs.filter(job => job.scope === scope && job.kind === kind)
         const gaps = missingRanges(wanted, [...coverage, ...pending])
         for (const range of gaps) appendJob(state, makeJob(kind, range))
-        // Explicit refresh revisits a bounded recent overlap, never the whole saved history.
-        if (options?.forceRecent || (coverage.length && !pending.length && !gaps.length)) appendJob(state, makeJob(kind, { from: new Date(Math.max(start, stop - 3 * 86400000)).toISOString(), to: wanted.to }))
+        // Active rolling window: purchases in the last 72 hours are volatile (cancellations, payment clearance).
+        // Always re-check the recent active window so canceled orders and status changes update immediately.
+        const recentFrom = new Date(Math.max(start, stop - 3 * 86400000)).toISOString()
+        if (kind === 'purchases') {
+          appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }))
+        } else if (options?.forceRecent || (coverage.length && !pending.length && !gaps.length)) {
+          appendJob(state, makeJob(kind, { from: recentFrom, to: wanted.to }))
+        }
       }
     })
     const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 2000, purchases: 3000, order: 2000, catalog: 2000 }
@@ -303,7 +309,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           if ((job.kind === 'finance' || job.kind === 'history') && !Array.isArray(page.records)) throw new Error('Unsupported financial page; the checkpoint was not advanced.')
           if (job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Unsupported orders page; the checkpoint was not advanced.')
           const orders = job.kind === 'order' ? [orderSummary(page)] : job.kind === 'purchases' ? (page.orders as unknown[]).map(orderSummary) : undefined
-          const orderItems = job.kind === 'orderItems' && Array.isArray(page) ? (page as unknown[]).map(object).map(item => ({ asin: text(item.asin) || null, sku: text(item.sku) || null, title: text(item.title) || null, quantity: Number(item.quantity) || 1 })) : undefined
+          const orderItems = job.kind === 'orderItems' && Array.isArray(page) ? (page as unknown[]).map(object).map(item => ({ asin: text(item.asin) || null, sku: text(item.sku) || null, title: text(item.title) || null, quantity: Number(item.quantity) || 1, price: text(item.price) || null, currency: text(item.currency) || null })) : undefined
           const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
           await commitPage(account, owner, job, { records: Array.isArray(page.records) ? page.records.map(object) : undefined, orders, issues, nextToken, catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined, orderItems })
           completedCount++

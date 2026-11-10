@@ -12,6 +12,8 @@ export interface SourceOrderItem {
   readonly title?: string | null
   readonly imageUrl?: string | null
   readonly quantity?: number | null
+  readonly price?: string | null
+  readonly currency?: string | null
 }
 /** Allowlisted Orders metadata; no buyer/address information. */
 export interface SourceOrderSummary {

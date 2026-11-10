@@ -97,6 +97,8 @@ export interface CanonicalOrderItem {
   readonly title?: string | null
   readonly imageUrl?: string | null
   readonly quantity?: number | null
+  readonly price?: string | null
+  readonly currency?: string | null
 }
 
 export interface CanonicalOrder {

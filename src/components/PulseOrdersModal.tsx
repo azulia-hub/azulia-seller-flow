@@ -18,6 +18,11 @@ function formatInr(value: number): string {
 function formatDateTimeIST(dateStr: string): string {
   if (!dateStr) return '—'
   try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+      const [year, month, day] = dateStr.trim().split('-').map(Number)
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${String(day).padStart(2, '0')} ${months[month - 1]} ${year}`
+    }
     const timestamp = Date.parse(dateStr)
     if (!Number.isFinite(timestamp)) return dateStr
     // Convert to IST (UTC + 5:30)
@@ -60,6 +65,7 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
     let fbmSales = 0
 
     for (const order of period.orders) {
+      if (order.statusCategory === 'CANCELED') continue
       if (isFbaOrder(order.fulfillmentType)) {
         fbaOrders++
         fbaSales += order.orderValue || 0

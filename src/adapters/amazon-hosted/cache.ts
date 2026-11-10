@@ -102,7 +102,7 @@ export async function clearRecentHostedCache(account: string, cutoffIso?: string
   }
 }
 
-export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number }[] }) {
+export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number; price?: string | null; currency?: string | null }[] }) {
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite'), done = complete(tx)
   // Attach the rejection handler immediately; await the same promise after all writes.
   void done.catch(() => {})
@@ -124,7 +124,17 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
     for (const order of page.orders ?? []) {
       if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(order.id) || !Number.isFinite(Date.parse(order.purchased))) throw new Error('Unsupported order identity or date. The checkpoint was retained.')
       state.orderChecked[order.id] = Date.now()
-      const value = { ...order, purchased: new Date(order.purchased).toISOString() }, store = tx.objectStore('orders'), old = await result(store.get([account, order.id])) as StoredValue<SourceOrderSummary> | undefined
+      const store = tx.objectStore('orders'), old = await result(store.get([account, order.id])) as StoredValue<SourceOrderSummary> | undefined
+      const value: SourceOrderSummary = {
+        ...old?.value,
+        ...order,
+        purchased: new Date(order.purchased).toISOString(),
+        sku: order.sku ?? old?.value.sku ?? null,
+        asin: order.asin ?? old?.value.asin ?? null,
+        title: order.title ?? old?.value.title ?? null,
+        imageUrl: order.imageUrl ?? old?.value.imageUrl ?? null,
+        items: order.items ?? old?.value.items,
+      }
       if (!old || !sameContent(old.value, value)) { store.put({ account, id: order.id, value }); changed = true }
     }
     if (page.orderItems && job.orderId) {
@@ -132,11 +142,17 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       if (old?.value) {
         const items = page.orderItems
         const first = items[0]
+        const itemsTotal = items.reduce((sum, it) => {
+          const p = Number(it.price)
+          return Number.isFinite(p) && p > 0 ? sum + p * (it.quantity || 1) : sum
+        }, 0)
         const value: SourceOrderSummary = {
           ...old.value,
           sku: first?.sku ?? old.value.sku ?? null,
           asin: first?.asin ?? old.value.asin ?? null,
           title: first?.title ?? old.value.title ?? null,
+          orderValue: old.value.orderValue ?? (itemsTotal > 0 ? itemsTotal.toFixed(2) : null),
+          currency: old.value.currency ?? (first?.currency ?? null),
           items: items.length ? items : old.value.items,
         }
         if (!sameContent(old.value, value)) {

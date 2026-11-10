@@ -120,7 +120,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
                         className="pulse-pending-note"
                         title={`${period.confirmedOrdersCount} confirmed/shipped · ${period.unshippedOrdersCount} unshipped · ${period.pendingOrdersCount} pending`}
                       >
-                        ({period.confirmedOrdersCount} conf. · {period.unshippedOrdersCount + period.pendingOrdersCount} pend.)
+                        ({period.confirmedOrdersCount > 0 ? `${period.confirmedOrdersCount} conf. · ` : ''}{period.unshippedOrdersCount > 0 ? `${period.unshippedOrdersCount} unshipped` : ''}{period.unshippedOrdersCount > 0 && period.pendingOrdersCount > 0 ? ' · ' : ''}{period.pendingOrdersCount > 0 ? `${period.pendingOrdersCount} pend.` : ''})
                       </span>
                     ) : null}
                     <span>·</span>

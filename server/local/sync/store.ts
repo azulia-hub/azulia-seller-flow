@@ -138,7 +138,7 @@ export async function openSyncStore(directory: string, key: string) {
         } as SourceOrderSummary
       })
     },
-    saveOrderItems(id: string, items: readonly { asin: string | null; sku: string | null; title: string | null; quantity: number }[]) {
+    saveOrderItems(id: string, items: readonly { asin: string | null; sku: string | null; title: string | null; quantity: number; price?: string | null; currency?: string | null }[]) {
       atomic(() => {
         db.prepare('UPDATE order_dates SET items_checked=? WHERE id=?').run(Date.now(), id)
         const existing = db.prepare('SELECT raw FROM order_summaries WHERE id=?').get(id) as { raw: string } | undefined
@@ -146,12 +146,18 @@ export async function openSyncStore(directory: string, key: string) {
         const parsed = JSON.parse(existing.raw) as Record<string, unknown>
         const primary = items[0]
         if (primary?.asin) insertCatalog.run(primary.asin)
+        const itemsTotal = items.reduce((sum, it) => {
+          const p = Number(it.price)
+          return Number.isFinite(p) && p > 0 ? sum + p * (it.quantity || 1) : sum
+        }, 0)
         const updated = {
           ...parsed,
           sku: primary?.sku ?? parsed.sku ?? null,
           asin: primary?.asin ?? parsed.asin ?? null,
           title: primary?.title ?? parsed.title ?? null,
-          items: items.map(i => ({ asin: i.asin, sku: i.sku, title: i.title, quantity: i.quantity })),
+          orderValue: parsed.orderValue ?? (itemsTotal > 0 ? itemsTotal.toFixed(2) : null),
+          currency: parsed.currency ?? (primary?.currency ?? null),
+          items: items.map(i => ({ asin: i.asin, sku: i.sku, title: i.title, quantity: i.quantity, price: i.price ?? null, currency: i.currency ?? null })),
         }
         db.prepare('UPDATE order_summaries SET raw=? WHERE id=?').run(JSON.stringify(updated), id)
         const nextRev = revision() + 1

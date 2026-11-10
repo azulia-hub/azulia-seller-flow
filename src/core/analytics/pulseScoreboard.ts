@@ -57,6 +57,7 @@ export interface PulseSourceOrder {
   readonly asin?: string | null
   readonly title?: string | null
   readonly imageUrl?: string | null
+  readonly items?: readonly { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number | null; price?: string | null; currency?: string | null }[]
 }
 
 export interface PulseScoreboardInput {
@@ -183,6 +184,24 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     if (Number.isFinite(val) && val > 0 && !orderSalesRecorded.has(order.orderId)) {
       orderSalesRecorded.set(order.orderId, val)
     }
+    // Learn real SKU prices from confirmed orders even before settlement ledger arrives
+    if (order.status?.toLowerCase() !== 'canceled') {
+      if (order.sku && Number.isFinite(val) && val > 0) {
+        const stat = skuPriceMap.get(order.sku) ?? { total: 0, count: 0 }
+        stat.total += val
+        stat.count += 1
+        skuPriceMap.set(order.sku, stat)
+      }
+      for (const item of order.items ?? []) {
+        const p = Number(item.price)
+        if (item.sku && Number.isFinite(p) && p > 0) {
+          const stat = skuPriceMap.get(item.sku) ?? { total: 0, count: 0 }
+          stat.total += p
+          stat.count += 1
+          skuPriceMap.set(item.sku, stat)
+        }
+      }
+    }
     if (order.title && !orderTitleMap.has(order.orderId)) {
       orderTitleMap.set(order.orderId, order.title)
     }
@@ -210,9 +229,6 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     }
   }
 
-  const defaultFbaAov = fbaOrderCount > 0 ? Math.round((fbaRevenue / fbaOrderCount) * 100) / 100 : 750
-  const defaultFbmAov = fbmOrderCount > 0 ? Math.round((fbmRevenue / fbmOrderCount) * 100) / 100 : 650
-
   function evaluate(label: string, from: string, to: string): PulsePeriodMetrics {
     const { matchedEvents, orderIds } = filterEventsByDateRange(input.events, from, to, orderDates)
     const overview = buildBusinessOverview(
@@ -227,9 +243,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     for (const [dateKey, orders] of ordersByDate) {
       if (dateKey >= from && dateKey <= to) {
         for (const order of orders) {
-          if (order.status?.toLowerCase() !== 'canceled') {
-            periodOrders.push(order)
-          }
+          periodOrders.push(order)
         }
       }
     }
@@ -260,21 +274,50 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
         orderValue = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0
       }
 
-      // If order is pending/unsettled and Amazon did not provide orderValue (common for pending FBA orders)
-      if (orderValue === 0 && !isSettled) {
-        const ft = (sourceOrder?.fulfillmentType || eventsForOrder.find(e => e.fulfillmentType)?.fulfillmentType || '').toUpperCase()
-        const isFba = ft === 'AFN' || ft === 'FBA' || ft === 'AMAZON'
-
-        let skuEstimatedPrice: number | null = null
-        for (const sku of orderSkus) {
-          const stat = skuPriceMap.get(sku)
-          if (stat && stat.count > 0) {
-            skuEstimatedPrice = Math.round((stat.total / stat.count) * 100) / 100
-            break
+      // Check explicit item line prices
+      if (orderValue === 0 && sourceOrder?.items?.length) {
+        let itemsSum = 0
+        for (const it of sourceOrder.items) {
+          const p = Number(it.price)
+          if (Number.isFinite(p) && p > 0) {
+            itemsSum += p * (it.quantity || 1)
           }
         }
-        orderValue = skuEstimatedPrice ?? (isFba ? defaultFbaAov : defaultFbmAov)
-        isValueEstimated = true
+        if (itemsSum > 0) {
+          orderValue = Math.round(itemsSum * 100) / 100
+        }
+      }
+
+      // If order is pending/unsettled and Amazon did not provide orderValue (common for pending FBA orders)
+      if (orderValue === 0 && !isSettled) {
+        if (sourceOrder?.items?.length) {
+          let verifiedPrice = 0
+          let resolvedAll = true
+          for (const it of sourceOrder.items) {
+            const stat = it.sku ? skuPriceMap.get(it.sku) : null
+            if (stat && stat.count > 0) {
+              verifiedPrice += Math.round((stat.total / stat.count) * 100) / 100 * (it.quantity || 1)
+            } else {
+              resolvedAll = false
+            }
+          }
+          if (verifiedPrice > 0 && resolvedAll) {
+            orderValue = Math.round(verifiedPrice * 100) / 100
+            isValueEstimated = true
+          }
+        }
+
+        if (orderValue === 0) {
+          for (const sku of orderSkus) {
+            const stat = skuPriceMap.get(sku)
+            if (stat && stat.count > 0) {
+              orderValue = Math.round((stat.total / stat.count) * 100) / 100
+              isValueEstimated = true
+              break
+            }
+          }
+        }
+        // Strict financial truth: zero arbitrary guessing (no hardcoded fallback)
       }
 
       const purchaseDate = sourceOrder?.purchaseDate
@@ -329,12 +372,12 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     const orderList = [...ordersMap.values()].sort((a, b) => b.purchaseDate.localeCompare(a.purchaseDate) || b.orderValue - a.orderValue)
     const confirmedOrdersCount = orderList.filter(o => o.statusCategory === 'CONFIRMED').length
     const unshippedOrdersCount = orderList.filter(o => o.statusCategory === 'UNSHIPPED').length
-    const pendingOrdersCount = orderList.filter(o => !orderIds.has(o.orderId) && o.statusCategory !== 'CANCELED').length
+    const pendingOrdersCount = orderList.filter(o => o.statusCategory === 'PENDING').length
 
-    // Calculate pending sales including pending FBA orders
+    // Calculate pending sales: only active unsettled orders (UNSHIPPED or PENDING), strictly excluding CANCELED
     const pendingSales = Math.round(
       orderList
-        .filter(o => !orderIds.has(o.orderId) && o.statusCategory !== 'CANCELED')
+        .filter(o => !orderIds.has(o.orderId) && (o.statusCategory === 'UNSHIPPED' || o.statusCategory === 'PENDING'))
         .reduce((sum, o) => sum + (o.orderValue > 0 ? o.orderValue : 0), 0) * 100,
     ) / 100
 
@@ -344,7 +387,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0
     const unitsSold = overview.summary.soldQuantity
     const returnUnits = overview.summary.returnQuantity
-    const ordersCount = totalOrderIds.size
+    const ordersCount = confirmedOrdersCount + unshippedOrdersCount + pendingOrdersCount
 
     return {
       label,

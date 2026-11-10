@@ -315,6 +315,7 @@ export function App() {
           asin,
           title,
           imageUrl,
+          items: order.items,
         }
       }),
       anchorDate: periodAnchor,

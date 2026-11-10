@@ -49,11 +49,14 @@ export function createOrderDateReader(credentials: PilotCredentials, request: ty
       const itemsList = Array.isArray(payload.OrderItems) ? payload.OrderItems : []
       return itemsList.map(value => {
         const item = object(value)
+        const price = object(item.ItemPrice)
         return {
           asin: text(item.ASIN) || null,
           sku: text(item.SellerSKU) || null,
           title: text(item.Title) || null,
           quantity: Number(item.QuantityOrdered) || 1,
+          price: text(price.Amount) || null,
+          currency: text(price.CurrencyCode) || null,
         }
       })
     },

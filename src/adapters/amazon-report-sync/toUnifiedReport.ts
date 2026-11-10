@@ -109,7 +109,7 @@ export function toUnifiedReport(snapshot: SyncSnapshot) {
     if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(order.id) || !Number.isFinite(Date.parse(order.purchased))) throw new Error('Unsupported order summary; the previous reading is retained.')
     return {
       orderId: order.id,
-      purchaseDate: new Date(Date.parse(order.purchased) + 330 * 60000).toISOString().slice(0, 10),
+      purchaseDate: order.purchased,
       status: order.status,
       fulfillmentType: order.fulfillmentType,
       orderValue: order.orderValue,
