@@ -28,6 +28,7 @@ export async function openSyncStore(directory: string, key: string) {
     CREATE INDEX IF NOT EXISTS record_dates ON records(date,id);
     CREATE INDEX IF NOT EXISTS record_orders ON records(order_id);
     CREATE INDEX IF NOT EXISTS order_cycle_dates ON order_dates(cycle_checked,id);`)
+  try { db.exec('ALTER TABLE order_dates ADD COLUMN items_checked INTEGER NOT NULL DEFAULT 0') } catch {}
   const get = (key: string) => (db.prepare('SELECT value FROM meta WHERE key=?').get(key) as { value: string } | undefined)?.value ?? null
   const set = (key: string, value: string) => { db.prepare('INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value) }
   if (!get('deltaBase')) set('deltaBase', get('revision') ?? '0')
@@ -56,9 +57,26 @@ export async function openSyncStore(directory: string, key: string) {
     let summaryChanged = false
     if (summary) {
       if (summary.id !== id || new Date(summary.purchased).toISOString() !== normalized) throw new Error('Order summary identity differs from its verified date.')
-      // Retain only the declared order fields, even if a caller supplied extra source properties.
-      const raw = JSON.stringify({ id, purchased: normalized, status: summary.status, fulfillmentType: summary.fulfillmentType, orderValue: summary.orderValue, currency: summary.currency })
       const previous = db.prepare('SELECT raw FROM order_summaries WHERE id=?').get(id) as { raw: string } | undefined
+      const prevParsed = previous?.raw ? JSON.parse(previous.raw) as Record<string, unknown> : undefined
+      const sku = summary.sku ?? prevParsed?.sku
+      const asin = summary.asin ?? prevParsed?.asin
+      const title = summary.title ?? prevParsed?.title
+      const imageUrl = summary.imageUrl ?? prevParsed?.imageUrl
+      const items = summary.items ?? prevParsed?.items
+      const raw = JSON.stringify({
+        id,
+        purchased: normalized,
+        status: summary.status,
+        fulfillmentType: summary.fulfillmentType,
+        orderValue: summary.orderValue,
+        currency: summary.currency,
+        ...(sku ? { sku } : {}),
+        ...(asin ? { asin } : {}),
+        ...(title ? { title } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(items && Array.isArray(items) && items.length ? { items } : {}),
+      })
       summaryChanged = previous?.raw !== raw
       if (summaryChanged) db.prepare('INSERT INTO order_summaries VALUES(?,?) ON CONFLICT(id) DO UPDATE SET raw=excluded.raw').run(id, raw)
     }
@@ -101,7 +119,58 @@ export async function openSyncStore(directory: string, key: string) {
     },
     enqueue(kind: string, range: SyncRange, orderId: string | null = null) { if (!db.prepare('SELECT id FROM jobs WHERE kind=? AND start=? AND stop=? AND order_id IS ?').get(kind, range.from, range.to, orderId)) db.prepare('INSERT INTO jobs(kind,start,stop,order_id,created) VALUES(?,?,?,?,?)').run(kind, range.from, range.to, orderId, Date.now()) },
     discardJob(id: number) { db.prepare('DELETE FROM jobs WHERE id=?').run(id) },
-    orders() { return (db.prepare('SELECT o.id,o.purchased,s.raw FROM order_dates o LEFT JOIN order_summaries s ON s.id=o.id WHERE o.purchased IS NOT NULL ORDER BY o.purchased,o.id').all() as { id: string; purchased: string; raw: string | null }[]).map(order => order.raw ? { ...JSON.parse(order.raw), purchased: order.purchased } as SourceOrderSummary : { id: order.id, purchased: order.purchased, status: null, fulfillmentType: null, orderValue: null, currency: null }) },
+    orders() {
+      const catalog = new Map((db.prepare('SELECT asin,title,image_url FROM catalog_items').all() as { asin: string; title: string | null; image_url: string | null }[]).map(item => [item.asin, item]))
+      return (db.prepare('SELECT o.id,o.purchased,s.raw FROM order_dates o LEFT JOIN order_summaries s ON s.id=o.id WHERE o.purchased IS NOT NULL ORDER BY o.purchased,o.id').all() as { id: string; purchased: string; raw: string | null }[]).map(order => {
+        if (!order.raw) return { id: order.id, purchased: order.purchased, status: null, fulfillmentType: null, orderValue: null, currency: null }
+        const parsed = JSON.parse(order.raw) as SourceOrderSummary
+        const cat = parsed.asin ? catalog.get(parsed.asin) : undefined
+        const title = parsed.title ?? cat?.title
+        const imageUrl = parsed.imageUrl ?? cat?.image_url
+        return {
+          ...parsed,
+          purchased: order.purchased,
+          ...(title ? { title } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+        } as SourceOrderSummary
+      })
+    },
+    saveOrderItems(id: string, items: readonly { asin: string | null; sku: string | null; title: string | null; quantity: number }[]) {
+      atomic(() => {
+        db.prepare('UPDATE order_dates SET items_checked=? WHERE id=?').run(Date.now(), id)
+        const existing = db.prepare('SELECT raw FROM order_summaries WHERE id=?').get(id) as { raw: string } | undefined
+        if (!existing) return
+        const parsed = JSON.parse(existing.raw) as Record<string, unknown>
+        const primary = items[0]
+        if (primary?.asin) insertCatalog.run(primary.asin)
+        const updated = {
+          ...parsed,
+          sku: primary?.sku ?? parsed.sku ?? null,
+          asin: primary?.asin ?? parsed.asin ?? null,
+          title: primary?.title ?? parsed.title ?? null,
+          items: items.map(i => ({ asin: i.asin, sku: i.sku, title: i.title, quantity: i.quantity })),
+        }
+        db.prepare('UPDATE order_summaries SET raw=? WHERE id=?').run(JSON.stringify(updated), id)
+        const nextRev = revision() + 1
+        set('revision', String(nextRev))
+        set('updatedAt', new Date().toISOString())
+      })
+    },
+    deferOrderItems(id: string) {
+      db.prepare('UPDATE order_dates SET items_checked=? WHERE id=?').run(Date.now(), id)
+    },
+    missingOrderItems() {
+      return db.prepare(`
+        SELECT o.id FROM order_dates o
+        JOIN order_summaries s ON s.id=o.id
+        WHERE o.purchased IS NOT NULL
+          AND s.raw NOT LIKE '%"sku"%'
+          AND coalesce(o.items_checked,0) < ?
+          AND NOT EXISTS (SELECT 1 FROM records r WHERE r.order_id=o.id)
+        ORDER BY o.purchased DESC
+        LIMIT 1
+      `).get(Date.now() - 6 * 3600000) as { id: string } | undefined
+    },
     staleOrderSummary() { return db.prepare('SELECT id FROM order_dates WHERE purchased IS NOT NULL AND checked<? ORDER BY checked LIMIT 1').get(Date.now() - 6 * 3600000) as { id: string } | undefined },
     records() { return decode(db.prepare('SELECT r.raw,o.purchased FROM records r LEFT JOIN order_dates o ON o.id=r.order_id ORDER BY r.date,r.id').all() as { raw: string; purchased: string | null }[]) },
     changesSince(since: number) { return decode(db.prepare('SELECT r.raw,o.purchased FROM records r JOIN changes c ON c.id=r.id LEFT JOIN order_dates o ON o.id=r.order_id WHERE c.revision>? ORDER BY r.date,r.id').all(since) as { raw: string; purchased: string | null }[]) },

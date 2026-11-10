@@ -3,6 +3,7 @@ import type { ProductCost } from '../costs/types'
 import type { MissingCostPolicy } from '../costs/calculateCosts'
 import { canonicalDateKey, isCustomerSale } from './dashboardSummary'
 import { buildBusinessOverview } from './businessOverview'
+import { productImage, productTitles } from '../search/productTitles'
 
 export type PulseOrderStatusCategory = 'CONFIRMED' | 'UNSHIPPED' | 'PENDING' | 'CANCELED'
 
@@ -16,6 +17,7 @@ export interface PulseOrderSummary {
   readonly skus: readonly string[]
   readonly fulfillmentType?: string | null
   readonly productTitle?: string | null
+  readonly imageUrl?: string | null
   readonly isValueEstimated?: boolean
 }
 
@@ -52,7 +54,9 @@ export interface PulseSourceOrder {
   readonly orderValue?: string | number | null
   readonly fulfillmentType?: string | null
   readonly sku?: string | null
+  readonly asin?: string | null
   readonly title?: string | null
+  readonly imageUrl?: string | null
 }
 
 export interface PulseScoreboardInput {
@@ -90,6 +94,15 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const yesterdayDate = new Date(Date.parse(anchorDate) - 86400000).toISOString().slice(0, 10)
   const monthStart = `${anchorDate.slice(0, 7)}-01`
 
+  // Precompute product titles, images, SKU prices, and fulfillment channel AOVs
+  const orderTitleMap = new Map<string, string>()
+  const skuTitleMap = new Map<string, string>()
+  const asinTitleMap = new Map<string, string>()
+  const orderImageMap = new Map<string, string>()
+  const skuImageMap = new Map<string, string>()
+  const asinImageMap = new Map<string, string>()
+  const skuPriceMap = new Map<string, { total: number; count: number }>()
+
   const orderDates = new Map<string, string>()
   const ordersByDate = new Map<string, PulseSourceOrder[]>()
   for (const order of input.sourceOrders ?? []) {
@@ -99,12 +112,17 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     const list = ordersByDate.get(dateKey) ?? []
     list.push(order)
     ordersByDate.set(dateKey, list)
+    if (order.title) {
+      if (!orderTitleMap.has(order.orderId)) orderTitleMap.set(order.orderId, order.title)
+      if (order.sku && !skuTitleMap.has(order.sku)) skuTitleMap.set(order.sku, order.title)
+      if (order.asin && !asinTitleMap.has(order.asin)) asinTitleMap.set(order.asin, order.title)
+    }
+    if (order.imageUrl) {
+      if (!orderImageMap.has(order.orderId)) orderImageMap.set(order.orderId, order.imageUrl)
+      if (order.sku && !skuImageMap.has(order.sku)) skuImageMap.set(order.sku, order.imageUrl)
+      if (order.asin && !asinImageMap.has(order.asin)) asinImageMap.set(order.asin, order.imageUrl)
+    }
   }
-
-  // Precompute product titles, SKU prices, and fulfillment channel AOVs
-  const orderTitleMap = new Map<string, string>()
-  const skuTitleMap = new Map<string, string>()
-  const skuPriceMap = new Map<string, { total: number; count: number }>()
 
   let fbaRevenue = 0
   let fbaOrderCount = 0
@@ -115,7 +133,16 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const orderChannelRecorded = new Map<string, string>()
 
   for (const event of input.events) {
+    const img = productImage([event])
+    if (img) {
+      if (event.orderId && !orderImageMap.has(event.orderId)) orderImageMap.set(event.orderId, img)
+      if (event.sku && !skuImageMap.has(event.sku)) skuImageMap.set(event.sku, img)
+      const asin = typeof event.raw?.['asin'] === 'string' ? event.raw['asin'].trim() : undefined
+      if (asin && !asinImageMap.has(asin)) asinImageMap.set(asin, img)
+    }
+
     const title = (event.raw?.['product title'] as string)
+      || productTitles([event])[0]
       || (event.descriptionIsProductTitle !== false ? event.rawDescription : undefined)
     if (title && title.trim()) {
       const clean = title.trim()
@@ -124,6 +151,10 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       }
       if (event.sku && !skuTitleMap.has(event.sku)) {
         skuTitleMap.set(event.sku, clean)
+      }
+      const asin = typeof event.raw?.['asin'] === 'string' ? event.raw['asin'].trim() : undefined
+      if (asin && !asinTitleMap.has(asin)) {
+        asinTitleMap.set(asin, clean)
       }
     }
 
@@ -154,6 +185,17 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     }
     if (order.title && !orderTitleMap.has(order.orderId)) {
       orderTitleMap.set(order.orderId, order.title)
+    }
+    if (order.imageUrl && !orderImageMap.has(order.orderId)) {
+      orderImageMap.set(order.orderId, order.imageUrl)
+    }
+    if (order.sku) {
+      if (skuTitleMap.has(order.sku) && !orderTitleMap.has(order.orderId)) {
+        orderTitleMap.set(order.orderId, skuTitleMap.get(order.sku)!)
+      }
+      if (skuImageMap.has(order.sku) && !orderImageMap.has(order.orderId)) {
+        orderImageMap.set(order.orderId, skuImageMap.get(order.sku)!)
+      }
     }
   }
 
@@ -255,9 +297,18 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
         statusCategory = isSettled ? 'CONFIRMED' : 'UNSHIPPED'
       }
 
+      const orderAsins = [...new Set(eventsForOrder.map(e => typeof e.raw?.['asin'] === 'string' ? e.raw['asin'].trim() : '').filter(Boolean))]
+
       const productTitle = orderTitleMap.get(orderId)
         ?? (sourceOrder as { title?: string | null })?.title
         ?? orderSkus.map(s => skuTitleMap.get(s)).find(Boolean)
+        ?? orderAsins.map(a => asinTitleMap.get(a)).find(Boolean)
+        ?? null
+
+      const imageUrl = orderImageMap.get(orderId)
+        ?? (sourceOrder as { imageUrl?: string | null })?.imageUrl
+        ?? orderSkus.map(s => skuImageMap.get(s)).find(Boolean)
+        ?? orderAsins.map(a => asinImageMap.get(a)).find(Boolean)
         ?? null
 
       ordersMap.set(orderId, {
@@ -268,8 +319,9 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
         orderValue,
         isValueEstimated,
         isSettled,
-        skus: orderSkus,
+        skus: orderSkus.length ? orderSkus : sourceOrder?.sku ? [sourceOrder.sku] : [],
         productTitle,
+        imageUrl,
         fulfillmentType: sourceOrder?.fulfillmentType ?? eventsForOrder.find(e => e.fulfillmentType)?.fulfillmentType ?? null,
       })
     }

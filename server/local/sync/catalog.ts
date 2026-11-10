@@ -21,12 +21,15 @@ export function createCatalogReader(credentials: PilotCredentials, request: type
     const body = object(JSON.parse(new TextDecoder().decode(bytes)))
     if (body.asin !== asin) throw new SourceError('Catalog item identity did not match the requested product.')
     const groups = Array.isArray(body.images) ? body.images.map(object) : []
-    const group = groups.find(row => row.marketplaceId === 'A21TJRUUN4KGV')
-    const images = Array.isArray(group?.images) ? group.images.map(object).filter(row => row.variant === 'MAIN').sort((a, b) => Number(a.width) - Number(b.width)) : []
+    const group = groups.find(row => row.marketplaceId === 'A21TJRUUN4KGV') ?? groups[0]
+    const allImages = Array.isArray(group?.images) ? group.images.map(object) : []
+    const mainImages = allImages.filter(row => row.variant === 'MAIN').sort((a, b) => Number(a.width) - Number(b.width))
+    const images = mainImages.length ? mainImages : allImages.sort((a, b) => Number(a.width) - Number(b.width))
     const image = images.find(row => Number(row.width) >= 100) ?? images.at(-1)
     let imageUrl: string | null = null
     try { const candidate = new URL(text(image?.link)); if (candidate.protocol === 'https:' && !candidate.username && !candidate.password) imageUrl = candidate.href } catch { /* Missing image stays explicit. */ }
     const summaries = Array.isArray(body.summaries) ? body.summaries.map(object) : []
-    return { asin, title: text(summaries.find(row => row.marketplaceId === 'A21TJRUUN4KGV')?.itemName) || null, imageUrl }
+    const summary = summaries.find(row => row.marketplaceId === 'A21TJRUUN4KGV') ?? summaries[0]
+    return { asin, title: text(summary?.itemName) || null, imageUrl }
   }
 }

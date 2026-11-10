@@ -64,7 +64,7 @@ export function toUnifiedReport(snapshot: SyncSnapshot) {
       rowOccurrences.set(baseKey, occurrence + 1)
       const row: Record<string, string | number | null> = { 'date/time': posted, 'settlement id': '', type: rowType, 'order id': orderId, sku: text(context.sku), quantity,
         'order state': '', 'order city': '', fulfillment: text(context.fulfillmentNetwork) || orderMetadata.get(orderId)?.fulfillmentType || '', 'account type': account, 'Transaction Status': status === 'DEFERRED' || releaseUnknown ? 'Deferred' : ['RELEASED','DEFERRED_RELEASED'].includes(status) ? 'Released' : 'Unknown',
-        'product title': mapped.column === 'product sales' ? text(object(record.azuliaCatalogTitles)[text(context.asin)]) || text(item.description) : '', 'product image': text(object(record.azuliaCatalogImages)[text(context.asin)]), asin: text(context.asin), description: mapped.description || text(record.description), total: decimal(value), 'api transaction id': id, 'api row key': `${baseKey}:${occurrence}`, 'api component': path.join(' / '), 'api currency': 'INR', 'api source total': decimal(source), 'api order purchase date': purchaseDate, 'api order origin required': orderId || ['shipment','refund'].includes(kind) ? 'yes' : 'no' }
+        'product title': text(object(record.azuliaCatalogTitles)[text(context.asin)]) || (mapped.column === 'product sales' ? text(item.description) : '') || '', 'product image': text(object(record.azuliaCatalogImages)[text(context.asin)]) || '', asin: text(context.asin), description: mapped.description || text(record.description), total: decimal(value), 'api transaction id': id, 'api row key': `${baseKey}:${occurrence}`, 'api component': path.join(' / '), 'api currency': 'INR', 'api source total': decimal(source), 'api order purchase date': purchaseDate, 'api order origin required': orderId || ['shipment','refund'].includes(kind) ? 'yes' : 'no' }
       if (mapped.column) row[mapped.column] = decimal(value)
       else { row['api unmapped amount'] = decimal(value); issues.push(`Unmapped API component: ${path.join(' / ')}`) }
       if (first) { row['api raw record'] = JSON.stringify(record); first = false }
@@ -107,7 +107,19 @@ export function toUnifiedReport(snapshot: SyncSnapshot) {
   const normalized = amazonUnifiedTransactionAdapter.normalize(raw)
   const orders = (snapshot.orders ?? []).map(order => {
     if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(order.id) || !Number.isFinite(Date.parse(order.purchased))) throw new Error('Unsupported order summary; the previous reading is retained.')
-    return { orderId: order.id, purchaseDate: new Date(Date.parse(order.purchased) + 330 * 60000).toISOString().slice(0, 10), status: order.status, fulfillmentType: order.fulfillmentType, orderValue: order.orderValue, currency: order.currency }
+    return {
+      orderId: order.id,
+      purchaseDate: new Date(Date.parse(order.purchased) + 330 * 60000).toISOString().slice(0, 10),
+      status: order.status,
+      fulfillmentType: order.fulfillmentType,
+      orderValue: order.orderValue,
+      currency: order.currency,
+      ...(order.sku ? { sku: order.sku } : {}),
+      ...(order.asin ? { asin: order.asin } : {}),
+      ...(order.title ? { title: order.title } : {}),
+      ...(order.imageUrl ? { imageUrl: order.imageUrl } : {}),
+      ...(order.items && order.items.length ? { items: order.items } : {}),
+    }
   })
   const dataset = { ...normalized, orders, events: normalized.events.map(event => ({ ...event, sourceIdentityResolved: true, sourceTransactionId: text(rows[event.sourceRow - 1]['api transaction id']), descriptionIsProductTitle: false, orderPurchaseDate: text(rows[event.sourceRow - 1]['api order purchase date']) || null, orderOriginRequired: rows[event.sourceRow - 1]['api order origin required'] === 'yes', releaseState: event.status === 'Released' ? 'RELEASED' as const : event.status === 'Deferred' ? 'PENDING' as const : 'UNKNOWN' as const, id: `${raw.id}:${String(rows[event.sourceRow - 1]['api row key'])}:${event.amountType}` })) }
   if (!dataset.quality.reconciliation.reconciled) throw new Error('Automatic source does not reconcile with existing report normalization. The previous reading is retained.')

@@ -31,11 +31,13 @@ const CACHE = PREFIX + '${version}';
 const URLS = ${JSON.stringify(files)}.map(path => new URL(path,self.registration.scope).href);
 // Load large PDF assets only when the tool is used; cache them for later offline use.
 const SHELL_URLS = URLS.filter(url => !url.endsWith('.wasm') && !new URL(url).pathname.includes('/fonts/'));
-self.addEventListener('install',event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL_URLS))));
+self.addEventListener('install',event => {
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL_URLS)));
+});
 self.addEventListener('activate',event => event.waitUntil((async () => {
   const keys = (await caches.keys()).filter(key => key.startsWith(PREFIX));
-  const previous = keys.filter(key => key !== CACHE).slice(-1);
-  await Promise.all(keys.filter(key => key !== CACHE && !previous.includes(key)).map(key => caches.delete(key)));
+  await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
   await self.clients.claim();
 })()));
 self.addEventListener('message',event => { if (event.data?.type === 'ACTIVATE_UPDATE') self.skipWaiting(); });

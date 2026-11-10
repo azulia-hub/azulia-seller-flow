@@ -77,7 +77,7 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
         let reading: AutomaticReading
         try { reading = await saveReading(key!, snapshot.revision, result, completeSnapshot.records, completeSnapshot.orders) } catch { throw new Error('New activity was read, but this browser could not save its calculation. The last saved reading remains visible; check browser storage.') }
         if (!active || !latest.current.enabled) return
-        latest.current.onReading(reading); applied = snapshot.revision; setAppliedRevision(applied); nextCalculation = Date.now() + (isSyncing ? 4000 : 0); sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders; currentReading = reading; mappingOutdated = false; setLastReading(reading.importedAt); setError('')
+        latest.current.onReading(reading); applied = snapshot.revision; setAppliedRevision(applied); nextCalculation = Date.now() + (isSyncing ? 1500 : 0); sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders; currentReading = reading; mappingOutdated = false; setLastReading(reading.importedAt); setError('')
       } catch (cause) { nextPoll = Date.now() + 15000; if (active && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'Automatic delivery is unavailable; use manual upload as a fallback.') }
       finally { worker?.terminate(); worker = undefined; working = false; if (active) setPhase('idle') }
     }

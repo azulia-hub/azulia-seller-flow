@@ -4,6 +4,8 @@ import { buildSkuAdvertisingEconomics, type SponsoredProductsAttribution } from 
 import { ProductCostEditor } from './ProductCostEditor'
 import { SkuWorkspace } from './SkuWorkspace'
 import { SkuTrendChart } from './SkuTrendChart'
+import { ProductThumbnail } from './ProductThumbnail'
+import { productImage } from '../core/search/productTitles'
 
 export function ProductPage({ product, advertisingProduct, sponsored, title, basis, backLabel, formatMoney, onBack }: {
   product: SkuProfitSummary; advertisingProduct?: SkuProfitSummary; sponsored: SponsoredProductsAttribution;
@@ -14,9 +16,21 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
   const ads = sponsored.skus.find(item => item.sku === product.sku)
   const economics = useMemo(() => ads && advertisingProduct ? buildSkuAdvertisingEconomics(advertisingProduct, ads) : null, [ads, advertisingProduct])
   const result = ads ? economics?.contributionAfterReportedAds ?? null : product.missingCost ? null : product.profitBeforeAds
+  const imageUrl = useMemo(() => productImage(product.orders.flatMap(order => order.events).filter(event => event.sku === product.sku)), [product])
+
   return <section className="product-page" aria-label="Product profile">
     <button className="product-page-back text-btn" onClick={onBack}>← Back to {backLabel}</button>
-    <header className="product-page-header"><div className="product-page-identity"><span className="eyebrow">Product overview</span><h1 ref={heading} tabIndex={-1}>{title || product.sku}</h1><p>{product.sku} · {basis}</p></div><ProductCostEditor sku={product.sku} missingCost={product.missingCost || Boolean(advertisingProduct?.missingCost)} /></header>
+    <header className="product-page-header">
+      <div className="product-page-identity" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <ProductThumbnail url={imageUrl} />
+        <div>
+          <span className="eyebrow">Product overview</span>
+          <h1 ref={heading} tabIndex={-1}>{title || product.sku}</h1>
+          <p>{product.sku} · {basis}</p>
+        </div>
+      </div>
+      <ProductCostEditor sku={product.sku} missingCost={product.missingCost || Boolean(advertisingProduct?.missingCost)} />
+    </header>
     <nav className="product-section-nav" aria-label="Product sections">{[['product-advertising','Advertising'],['product-costs','Costs & returns'],['product-orders','Orders'],['product-locations','Locations']].map(([id,label]) => <button className="text-btn" key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start' })}>{label}</button>)}</nav>
     <section className="product-page-metrics" aria-label="Product performance summary">
       <article><span>Total product sales</span><strong>{formatMoney(product.grossSales)}</strong><small>{product.soldQuantity.toLocaleString('en-IN')} units sold</small></article>

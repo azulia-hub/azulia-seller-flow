@@ -188,6 +188,7 @@ export async function syncHosted(days: { from: string; to: string }) {
       const jobs = state.jobs.filter(job => job.scope === scope)
       if (!jobs.length) {
         const cache = await loadCache(account), known = new Map(cache.orders.map(order => [order.id, order])), references = new Set<string>(), asins = new Set<string>()
+        const catalogMap = new Map(cache.catalog.map(item => [item.asin, item]))
         for (const record of cache.records) {
           for (const related of (Array.isArray(record.relatedIdentifiers) ? record.relatedIdentifiers : []).map(object)) if (related.relatedIdentifierName === 'ORDER_ID') references.add(text(related.relatedIdentifierValue))
           for (const item of (Array.isArray(record.items) ? record.items : []).map(object)) for (const context of (Array.isArray(item.contexts) ? item.contexts : []).map(object)) if (/^[A-Z0-9]{10}$/.test(text(context.asin))) asins.add(text(context.asin))
@@ -201,8 +202,16 @@ export async function syncHosted(days: { from: string; to: string }) {
           const missingIds = [...references].filter(id => id && /^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id) && !known.has(id) && Date.now() - (current.dateFailures[id] ?? 0) > 6 * 3600000).slice(0, 10)
           for (const id of missingIds) appendJob(current, makeJob('order', wanted, { orderId: id }))
 
-          // Cap missing catalog lookups to at most 10 per sync
-          const missingAsins = [...asins].filter(asin => syncStarted - (current.catalogChecked[asin] ?? 0) > 7 * 86400000 && !current.catalogError).slice(0, 10)
+          // Cap missing catalog lookups to at most 10 per sync.
+          // If an item already has an image, cache it for 7 days.
+          // If an item has no image or title (fresh or recovering from earlier 403), retry after 1 minute cooldown.
+          const missingAsins = [...asins].filter(asin => {
+            if (current.catalogError) return false
+            const item = catalogMap.get(asin)
+            const hasImage = Boolean(item?.imageUrl)
+            const cooldown = hasImage ? 7 * 86400000 : 60000
+            return syncStarted - (current.catalogChecked[asin] ?? 0) > cooldown
+          }).slice(0, 10)
           for (const asin of missingAsins) appendJob(current, makeJob('catalog', wanted, { asin }))
         })
         if (!planned.jobs.some(job => job.scope === scope)) break

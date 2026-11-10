@@ -38,18 +38,39 @@ export function PwaProvider({ children }: { children:ReactNode }) {
     if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !window.isSecureContext) return
     let disposed = false
     let installing:ServiceWorker | null = null
-    const stateChanged = () => { if (!disposed && installing?.state === 'installed' && navigator.serviceWorker.controller) setUpdateReady(true) }
+    const stateChanged = () => { if (!disposed && installing?.state === 'installed' && navigator.serviceWorker.controller) { installing.postMessage({ type:'ACTIVATE_UPDATE' }); setUpdateReady(true) } }
     const updateFound = () => { installing?.removeEventListener('statechange',stateChanged); installing = registration.current?.installing ?? null; installing?.addEventListener('statechange',stateChanged) }
-    const changed = () => { if (updating.current) window.location.reload() }
+    let hasController = Boolean(navigator.serviceWorker.controller)
+    let reloading = false
+    const changed = () => {
+      if (hasController && !reloading) {
+        reloading = true
+        window.location.reload()
+      }
+      hasController = true
+    }
     navigator.serviceWorker.addEventListener('controllerchange',changed)
+    const checkUpdate = () => { registration.current?.update().catch(() => {}) }
+    window.addEventListener('focus', checkUpdate)
+    const onVisibility = () => { if (document.visibilityState === 'visible') checkUpdate() }
+    document.addEventListener('visibilitychange', onVisibility)
+    const updateInterval = setInterval(checkUpdate, 30000)
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { scope:import.meta.env.BASE_URL, updateViaCache:'none' }).then(result => {
       if (disposed) return
       registration.current = result
-      if (result.waiting) setUpdateReady(true)
+      if (result.waiting) { result.waiting.postMessage({ type:'ACTIVATE_UPDATE' }); setUpdateReady(true) }
       result.addEventListener('updatefound',updateFound)
       updateFound()
     }).catch(() => { if (!disposed) setError('Offline setup could not finish. Reopen online to retry; your saved reports are unchanged.') })
-    return () => { disposed = true; installing?.removeEventListener('statechange',stateChanged); registration.current?.removeEventListener('updatefound',updateFound); navigator.serviceWorker.removeEventListener('controllerchange',changed) }
+    return () => {
+      disposed = true
+      installing?.removeEventListener('statechange',stateChanged)
+      registration.current?.removeEventListener('updatefound',updateFound)
+      navigator.serviceWorker.removeEventListener('controllerchange',changed)
+      window.removeEventListener('focus', checkUpdate)
+      document.removeEventListener('visibilitychange', onVisibility)
+      clearInterval(updateInterval)
+    }
   }, [])
   useEffect(() => { if (help && dialog.current && !dialog.current.open) dialog.current.showModal() }, [help])
   const install = async () => {

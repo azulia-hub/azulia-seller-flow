@@ -1,4 +1,4 @@
-import { productTitles } from './productTitles'
+import { productTitles, productImage } from './productTitles'
 import type { CanonicalFinancialEvent } from '../data/types'
 
 export type ReportSearchField = 'ALL' | 'SKU' | 'IDENTITY' | 'TITLE' | 'CITY' | 'ORDER' | 'LOCATION'
@@ -9,6 +9,7 @@ export interface ReportSearchDocument {
   readonly label: string
   readonly detail: string
   readonly sku?: string
+  readonly imageUrl?: string | null
   readonly orderId?: string
   readonly eventIds: readonly string[]
   readonly skuSearchText?: string
@@ -60,7 +61,7 @@ export function buildReportSearchIndex(events: readonly CanonicalFinancialEvent[
   }
   for (const [sku, rows] of products) {
     const names = productTitles(rows, options.productTitleFields)
-    documents.push({ kind: 'PRODUCT', id: sku, sku, label: names[0] || sku, detail: [sku, ...aliases.get(sku) ?? []].join(' · '), eventIds: rows.map(row => row.id),
+    documents.push({ kind: 'PRODUCT', id: sku, sku, label: names[0] || sku, imageUrl: productImage(rows) ?? null, detail: [sku, ...aliases.get(sku) ?? []].join(' · '), eventIds: rows.map(row => row.id),
       skuSearchText: [sku, ...skuAliases.get(sku) ?? []].join(' ').toLowerCase(),
       identitySearchText: [...identityAliases.get(sku) ?? []].join(' ').toLowerCase(),
       titleSearchText: names.join(' ').toLowerCase(),

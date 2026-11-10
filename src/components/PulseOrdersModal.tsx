@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import type { PulsePeriodMetrics, PulseOrderSummary, PulseOrderStatusCategory } from '../core/analytics/pulseScoreboard'
+import { ProductThumbnail } from './ProductThumbnail'
 
 interface Props {
   readonly period: PulsePeriodMetrics
@@ -324,24 +325,29 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                     <tr key={order.orderId} className={`pulse-order-row ${order.statusCategory.toLowerCase()}`}>
                       {/* Product Name (top) and Order ID (down) */}
                       <td className="pulse-order-product-cell">
-                        <div className="pulse-order-product-name" title={displayTitle}>
-                          {displayTitle}
-                        </div>
-                        <div className="pulse-order-subline">
-                          <strong>{order.orderId}</strong>
-                          <button
-                            type="button"
-                            className="copy-order-btn"
-                            onClick={() => copyToClipboard(order.orderId)}
-                            title="Copy Amazon Order ID"
-                          >
-                            {copiedId === order.orderId ? '✓ Copied' : 'Copy'}
-                          </button>
-                          {order.skus.length > 0 ? (
-                            <span className="sku-tag" title={order.skus.join(', ')}>
-                              {order.skus.join(', ')}
-                            </span>
-                          ) : null}
+                        <div className="pulse-order-product-header">
+                          <ProductThumbnail url={order.imageUrl ?? null} />
+                          <div className="pulse-order-product-info">
+                            <div className="pulse-order-product-name" title={displayTitle}>
+                              {displayTitle}
+                            </div>
+                            <div className="pulse-order-subline">
+                              <strong>{order.orderId}</strong>
+                              <button
+                                type="button"
+                                className="copy-order-btn"
+                                onClick={() => copyToClipboard(order.orderId)}
+                                title="Copy Amazon Order ID"
+                              >
+                                {copiedId === order.orderId ? '✓ Copied' : 'Copy'}
+                              </button>
+                              {order.skus.length > 0 ? (
+                                <span className="sku-tag" title={order.skus.join(', ')}>
+                                  {order.skus.join(', ')}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
                         </div>
                       </td>
 
