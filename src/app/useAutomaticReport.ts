@@ -55,6 +55,7 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
           if (!active || !latest.current.enabled) return
           applied = snapshot.revision; sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders
           setAppliedRevision(applied)
+          latest.current.onReading(currentReading)
           return
         }
         setPhase('calculating')

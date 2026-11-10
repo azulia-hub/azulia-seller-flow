@@ -1,7 +1,7 @@
 export { hostedDelivery } from './deliveryMode'
 import { saveAnalysisView } from '../browser/activeReportStore'
 import { object, text } from '../amazon-report-sync/money'
-import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
+import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, clearRecentHostedCache, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
 import { missingRanges, type SyncRange } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncStatus } from '../amazon-report-sync/protocol'
 interface Credentials { clientId: string; clientSecret: string; refreshToken: string }
@@ -57,6 +57,34 @@ async function refreshView() {
   const records = !view.state || state.revision !== view.state.revision ? (await loadCache(view.account)).records.length : view.records
   publish({ state, records })
 }
+let autoSyncTimer: ReturnType<typeof setInterval> | null = null
+
+export function triggerRecentCheck(force = false) {
+  if (!session || !view.account || run || view.connecting) return
+  const state = view.state
+  const last = state?.lastSync ? Date.parse(state.lastSync) : 0
+  if (force || !last || Date.now() - last > 2 * 60000) {
+    const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+    const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10)
+    void syncHosted({ from: yesterday, to: today }, { silent: true, forceRecent: force })
+  }
+}
+
+export function ensureAutoSyncLoop() {
+  if (autoSyncTimer || typeof window === 'undefined') return
+  autoSyncTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      triggerRecentCheck(false)
+    }
+  }, 45000)
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('focus', () => {
+    triggerRecentCheck(false)
+  })
+}
+
 export function initializeHosted() {
   return initializing ??= (async () => {
     let account: string | null = null
@@ -94,7 +122,12 @@ export function initializeHosted() {
     } else if (account) {
       publish({ account })
     }
-    if (account) await refreshView()
+    if (account) {
+      await refreshView()
+      ensureAutoSyncLoop()
+      const isReload = typeof performance !== 'undefined' && (performance.getEntriesByType?.('navigation')?.[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
+      setTimeout(() => triggerRecentCheck(Boolean(isReload)), isReload ? 1200 : 2500)
+    }
   })().catch(() => { initializing = undefined; publish({ error: 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
 }
 export async function connectHosted(credentials: Credentials, remember = true) {
@@ -114,14 +147,16 @@ export async function connectHosted(credentials: Credentials, remember = true) {
       if (remember) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
       else localStorage.removeItem(STORAGE_CREDS_KEY)
     } catch { /* This page's session remains usable. */ }
-    publish({ account, connected: true, records: 0, state: null, progress: 'Connected. Choose dates and press Sync now.' })
+    publish({ account, connected: true, records: 0, state: null, progress: 'Connected. Choosing dates and synchronizing…' })
     await refreshView()
+    ensureAutoSyncLoop()
+    setTimeout(() => triggerRecentCheck(true), 1000)
   } catch (cause) { if (!abort.signal.aborted) { publish({ error: cause instanceof Error ? cause.message : 'Connection failed.' }); throw cause } }
   finally { if (connecting === abort) { connecting = null; publish({ connecting: false }) } }
 }
 export function cancelHostedConnection() { connecting?.abort(); connecting = null; publish({ connecting: false }) }
 export function stopHosted() { run?.abort(); publish({ progress: 'Stopping after the current request. Saved pages can be resumed.' }) }
-export function disconnectHosted() { connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
+export function disconnectHosted() { if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null }; connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
 async function authorized(action: string, body: Record<string, unknown>, signal: AbortSignal, retry = true): Promise<Record<string, unknown>> {
   const current = session
   if (!current) throw new Error('Connect Amazon to start a sync. Cached results remain available.')
@@ -163,7 +198,7 @@ function appendJob(state: CacheMeta, job: BrowserJob) {
   if (old) { old.scope = job.scope; if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() } }
   else state.jobs.push(job)
 }
-export async function syncHosted(days: { from: string; to: string }) {
+export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean }) {
   await initializeHosted()
   if (run || !session || !view.account || session.account !== view.account) return
   const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000
@@ -171,7 +206,7 @@ export async function syncHosted(days: { from: string; to: string }) {
   if (!Number.isFinite(start) || !Number.isFinite(stop) || start >= stop || stop - start > 5 * 366 * 86400000 || start < Date.UTC(2010, 0, 1)) { publish({ error: 'Choose a valid date range of at most five years.' }); return }
   const wanted = { from: new Date(start).toISOString(), to: new Date(stop).toISOString() }, scope = `${days.from}/${days.to}`, account = view.account, owner = crypto.randomUUID(), abort = new AbortController()
   saveAnalysisView(`api:${account}`, { from: days.from, to: days.to, period: 'CUSTOM', basis: 'SALE_PERIOD_ORDERS', fulfillment: '' })
-  run = abort; publish({ busy: true, error: '', progress: 'Preparing your requested sync…' })
+  run = abort; publish({ busy: true, error: '', progress: options?.silent ? 'Syncing latest Amazon orders…' : 'Preparing your requested sync…' })
   let heartbeat: ReturnType<typeof setInterval> | undefined
   const checkedUpdate = (update: (state: CacheMeta) => void) => updateMeta(account, state => { assertLease(state, owner); update(state) })
   const makeJob = (kind: BrowserJob['kind'], range: SyncRange, extra: Partial<BrowserJob> = {}): BrowserJob => ({ id: JSON.stringify([kind, range.from, range.to, extra.orderId ?? extra.asin ?? '']), scope, kind, ...range, nextToken: null, createdAt: Date.now(), ...extra })
@@ -190,7 +225,7 @@ export async function syncHosted(days: { from: string; to: string }) {
         const gaps = missingRanges(wanted, [...coverage, ...pending])
         for (const range of gaps) appendJob(state, makeJob(kind, range))
         // Explicit refresh revisits a bounded recent overlap, never the whole saved history.
-        if (coverage.length && !pending.length && !gaps.length) appendJob(state, makeJob(kind, { from: new Date(Math.max(start, stop - 3 * 86400000)).toISOString(), to: wanted.to }))
+        if (options?.forceRecent || (coverage.length && !pending.length && !gaps.length)) appendJob(state, makeJob(kind, { from: new Date(Math.max(start, stop - 3 * 86400000)).toISOString(), to: wanted.to }))
       }
     })
     const next: Record<string, number> = { ...(await meta(account)).nextAllowed }, delays: Record<string, number> = { finance: 2000, purchases: 3000, order: 2000, catalog: 2000 }
@@ -303,7 +338,7 @@ export async function syncHosted(days: { from: string; to: string }) {
         }
       }
     }
-    publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.', percent: 100 })
+    publish({ progress: abort.signal.aborted ? 'Sync stopped. Completed pages are saved; press Sync now to resume.' : options?.silent ? 'Synced with Amazon just now.' : 'Requested sync complete. New Amazon activity is fetched only when you press Sync now.', percent: 100 })
   } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, error: 'Amazon credentials expired or were revoked. Reconnect to continue.' }) } else { publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } } }
   finally {
     releaseWakeLock()
@@ -313,13 +348,39 @@ export async function syncHosted(days: { from: string; to: string }) {
     publish({ busy: false, percent: undefined }); await refreshView().catch(() => {})
   }
 }
+export async function clearAndResyncHosted(range?: { from: string; to: string }) {
+  await initializeHosted()
+  if (!view.account) return
+  if (run) stopHosted()
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+  const yesterday = new Date(Date.parse(today) - 86400000).toISOString().slice(0, 10)
+  const days = range ?? { from: yesterday, to: today }
+  const cutoff = new Date(Date.parse(`${days.from}T00:00:00+05:30`)).toISOString()
+  publish({ progress: 'Flushing cached orders and pulling fresh activity from Amazon…' })
+  await clearRecentHostedCache(view.account, cutoff)
+  await refreshView()
+  await syncHosted(days, { forceRecent: true })
+}
 export async function hostedFetch(input: string, init?: RequestInit): Promise<Response> {
   await initializeHosted()
-  if (input.startsWith('/api/report-sync/range')) return Response.json({ queued: false, onDemand: true })
+  if (input.startsWith('/api/report-sync/range')) {
+    if (init?.body && typeof init.body === 'string' && session && view.account && !run) {
+      try {
+        const body = JSON.parse(init.body)
+        if (body.from && body.to) {
+          const from = String(body.from).slice(0, 10), to = String(body.to).slice(0, 10)
+          setTimeout(() => {
+            if (!run && session && view.account) void syncHosted({ from, to }, { silent: true })
+          }, 400)
+        }
+      } catch {}
+    }
+    return Response.json({ queued: true, onDemand: false })
+  }
   await refreshView()
   if (input.startsWith('/api/report-sync/status')) {
     const state = view.state
-    const status: SyncStatus = { onDemand: true, connectionKey: view.account ?? '', configured: Boolean(view.account), revision: state?.revision ?? 0, records: view.records, missingWindows: state?.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases').length ?? 0, coverage: state?.coverage ?? [], state: view.busy ? 'syncing' : view.error ? 'error' : 'idle', lastSync: state?.lastSync ?? null, nextAttempt: null, error: view.error || null, catalogError: state?.catalogError, orderDateIssues: state?.orderDateIssues, pendingOrderCycles: state?.jobs.filter(job => job.kind === 'history').length, pendingOrderDates: state?.jobs.filter(job => job.kind === 'order').length }
+    const status: SyncStatus = { onDemand: false, connectionKey: view.account ?? '', configured: Boolean(view.account), revision: state?.revision ?? 0, records: view.records, missingWindows: state?.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases').length ?? 0, coverage: state?.coverage ?? [], state: view.busy ? 'syncing' : view.error ? 'error' : 'idle', lastSync: state?.lastSync ?? null, nextAttempt: null, error: view.error || null, catalogError: state?.catalogError, orderDateIssues: state?.orderDateIssues, pendingOrderCycles: state?.jobs.filter(job => job.kind === 'history').length, pendingOrderDates: state?.jobs.filter(job => job.kind === 'order').length }
     return Response.json(status)
   }
   if (input.startsWith('/api/report-sync/data') && view.account) {

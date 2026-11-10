@@ -107,7 +107,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const ordersByDate = new Map<string, PulseSourceOrder[]>()
   for (const order of input.sourceOrders ?? []) {
     if (!order.orderId || !order.purchaseDate) continue
-    const dateKey = order.purchaseDate.slice(0, 10)
+    const dateKey = canonicalDateKey(order.purchaseDate) ?? order.purchaseDate.slice(0, 10)
     orderDates.set(order.orderId, dateKey)
     const list = ordersByDate.get(dateKey) ?? []
     list.push(order)

@@ -75,6 +75,33 @@ export async function snapshot(account: string): Promise<SyncSnapshot> {
   return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: enrichedOrders, coverage: cache.meta.coverage }
 }
 export function assertLease(state: CacheMeta, owner: string) { if (state.leaseOwner !== owner || (state.leaseUntil ?? 0) < Date.now()) throw new Error('This sync session lost its browser lock. Resume from the saved checkpoint.') }
+export async function clearRecentHostedCache(account: string, cutoffIso?: string) {
+  const db = await open(), tx = db.transaction(['meta', 'orders', 'records'], 'readwrite'), done = complete(tx)
+  void done.catch(() => {})
+  try {
+    const cutoff = cutoffIso ?? new Date(Date.now() - 48 * 3600000).toISOString()
+    const metadata = tx.objectStore('meta'), state = ((await result(metadata.get(account))) as CacheMeta) ?? empty(account)
+    const orderStore = tx.objectStore('orders')
+    const allOrders = ((await result(orderStore.index('account').getAll(account))) as StoredValue<SourceOrderSummary>[]) || []
+    for (const row of allOrders) {
+      if (row.value?.purchased && row.value.purchased >= cutoff) {
+        orderStore.delete([account, row.id])
+      }
+    }
+    state.purchaseCoverage = state.purchaseCoverage.filter(c => c.to < cutoff)
+    state.coverage = state.coverage.filter(c => c.to < cutoff)
+    state.jobs = state.jobs.filter(job => job.to < cutoff)
+    state.revision++
+    state.updatedAt = new Date().toISOString()
+    metadata.put(state)
+    await done
+  } catch (cause) {
+    try { tx.abort() } catch { /* Aborted */ }
+    await done.catch(() => {})
+    throw cause
+  }
+}
+
 export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue }) {
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite'), done = complete(tx)
   // Attach the rejection handler immediately; await the same promise after all writes.

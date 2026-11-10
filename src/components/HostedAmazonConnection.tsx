@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
-import { cancelHostedConnection, connectHosted, disconnectHosted, hostedView, initializeHosted, stopHosted, subscribeHosted, syncHosted } from '../adapters/amazon-hosted/client'
+import { cancelHostedConnection, clearAndResyncHosted, connectHosted, disconnectHosted, hostedView, initializeHosted, stopHosted, subscribeHosted, syncHosted } from '../adapters/amazon-hosted/client'
 import './hostedAmazon.css'
 
 export function HostedAmazonConnection({ range, onUseAutomatic }: { range: { from: string; to: string } | null; onUseAutomatic: () => void }) {
@@ -20,8 +20,11 @@ export function HostedAmazonConnection({ range, onUseAutomatic }: { range: { fro
   const currentScope = range ? `${range.from}/${range.to}` : `${from}/${to}`
   const pendingJobs = connection.state?.jobs.filter(job => job.scope === currentScope).length ?? 0
   return <section className="hosted-amazon-connection" id="amazon-connection" aria-label="Amazon connection and on-demand sync">
-    <div className="hosted-connection-bar"><div><strong>{connection.connected ? 'Amazon connected' : connection.account ? 'Saved Amazon data' : 'Connect Amazon'}</strong><small>{connection.busy ? connection.progress : connection.account ? `${connection.records.toLocaleString('en-IN')} records saved on this device · sync on request` : 'Fetch through Netlify; save and calculate on this device.'}</small></div><div className="hosted-connection-actions">
-      {connection.busy ? <button className="secondary" onClick={stopHosted}>Stop sync</button> : <button className="primary" disabled={!connection.connected || connection.connecting} onClick={() => { onUseAutomatic(); void syncHosted(range ?? { from, to }) }}>{pendingJobs > 0 ? `Resume sync (${pendingJobs} remaining)` : 'Sync now'}</button>}
+    <div className="hosted-connection-bar"><div><strong>{connection.connected ? 'Amazon connected' : connection.account ? 'Saved Amazon data' : 'Connect Amazon'}{connection.connected && !connection.busy ? <span style={{ marginLeft: 8, fontSize: '0.85em', color: '#10b981', fontWeight: 500 }}>● Auto-sync active</span> : null}</strong><small>{connection.busy ? connection.progress : connection.account ? `${connection.records.toLocaleString('en-IN')} records saved on this device · auto-syncs every 5m or on demand` : 'Fetch through Netlify; save and calculate on this device.'}</small></div><div className="hosted-connection-actions">
+      {connection.busy ? <button className="secondary" onClick={stopHosted}>Stop sync</button> : <>
+        <button className="primary" disabled={!connection.connected || connection.connecting} onClick={() => { onUseAutomatic(); void syncHosted(range ?? { from, to }) }}>{pendingJobs > 0 ? `Resume sync (${pendingJobs} remaining)` : 'Sync now'}</button>
+        {connection.connected ? <button className="secondary" title="Flush recent local cache and fetch fresh from Amazon" onClick={() => { onUseAutomatic(); void clearAndResyncHosted(range ?? { from, to }) }}>Resync fresh</button> : null}
+      </>}
       <button className="secondary" disabled={connection.busy || connection.connecting} aria-expanded={open} aria-controls="hosted-credential-form" onClick={() => setOpen(value => !value)}>{connection.connected ? 'Change connection' : 'Enter credentials'}</button>
       {connection.connected ? <button className="text-btn" onClick={disconnectHosted}>Forget credentials</button> : null}
     </div></div>

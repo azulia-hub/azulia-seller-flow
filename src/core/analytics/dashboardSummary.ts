@@ -27,6 +27,12 @@ const months: Readonly<Record<string, string>> = {
 
 export function canonicalDateKey(value: string | null): string | null {
   if (!value) return null
+  if (value.includes('T') && (value.endsWith('Z') || value.includes('+'))) {
+    const epoch = Date.parse(value)
+    if (Number.isFinite(epoch)) {
+      return new Date(epoch + 330 * 60000).toISOString().slice(0, 10)
+    }
+  }
   const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
   const named = value.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/)
