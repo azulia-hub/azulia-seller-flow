@@ -1,5 +1,51 @@
 # Seller Analytics — Architecture
 
+## Shared connected delivery (ADR-075)
+
+`server/shared/` owns authenticated access to durable Netlify Postgres source tables,
+encrypted credentials, atomic source-page/checkpoint transactions and cached
+normalization/dashboard results. Owner login is configured with a server-side
+email and scrypt password hash, with opaque sessions hashed in Postgres. Every
+data request verifies the session and configured owner; request bodies cannot
+select an owner. Expiring sessions, password-version invalidation, sign-out and
+persisted login throttling live behind `OwnerAuthRepository`.
+
+`server/shared/database.ts` isolates the official `@netlify/database` connector.
+All queries use fixed SQL with bound parameters; no application ORM or duplicate
+Postgres client was added. Netlify chooses the current production/preview branch.
+Native SQL migrations in `netlify/database/migrations/` create tables/functions
+at deployment; application startup does not run arbitrary DDL. PUBLIC database
+privileges are revoked and RLS is enabled. The server's database-owner connection
+can bypass RLS, so owner predicates/authentication remain mandatory. A permanent
+authorization binding prevents reconnect/disconnect from mixing seller data.
+
+`src/adapters/amazon-shared/` provides authenticated transport and shared source
+storage behind the existing hosted coordinator. One renewable database lease
+coordinates open devices; source pages are fetched and committed server-side.
+Stopped/closed browser sessions leave durable continuation tokens for another
+device. No closed-browser scheduled worker is introduced. Metadata compare and
+swap separates checkpoint versions from actual-content source revisions.
+
+The server invokes the existing pure adapter/core engines, caches normalized
+readings by source revision/engine, and dashboard results by revision, settings,
+filters and marketplace day. The browser retains a previous reading while
+revalidating; secondary drilldowns use the same normalized dataset and shared
+settings. Temporary user cost previews intentionally remain local. Generic core
+does not import database, marketplace adapter, browser or React modules.
+
+Orders-based card values have an explicit `ORDERED` policy: recorded order totals
+only, with unavailable totals exposed. Ledger/profit recognition remains
+all-recorded activity in the verified original purchase period. No historical
+SKU guesses or source switching are used by that policy. Shared costs default
+to `BLOCK`. Legacy modes retain their existing recognition settings.
+
+ADR-075 replaces the unactivated Supabase REST/Auth implementation from ADR-074.
+This supersedes ADR-073's browser-owned source model only for
+`VITE_AZULIA_DELIVERY=shared`. See `docs/shared-seller-setup.md` for migration,
+the current bounded snapshot size and the deferred scale-out work. The official
+database connector is the sole new application dependency. No runtime
+verification was performed at the owner's request.
+
 ## Architectural Goal
 
 Preserve the functional composition philosophy of the original AWK engine while implementing a browser-native React/TypeScript application.

@@ -21,9 +21,12 @@ export interface PulseOrderSummary {
   readonly productTitle?: string | null
   readonly imageUrl?: string | null
   readonly isValueEstimated?: boolean
+  readonly isValueMissing?: boolean
 }
 
 export interface PulsePeriodMetrics {
+  readonly salesBasis?: 'ORDERED' | 'LEDGER_PLUS_PENDING'
+  readonly profitReady?: boolean
   readonly label: string
   readonly from: string
   readonly to: string
@@ -40,6 +43,7 @@ export interface PulsePeriodMetrics {
   readonly returnUnits: number
   readonly orders: readonly PulseOrderSummary[]
   readonly isPartialCoverage?: boolean
+  readonly missingValueOrders?: number
 }
 
 export interface PulseScoreboard {
@@ -51,6 +55,7 @@ export interface PulseScoreboard {
 }
 
 export interface PulseSourceOrder {
+  readonly currency?: string | null
   readonly orderId: string
   readonly purchaseDate: string
   readonly status?: string | null
@@ -64,6 +69,8 @@ export interface PulseSourceOrder {
 }
 
 export interface PulseScoreboardInput {
+  /** Ordered values never switch to ledger revenue or historical SKU estimates. */
+  readonly salesBasis?: 'ORDERED' | 'LEDGER_PLUS_PENDING'
   readonly events: readonly CanonicalFinancialEvent[]
   readonly costs: readonly ProductCost[]
   readonly missingCostPolicy: MissingCostPolicy
@@ -78,13 +85,15 @@ function filterEventsByDateRange(
   from: string,
   to: string,
   orderDates: Map<string, string>,
+  requirePurchaseDate = false,
 ): { matchedEvents: CanonicalFinancialEvent[]; orderIds: Set<string> } {
   const matchedEvents: CanonicalFinancialEvent[] = []
   const orderIds = new Set<string>()
 
   for (const event of events) {
     const orderDate = event.orderId ? orderDates.get(event.orderId) : undefined
-    const effectiveDate = orderDate ?? canonicalDateKey(event.orderPurchaseDate ?? null) ?? canonicalDateKey(event.date)
+    const verified = orderDate ?? canonicalDateKey(event.orderPurchaseDate ?? null)
+    const effectiveDate = verified ?? (requirePurchaseDate && event.orderId ? null : canonicalDateKey(event.date))
     if (effectiveDate && effectiveDate >= from && effectiveDate <= to) {
       matchedEvents.push(event)
       if (event.orderId) orderIds.add(event.orderId)
@@ -234,7 +243,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   }
 
   function evaluate(label: string, from: string, to: string): PulsePeriodMetrics {
-    const { matchedEvents, orderIds } = filterEventsByDateRange(input.events, from, to, orderDates)
+    const { matchedEvents, orderIds } = filterEventsByDateRange(input.events, from, to, orderDates,input.salesBasis === 'ORDERED')
     const overview = buildBusinessOverview(
       matchedEvents,
       input.costs,
@@ -271,15 +280,15 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
 
       let orderValue = 0
       let isValueEstimated = false
-      if (isSettled && settledOrderSales > 0) {
+      if (input.salesBasis !== 'ORDERED' && isSettled && settledOrderSales > 0) {
         orderValue = Math.round(settledOrderSales * 100) / 100
-      } else if (sourceOrder?.orderValue !== undefined && sourceOrder?.orderValue !== null) {
+      } else if (sourceOrder?.orderValue !== undefined && sourceOrder?.orderValue !== null && (input.salesBasis !== 'ORDERED' || sourceOrder.currency === 'INR')) {
         const parsed = typeof sourceOrder.orderValue === 'number' ? sourceOrder.orderValue : Number(sourceOrder.orderValue)
         orderValue = Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed * 100) / 100 : 0
       }
 
       // Check explicit item line prices
-      if (orderValue === 0 && sourceOrder?.items?.length) {
+      if (input.salesBasis !== 'ORDERED' && orderValue === 0 && sourceOrder?.items?.length) {
         let itemsSum = 0
         for (const it of sourceOrder.items) {
           const p = Number(it.price)
@@ -293,7 +302,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       }
 
       // If order is pending/unsettled and Amazon did not provide orderValue (common for pending FBA orders)
-      if (orderValue === 0 && !isSettled) {
+      if (input.salesBasis !== 'ORDERED' && orderValue === 0 && !isSettled) {
         if (sourceOrder?.items?.length) {
           let verifiedPrice = 0
           let resolvedAll = true
@@ -359,6 +368,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
         ?? null
 
       ordersMap.set(orderId, {
+        isValueMissing: input.salesBasis === 'ORDERED' && !(sourceOrder?.orderValue != null && sourceOrder.currency === 'INR' && Number.isFinite(Number(sourceOrder.orderValue))),
         orderId,
         purchaseDate,
         rawStatus: raw,
@@ -386,7 +396,10 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     ) / 100
 
     const grossSales = overview.summary.grossSales
-    const totalSales = Math.round((grossSales + pendingSales) * 100) / 100
+    const missingValueOrders = orderList.filter(order => order.statusCategory !== 'CANCELED' && order.isValueMissing).length
+    const totalSales = input.salesBasis === 'ORDERED'
+      ? Math.round(orderList.filter(order => order.statusCategory !== 'CANCELED').reduce((sum,order) => sum + order.orderValue,0)*100)/100
+      : Math.round((grossSales + pendingSales) * 100) / 100
     const netProfit = overview.profitAfterAds
     const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0
     const unitsSold = overview.summary.soldQuantity
@@ -401,6 +414,8 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     }
 
     return {
+      salesBasis:input.salesBasis,
+      profitReady:overview.costStatus.profitReady,
       label,
       from,
       to,
@@ -416,7 +431,8 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       unitsSold,
       returnUnits,
       orders: orderList,
-      isPartialCoverage,
+      isPartialCoverage: isPartialCoverage || missingValueOrders > 0,
+      missingValueOrders,
     }
   }
 
@@ -437,6 +453,10 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const forecastMargin = forecastSales > 0 ? (forecastProfit / forecastSales) * 100 : 0
 
   const forecast: PulsePeriodMetrics = {
+    salesBasis:input.salesBasis,
+    profitReady:thisMonth.profitReady,
+    isPartialCoverage:thisMonth.isPartialCoverage,
+    missingValueOrders:thisMonth.missingValueOrders,
     label: 'Month Forecast',
     from: monthStart,
     to: `${anchorDate.slice(0, 7)}-${String(daysInMonth).padStart(2, '0')}`,

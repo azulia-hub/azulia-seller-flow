@@ -1,5 +1,32 @@
 # Seller Analytics — Roadmap
 
+## Netlify Database conversion — ADR-075 (publication authorized)
+
+- [x] Replace Supabase REST/Auth with Netlify Database and an owner workspace login.
+- [x] Add deploy-time SQL migrations; retain source checkpoints, source history, encryption and account isolation.
+- [x] Add the official `@netlify/database` driver behind a server-only adapter and update the lockfile. It handles Netlify connection/branch selection; no duplicate Postgres client or ORM is needed.
+- [x] Document the remaining server environment setup and the existing-account deployment flow.
+- [x] Author regression cases for login/session/expiry/throttle and database bindings without running them. Include shared backend cases in the future Vitest run.
+- [x] Set the owner email/password hash/encryption key privately in the existing Netlify project's production environment after owner authorization; read back values privately and confirm Functions availability.
+- [x] Owner-authorized build checks (2026-11-12): default and `VITE_AZULIA_DELIVERY=shared` production builds pass; local and relay/shared backend TypeScript checks pass. Fixed outdated fixture types and redundant narrowed conditions. No test suites executed.
+- Owner authorized pushing the prepared revision to `main` on 2026-11-12 after successful build/typechecks. Publication is in progress at this commit checkpoint; confirm the matching commit and database migration in Netlify's deployment status. Test suites/live Amazon verification have not been authorized or executed.
+
+### Owner setup execution (requested by owner)
+
+- [x] Generate and retain private app login/encryption settings in an ignored, owner-readable local file; do not print secret values or rotate existing settings. Prepared `.local/shared-owner-setup.json` with mode 600 as an actual setup action, not a test.
+- [x] Obtain the owner's Netlify authorization and configure only the existing project's server environment values. Free-plan settings use standard private production environment variables with default scopes; no paid scope/Secrets Controller feature was enabled.
+- Build/typechecks subsequently authorized and passed; deployment, test suites, pushes and database provisioning remain deferred.
+
+## Shared seller account — ADR-074 (provider superseded by ADR-075)
+
+- [x] Add authenticated durable seller storage, atomic page checkpoints and a cross-device writer lease.
+- [x] Keep Amazon credentials encrypted on the server; share Orders, Finance, Catalog and calculation settings across devices.
+- [x] Read the same versioned normalized dataset and server dashboard results on every device; retain the last reading during background refresh.
+- [x] Add setup/migration instructions without deleting existing local caches; author regression cases without executing them.
+- [x] Configure the Netlify owner workspace environment variables (ADR-075). Publication remains deferred until authorization.
+- [ ] Add windowed/paged reading delivery before scaling beyond the bounded personal-workspace payload.
+- [ ] Further verification/publication only when authorized. Builds/typechecks passed on 2026-11-12; test suites, push and deployment remain deferred.
+
 ## Phase 0 — Repository / Engineering Foundation
 
 - [x] Add AGENTS.md

@@ -1,5 +1,7 @@
 export { hostedDelivery } from './deliveryMode'
 import { object, text } from '../amazon-report-sync/money'
+import { sharedDelivery, sharedRequest, sharedSignedIn } from '../amazon-shared/client'
+import { sharedStatus, invalidateSharedSource } from '../amazon-shared/cache'
 import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, clearRecentHostedCache, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
 import { missingRanges, type SyncRange } from '../../core/sync/ranges'
 import { toIndiaDateString, indiaDateToUtcIso, getIndiaToday, stableJobId, SyncRunTracker } from '../../core/sync/planner'
@@ -44,6 +46,10 @@ async function digestAccount(clientId: string, refreshToken: string): Promise<st
 }
 class RelayError extends Error { constructor(message: string, readonly status: number, readonly retryAfter: number) { super(message) } }
 async function relay(body: Record<string, unknown>, signal: AbortSignal) {
+  if (sharedDelivery) {
+    try { return await sharedRequest<Record<string,unknown>>('amazon',{operation:body},signal) }
+    catch (cause) { const error=cause as Error & {status?:number;retryAfter?:number}; throw new RelayError(error.message,error.status ?? 502,error.retryAfter ?? 60) }
+  }
   const response = await fetch('/.netlify/functions/amazon', { method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(50000)]), headers: { 'Content-Type': 'application/json', 'X-Azulia-Intent': 'amazon-relay' }, body: JSON.stringify(body) })
   if (!response.headers.get('content-type')?.includes('application/json')) throw new RelayError('The Amazon relay is unavailable. Check the Netlify function deployment.', response.status, 60)
   const value = object(await response.json())
@@ -87,6 +93,15 @@ if (typeof window !== 'undefined') {
 
 export function initializeHosted() {
   return initializing ??= (async () => {
+    if (sharedDelivery) {
+      if (!sharedSignedIn()) return
+      const status = await sharedStatus()
+      publish({account:status.account,connected:status.configured})
+      if (status.configured) session = {account:status.account,accessToken:'server-managed',until:Infinity,clientId:'',clientSecret:'',refreshToken:''}
+      await refreshView()
+      if (status.configured) { ensureAutoSyncLoop(); setTimeout(() => triggerRecentCheck(true),1200) }
+      return
+    }
     let account: string | null = null
     try { const stored = localStorage.getItem(STORAGE_ACCOUNT_KEY); if (stored && /^[a-f0-9]{64}$/.test(stored)) account = stored } catch { /* Cache selection can still be made by connecting. */ }
     let creds: Credentials | null = null
@@ -128,7 +143,7 @@ export function initializeHosted() {
       const isReload = typeof performance !== 'undefined' && (performance.getEntriesByType?.('navigation')?.[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
       setTimeout(() => triggerRecentCheck(Boolean(isReload)), isReload ? 1200 : 2500)
     }
-  })().catch(() => { initializing = undefined; publish({ error: 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
+  })().catch((cause) => { initializing = undefined; publish({ error: sharedDelivery && cause instanceof Error ? cause.message : 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
 }
 export async function connectHosted(credentials: Credentials, remember = true) {
   await initializeHosted()
@@ -138,13 +153,13 @@ export async function connectHosted(credentials: Credentials, remember = true) {
   try {
     const value = await relay({ action: 'connect', ...credentials }, abort.signal), token = text(value.accessToken)
     if (!token) throw new Error('Amazon did not return an access token.')
-    const account = await digestAccount(credentials.clientId, credentials.refreshToken)
+    const account = sharedDelivery ? text(value.account) : await digestAccount(credentials.clientId, credentials.refreshToken)
     if (abort.signal.aborted || connecting !== abort) return
     await updateMeta(account, () => {})
-    session = { ...credentials, account, accessToken: token, until: Date.now() + 45 * 60000 }
+    session = sharedDelivery ? {clientId:'',clientSecret:'',refreshToken:'',account,accessToken:'server-managed',until:Infinity} : { ...credentials, account, accessToken: token, until: Date.now() + 45 * 60000 }
     try {
       localStorage.setItem(STORAGE_ACCOUNT_KEY, account)
-      if (remember) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
+      if (remember && !sharedDelivery) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
       else localStorage.removeItem(STORAGE_CREDS_KEY)
     } catch { /* This page's session remains usable. */ }
     publish({ account, connected: true, records: 0, state: null, progress: 'Connected. Choosing dates and synchronizing…' })
@@ -156,7 +171,7 @@ export async function connectHosted(credentials: Credentials, remember = true) {
 }
 export function cancelHostedConnection() { connecting?.abort(); connecting = null; publish({ connecting: false }) }
 export function stopHosted() { run?.abort(); publish({ progress: 'Stopping after the current request. Saved pages can be resumed.' }) }
-export function disconnectHosted() { if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null }; connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
+export function disconnectHosted() { if (sharedDelivery) { void sharedRequest('disconnect').then(() => { session=null; stopHosted(); publish({connected:false,progress:'Amazon disconnected for this seller account. Shared history is retained.'}) }).catch(cause => publish({error:cause instanceof Error ? cause.message : 'Disconnect failed.'})); return }; if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null }; connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
 async function authorized(action: string, body: Record<string, unknown>, signal: AbortSignal, retry = true): Promise<Record<string, unknown>> {
   const current = session
   if (!current) throw new Error('Connect Amazon to start a sync. Cached results remain available.')
@@ -199,13 +214,14 @@ function appendJob(state: CacheMeta, job: BrowserJob) {
   else state.jobs.push(job)
 }
 export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean }) {
+  if (sharedDelivery && !options?.silent) options={...options,forceRecent:true}
   await initializeHosted()
   if (run || !session || !view.account || session.account !== view.account) return
   const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000
   const start = Date.parse(indiaDateToUtcIso(days.from)), stop = Math.min(Date.parse(indiaDateToUtcIso(days.to, true)), requestCutoff)
   if (!Number.isFinite(start) || !Number.isFinite(stop) || start >= stop || stop - start > 5 * 366 * 86400000 || start < Date.UTC(2010, 0, 1)) { publish({ error: 'Choose a valid date range of at most five years.' }); return }
   const wanted = { from: new Date(start).toISOString(), to: new Date(stop).toISOString() }, scope = `${days.from}/${days.to}`, account = view.account, owner = crypto.randomUUID(), abort = new AbortController()
-  const tracker = new SyncRunTracker(owner)
+  const tracker = new SyncRunTracker(owner,sharedDelivery ? {maxHistory:Infinity,maxOrderItems:Infinity,maxCatalog:Infinity} : {})
   run = abort; publish({ busy: true, error: '', progress: options?.silent ? 'Syncing latest Amazon orders…' : 'Preparing your requested sync…' })
   let heartbeat: ReturnType<typeof setInterval> | undefined
   const checkedUpdate = (update: (state: CacheMeta) => void) => updateMeta(account, state => { assertLease(state, owner); update(state) })
@@ -223,7 +239,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
   })
   try {
     await acquireWakeLock()
-    await updateMeta(account, state => { if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('Another tab is syncing this account. Stop that sync or wait two minutes after closing the tab.'); state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000 })
+    await updateMeta(account, state => { if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('Another device is syncing this account. Its saved updates will appear here automatically.'); state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000 })
     heartbeat = setInterval(() => { void checkedUpdate(state => { state.leaseUntil = Date.now() + 120000 }).catch(() => abort.abort()) }, 20000)
     await checkedUpdate(state => {
       state.catalogError = null
@@ -275,13 +291,13 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           }
 
           // 1. Essential work: Linked order history (orders in requested window without continuous financial coverage)
-          const continuousHigh = current.coverage.map(c => c.to).sort().at(-1)
+          const continuousHigh = sharedDelivery ? new Date(requestCutoff).toISOString() : current.coverage.map(c => c.to).sort().at(-1)
           const isCovered = (purchased: string) => continuousHigh && purchased <= continuousHigh && !missingRanges({ from: purchased, to: continuousHigh }, current.coverage).length
           const dueHistoryOrders = cache.orders.filter(order =>
             order.purchased >= wanted.from && order.purchased <= wanted.to
             && !isCovered(order.purchased)
             && tracker.canEnqueue('history', order.id)
-            && Date.now() - (current.historyChecked[order.id] ?? 0) > 6 * 3600000
+            && (sharedDelivery && options?.forceRecent || Date.now() - (current.historyChecked[order.id] ?? 0) > 6 * 3600000)
           ).slice(0, 10)
           for (const order of dueHistoryOrders) {
             tracker.recordEnqueued('history', order.id)
@@ -292,7 +308,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           const hasEssentialPending = current.jobs.some(j => j.scope === scope && (j.kind === 'finance' || j.kind === 'purchases' || j.kind === 'order' || j.kind === 'history'))
           if (!hasEssentialPending) {
             const missingItemOrders = cache.orders.filter(order =>
-              (!order.asin || !order.title)
+              (!order.asin || !order.title || !order.items?.length || sharedDelivery && !order.orderValue)
               && tracker.canEnqueue('orderItems', order.id)
               && Date.now() - ((current.orderItemsChecked ?? {})[order.id] ?? 0) > 60000
             ).slice(0, 10)
@@ -339,14 +355,15 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
       const phasePrefix = isEnrichment ? 'Enriching product details' : 'Financial sync'
       const kindLabel = job.kind === 'purchases' ? 'orders' : job.kind === 'finance' ? 'financial activity' : job.kind === 'history' ? 'linked order history' : job.kind === 'catalog' ? 'product images' : job.kind === 'orderItems' ? 'product line items' : 'order dates'
       publish({ progress: `${phasePrefix}: fetching ${kindLabel} (${completedCount + 1}/${totalPlanned})`, percent })
-      const opDelay = job.kind === 'purchases' ? (job.nextToken ? 3000 : 60000) : (delays[operation] ?? 2000)
+      const opDelay = job.kind === 'purchases' ? (sharedDelivery ? 60000 : job.nextToken ? 3000 : 60000) : (delays[operation] ?? 2000)
       next[operation] = Date.now() + opDelay
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
       let retried = 0, succeeded = false
       while (!succeeded && !abort.signal.aborted) {
         try {
           const action = job.kind === 'history' ? 'finance' : job.kind
-          const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, nextToken: job.nextToken }, abort.signal)
+          const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, nextToken: job.nextToken, ...(sharedDelivery ? {syncJob:job,syncOwner:owner} : {}) }, abort.signal)
+          if (page.sharedCommitted) invalidateSharedSource()
           if (abort.signal.aborted) break
           const nextToken = text(page.nextToken) || null
           if (nextToken && nextToken === job.nextToken) throw new Error('Amazon repeated a page token. Resume the saved checkpoint later.')
@@ -365,7 +382,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
               }))
             : undefined
           const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
-          await commitPage(account, owner, job, {
+          if (!page.sharedCommitted) await commitPage(account, owner, job, {
             records: Array.isArray(page.records) ? page.records.map(object) : undefined,
             orders,
             issues,
@@ -382,6 +399,11 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           await refreshView()
         } catch (cause) {
           if (abort.signal.aborted) break
+          if (sharedDelivery && cause instanceof RelayError && cause.status === 409) {
+            // A server commit may have succeeded before the connection was interrupted.
+            // Resume its current token instead of replaying the old page forever.
+            await refreshView(); succeeded=true; break
+          }
           if (cause instanceof RelayError && cause.status === 429) {
             next[operation] = Date.now() + Math.max(cause.retryAfter, 5) * 1000
             await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
@@ -426,8 +448,12 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           const issueMsg = `Window ${job.from.slice(0, 10)} to ${job.to.slice(0, 10)} (${job.kind}): ${cause instanceof Error ? cause.message : 'Temporarily unavailable'}`
           await checkedUpdate(current => {
             if (!current.issues.includes(issueMsg)) current.issues.push(issueMsg)
-            current.jobs = current.jobs.filter(j => j.id !== job.id)
+            if (sharedDelivery) {
+              const failed = current.jobs.find(j => j.id === job.id)
+              if (failed) {failed.state='retryLater';failed.failureReason=issueMsg;failed.retries=(failed.retries ?? 0)+1}
+            } else current.jobs = current.jobs.filter(j => j.id !== job.id)
           })
+          if (sharedDelivery) throw cause
           if (job.orderId) tracker.recordFailed(job.kind, job.orderId, issueMsg)
           else if (job.asin) tracker.recordFailed(job.kind, job.asin, issueMsg)
           await refreshView()
@@ -460,6 +486,7 @@ export async function clearAndResyncHosted(range?: { from: string; to: string })
   const today = getIndiaToday()
   const yesterday = toIndiaDateString(Date.now() - 86400000) ?? today
   const days = range ?? { from: yesterday, to: today }
+  if (sharedDelivery) { await syncHosted(days,{forceRecent:true}); return }
   const cutoff = indiaDateToUtcIso(days.from)
   publish({ progress: 'Flushing cached orders and pulling fresh activity from Amazon…' })
   await clearRecentHostedCache(view.account, cutoff)
@@ -474,7 +501,8 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
         const body = JSON.parse(init.body)
         if (body.from && body.to) {
           const from = toIndiaDateString(body.from) ?? String(body.from).slice(0, 10)
-          const to = toIndiaDateString(body.to) ?? String(body.to).slice(0, 10)
+          // /range supplies an exclusive end; do not fetch a second India day.
+          const to = toIndiaDateString(sharedDelivery ? Date.parse(body.to)-1 : body.to) ?? String(body.to).slice(0, 10)
           setTimeout(() => {
             if (!run && session && view.account) void syncHosted({ from, to }, { silent: true })
           }, 400)
@@ -486,7 +514,9 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
   await refreshView()
   if (input.startsWith('/api/report-sync/status')) {
     const state = view.state
+    const shared = sharedDelivery && sharedSignedIn() ? await sharedStatus() : null
     const status: SyncStatus = {
+      engine: shared?.engine,
       onDemand: false,
       connectionKey: view.account ?? '',
       configured: Boolean(view.account),
@@ -495,7 +525,7 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
       missingWindows: state?.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases').length ?? 0,
       coverage: state?.coverage ?? [],
       purchaseCoverage: state?.purchaseCoverage ?? [],
-      state: view.busy ? 'syncing' : view.error ? 'error' : 'idle',
+      state: view.busy || shared && (shared.meta.leaseUntil ?? 0) > Date.now() ? 'syncing' : view.error ? 'error' : 'idle',
       lastSync: state?.lastSync ?? null,
       nextAttempt: null,
       error: view.error || null,

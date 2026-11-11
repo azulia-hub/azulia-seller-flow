@@ -16,9 +16,12 @@
     "local:setup": "node --experimental-strip-types server/local/setup.ts",
     "local:start": "node --experimental-strip-types server/local/start.ts",
     "local:verify": "node --experimental-strip-types server/local/verify.ts",
-    "local": "bash start-azulia.sh"
+    "local": "bash start-azulia.sh",
+    "local:shared": "bash start-azulia-shared.sh",
+    "shared:password": "node --experimental-strip-types scripts/create-owner-password-hash.ts"
   },
   "dependencies": {
+    "@netlify/database": "2.0.3",
     "fflate": "^0.8.3",
     "mupdf": "1.28.1",
     "react": "19.2.8",

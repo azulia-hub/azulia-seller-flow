@@ -14,7 +14,8 @@ try {
   const dist = fileURLToPath(new URL('../../dist/', import.meta.url))
   await access(new URL('../../dist/index.html', import.meta.url))
   startupStage = 'local credentials'
-  const credentials = await loadCredentials(fileURLToPath(new URL('../../.local/amazon-credentials.json', import.meta.url)))
+  const sharedMode = process.env.AZULIA_SHARED_MODE === '1'
+  const credentials = sharedMode ? {} : await loadCredentials(fileURLToPath(new URL('../../.local/amazon-credentials.json', import.meta.url)))
   // Acquire the listener first: a second launcher must not open or migrate the shared cache.
   startupStage = 'local HTTP server'
   const options: Parameters<typeof createLocalServer>[0] = { port, dist, credentials }
@@ -35,7 +36,7 @@ try {
   })
   console.log(`Azulia: http://127.0.0.1:${port}/auth/local`)
   console.log(`App: http://127.0.0.1:${port}/`)
-  console.log('Activity sync continues with the browser closed while this process is running.')
+  console.log(sharedMode ? 'Shared mode: this server serves the UI only. Amazon data comes from the configured shared backend.' : 'Activity sync continues with the browser closed while this process is running.')
   console.log('Local access only. Keep this terminal open; Ctrl+C stops it.')
   for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { listener.closeAllConnections(); listener.close(); void sync?.close(); })
 } catch (cause) {

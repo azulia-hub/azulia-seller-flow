@@ -1,5 +1,52 @@
 # Seller Analytics TODO
 
+## Prepared — Netlify Database conversion (ADR-075)
+
+Publication checkpoint (2026-11-12): owner authorized pushing the prepared source
+to `main` after successful default/shared builds and backend typechecks. Private
+settings, caches, generated login material and `dist` are excluded. Follow the
+matching commit in Netlify to determine publication/migration success; no test
+suites or live Amazon checks are part of this publication step.
+
+Owner authorized the Netlify connection. Generated the app password/hash and
+encryption key privately in `.local/shared-owner-setup.json` (mode 600, ignored
+by Git), and saved all three production settings to the existing
+`friendly-begonia-8ae3e2` project. Read-back confirmed matching values and
+Functions availability without displaying secret values. Free-plan configuration
+uses standard private environment variables/default scopes; no plan upgrade.
+The setup helper is `/tmp/azulia-netlify-owner-setup.mjs`; its `apply` command
+preserves existing settings and does not deploy. Application tests,
+push/deployment and database provisioning remain deferred.
+
+Owner authorized build/typechecks on 2026-11-12. Both default and Netlify
+shared-mode production builds pass, as do local and relay/shared backend
+TypeScript checks. Fixed missing fixture source metadata, the outdated `ZERO`
+cost-policy literal and redundant already-narrowed branch conditions. No test
+suites executed. Shared output retained separately in `/tmp`; ordinary local
+build restored to `dist` so checking Netlify mode does not change localhost mode.
+
+The unactivated Supabase implementation is replaced with native Netlify Database,
+deploy migrations and an owner-only login configured in Netlify. The official
+database driver/lockfile, owner password-hash helper, hashed database sessions,
+login throttling and regression source are prepared. One Netlify account is
+sufficient; no separate database-provider account. The shared sync/calculation
+contract and existing local caches are retained. The three server values are
+configured; see `docs/shared-seller-setup.md`. Builds/typechecks passed; test
+suites, push, deployment, migrations and provisioning remain deferred.
+
+## Shared seller workspace (ADR-074, provider updated by ADR-075)
+
+Source implementation prepared with Netlify Postgres and owner login, encrypted Amazon
+credentials, server-side source-page commits, cross-device sync lease,
+versioned server readings/dashboard results and shared costs/rules. Setup:
+`docs/shared-seller-setup.md`. Legacy notes below describe earlier modes.
+
+- [x] Configure the workspace owner email/password hash and credential encryption key in the existing Netlify project's production environment; private read-back confirmed.
+- [x] Run owner-authorized build/typechecks; passed on 2026-11-12. Test suites remain deferred.
+- [ ] Deploy/push only when explicitly authorized; nothing published now.
+- [ ] Add windowed/paged reading delivery before larger seller rollout.
+- [ ] Consider scheduled sync separately if required while all devices are closed.
+
 ## Active — automatic delivery into the existing report workflow (2026-11-07)
 Preserve all existing calculation engines/screens, imported history, costs, rules and PDF tools. Local backend remains running to sync with browser closed; computer shutdown stops work. No cloud database.
 - [x] Add pure missing-history interval planning, stable source identity merging and deterministic sorting.
@@ -146,7 +193,10 @@ Validation completed: 90 focused tests passed, plus two browser checks at 1280px
 5. [x] Add responsive hosted connection controls, deployment configuration and documentation; author regression cases without executing them.
 6. [ ] Tests/build/browser checks, publishing, commit/push and deployment remain deferred until requested.
 
-## Deferred: manual sync must recheck selected order histories
+## Deferred in legacy modes: manual sync must recheck selected order histories
+
+Shared mode now bypasses this gate on manual Sync now (ADR-074). The deferred
+item below continues to describe the independent legacy modes.
 
 - [ ] Remove the six-hour freshness gate for linked financial histories when the user explicitly clicks **Sync now**. Recheck selected purchase-period orders for later sales, fees, refunds and reimbursements from Amazon, even if cached histories were checked recently. Keep cached records, source-ID deduplication, actual-change-only recalculation, API rate pacing and resumable pagination. Do not introduce automatic scheduled fetching.
 - Deferred at the owner's explicit request to conserve quota. The six-hour gate remains in the implementation; the fix and tests remain deferred. Commit/push of the current implementation was separately authorized by the owner.
@@ -154,3 +204,7 @@ Validation completed: 90 focused tests passed, plus two browser checks at 1280px
 ## Publication checkpoint
 
 - Owner reported a successful hosted build and authorized committing/pushing the prepared source to main. No automated tests or browser checks were run in this publication step. The six-hour history-refresh fix remains deferred.
+## Shared seller account (2026-11-11)
+
+Implement ADR-074 in the order recorded in ROADMAP.md. Existing browser/local source caches remain available in legacy mode. Cloud setup is a separate manual prerequisite. No tests, builds, push or deployment are authorized for this work.
+

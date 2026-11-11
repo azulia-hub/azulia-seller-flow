@@ -1,5 +1,10 @@
 # Netlify setup — on-demand Amazon relay
 
+**Legacy mode only (`VITE_AZULIA_DELIVERY=netlify`).** The current checked-in
+configuration uses shared Netlify Database mode. Follow
+[the shared setup guide](docs/shared-seller-setup.md) for the current deployment.
+The independent browser-cache instructions below are retained for rollback.
+
 This deployment serves the website and a small stateless Netlify Function. Amazon records, coverage, old source versions, order metadata, pagination checkpoints and calculated readings are saved on the user's device. There is no Netlify database, Blob/KV storage, scheduled function or background job. Requests and their credentials necessarily pass through Netlify and Amazon in transit; application code does not persist or log them. Hosting providers can retain normal operational request metadata.
 
 ## Current readiness
