@@ -72,12 +72,12 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
 
                 <div className="pulse-card-body">
                   <div className="pulse-metric-primary">
-                    <small className="pulse-metric-label">{period.salesBasis === 'ORDERED' ? 'Order value' : 'Sales (Total)'}</small>
+                    <small className="pulse-metric-label">Sales (Total)</small>
                     <strong className="pulse-metric-value">
                       {formatInr(period.totalSales)}
                     </strong>
                     {/* Subtitle breakdown for settled vs pending */}
-                    {period.salesBasis === 'ORDERED' ? <div className="pulse-breakdown-sub"><small>{period.missingValueOrders ? `${period.missingValueOrders} orders awaiting price · known amounts shown` : 'Recorded order amounts · excludes canceled orders'}</small></div> : period.pendingSales > 0 && period.grossSales > 0 ? (
+                    {period.pendingSales > 0 && period.grossSales > 0 ? (
                       <div className="pulse-breakdown-sub" title={`Settled: ${formatInr(period.grossSales)} | Pending: ${formatInr(period.pendingSales)}`}>
                         <small>{formatInr(period.grossSales)} set. · {formatInr(period.pendingSales)} pend.</small>
                       </div>
@@ -94,7 +94,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
 
                   <div className="pulse-metric-secondary">
                     <small className="pulse-metric-label">Profit</small>
-                    {period.profitReady === false ? <strong className="pulse-profit-value neutral">Product costs missing</strong> : period.grossSales > 0 ? (
+                    {period.grossSales > 0 ? (
                       <strong className={`pulse-profit-value ${isProfitable ? 'good' : 'bad'}`}>
                         {formatInr(period.netProfit)}
                         <span className="pulse-margin-pill">{period.profitMargin}%</span>
@@ -149,7 +149,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
 
       {modalPeriod ? (
         <PulseOrdersModal
-          period={periods.find(period => period.label === modalPeriod.label) ?? modalPeriod}
+          period={modalPeriod}
           onClose={() => setModalPeriod(null)}
           onFilterDashboard={onSelectPeriod}
         />

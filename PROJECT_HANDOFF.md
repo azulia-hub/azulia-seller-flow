@@ -1,39 +1,5 @@
 # Azulia Seller Flow — Project Handoff
 
-## Current checkpoint — 12 November 2026
-
-Owner has now authorized pushing the prepared shared-workspace revision to
-`main`. The previously recorded build/typechecks passed. At this commit's
-publication checkpoint, follow the corresponding Netlify deploy to confirm live
-publication and migration success. Test suites and live Amazon verification
-remain deferred. Never include `.local` recovery/authorization files in Git.
-
-ADR-075 prepares native Netlify Database for the shared seller workspace and
-supersedes ADR-074's unactivated Supabase provider. See PROJECT_CONTEXT.md,
-ARCHITECTURE.md, DECISIONS.md, ROADMAP.md and docs/shared-seller-setup.md before
-continuing; the October notes below are historical. The official database
-connector and lockfile, native migration, owner-only login/session handling,
-password-hash helper and unexecuted regression cases are prepared locally.
-Activation needs three private Netlify environment values: owner email, owner
-password hash and credential encryption key. No additional provider account is
-needed. Owner-authorized default/shared-mode production builds and backend
-typechecks passed on 2026-11-12 after fixture/type-narrowing compile fixes. Test
-suites, process restart, push, deployment, database provisioning and migration
-execution remain deferred. The live Netlify site
-still has its previously deployed code until publication is authorized.
-
-Owner subsequently approved Netlify access. All three production environment
-values are now saved in the existing `friendly-begonia-8ae3e2` project, with
-private read-back confirming value matches and Functions availability. No paid
-plan upgrade was made. Recovery/login material is in ignored
-`.local/shared-owner-setup.json` with mode 600; never print its contents into
-chat or commit it. Publication and runtime/application tests remain deferred.
-Non-blocking Vite warnings remain for PDF-library Node imports/browser
-externalization and the main chunk exceeding 500 kB. No browser/PDF runtime
-claim is made from compilation alone. Shared-mode output is retained at
-`/tmp/azulia-netlify-build-8svd65rz/dist`; ordinary local output is restored in
-`dist` to preserve the existing localhost mode.
-
 Last updated: 15 October 2026
 Current production version: `v1.0.2`  
 Repository: https://github.com/azulia-hub/azulia-seller-flow  

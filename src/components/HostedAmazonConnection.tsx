@@ -1,8 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
 import { cancelHostedConnection, clearAndResyncHosted, connectHosted, disconnectHosted, hostedView, initializeHosted, stopHosted, subscribeHosted, syncHosted } from '../adapters/amazon-hosted/client'
 import './hostedAmazon.css'
-import { sharedDelivery, sharedSignedIn, signOutShared } from '../adapters/amazon-shared/client'
-import { SharedSellerLogin } from './SharedSellerLogin'
 
 export function HostedAmazonConnection({ range, onUseAutomatic }: { range: { from: string; to: string } | null; onUseAutomatic: () => void }) {
   const connection = useSyncExternalStore(subscribeHosted, hostedView, hostedView)
@@ -21,28 +19,26 @@ export function HostedAmazonConnection({ range, onUseAutomatic }: { range: { fro
   }
   const currentScope = range ? `${range.from}/${range.to}` : `${from}/${to}`
   const pendingJobs = connection.state?.jobs.filter(job => job.scope === currentScope).length ?? 0
-  if (sharedDelivery && !sharedSignedIn()) return <SharedSellerLogin />
   return <section className="hosted-amazon-connection" id="amazon-connection" aria-label="Amazon connection and on-demand sync">
-    <div className="hosted-connection-bar"><div><strong>{connection.connected ? 'Amazon connected' : connection.account ? 'Saved Amazon data' : 'Connect Amazon'}{connection.connected && !connection.busy ? <span style={{ marginLeft: 8, fontSize: '0.85em', color: '#10b981', fontWeight: 500 }}>● Auto-sync active</span> : null}</strong><small>{connection.busy ? connection.progress : connection.account ? `${connection.records.toLocaleString('en-IN')} records · ${sharedDelivery ? 'shared seller workspace' : 'saved on this device'}` : sharedDelivery ? 'Connect Amazon once for this workspace.' : 'Fetch through Netlify; save and calculate on this device.'}</small></div><div className="hosted-connection-actions">
+    <div className="hosted-connection-bar"><div><strong>{connection.connected ? 'Amazon connected' : connection.account ? 'Saved Amazon data' : 'Connect Amazon'}{connection.connected && !connection.busy ? <span style={{ marginLeft: 8, fontSize: '0.85em', color: '#10b981', fontWeight: 500 }}>● Auto-sync active</span> : null}</strong><small>{connection.busy ? connection.progress : connection.account ? `${connection.records.toLocaleString('en-IN')} records saved on this device · auto-syncs every 5m or on demand` : 'Fetch through Netlify; save and calculate on this device.'}</small></div><div className="hosted-connection-actions">
       {connection.busy ? <button className="secondary" onClick={stopHosted}>Stop sync</button> : <>
         <button className="primary" disabled={!connection.connected || connection.connecting} onClick={() => { onUseAutomatic(); void syncHosted(range ?? { from, to }) }}>{pendingJobs > 0 ? `Resume sync (${pendingJobs} remaining)` : 'Sync now'}</button>
         {connection.connected ? <button className="secondary" title="Flush recent local cache and fetch fresh from Amazon" onClick={() => { onUseAutomatic(); void clearAndResyncHosted(range ?? { from, to }) }}>Resync fresh</button> : null}
       </>}
       <button className="secondary" disabled={connection.busy || connection.connecting} aria-expanded={open} aria-controls="hosted-credential-form" onClick={() => setOpen(value => !value)}>{connection.connected ? 'Change connection' : 'Enter credentials'}</button>
       {connection.connected ? <button className="text-btn" onClick={disconnectHosted}>Forget credentials</button> : null}
-      {sharedDelivery ? <button className="text-btn" onClick={signOutShared}>Sign out</button> : null}
     </div></div>
     {connection.busy && connection.percent !== undefined ? <div className="hosted-progress-track" role="progressbar" aria-valuenow={connection.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Sync progress"><div className="hosted-progress-bar" style={{ width: `${connection.percent}%` }} /></div> : null}
     {!range ? <div className="hosted-initial-range"><label>From date (India)<input type="date" value={from} max={to} onChange={event => setFrom(event.target.value)} /></label><label>Through date (India)<input type="date" value={to} min={from} max={today} onChange={event => setTo(event.target.value)} /></label></div> : null}
     {open ? <form id="hosted-credential-form" className="hosted-credential-form" method="post" onSubmit={connect} autoComplete="off">
-      <p>{sharedDelivery ? 'Amazon credentials are encrypted in your server account. Other devices use the same connection after you sign in. They are not saved in browser storage.' : 'Use your own Amazon India app credentials. Remember credentials only on a private device.'}</p>
+      <p>Use your own Amazon India app credentials. When &ldquo;Remember credentials on this device&rdquo; is checked, your credentials are saved in this browser&apos;s local storage so you stay connected when refreshing or reopening the page. Uncheck on shared devices.</p>
       <label>LWA client ID<input name="clientId" required maxLength={1024} autoComplete="off" spellCheck={false} /></label>
       <label>LWA client secret<input name="clientSecret" type="password" required maxLength={2048} autoComplete="off" spellCheck={false} /></label>
       <label>SP-API refresh token<input name="refreshToken" type="password" required maxLength={8192} autoComplete="off" spellCheck={false} /></label>
-      {!sharedDelivery ? <label className="hosted-remember-checkbox">
+      <label className="hosted-remember-checkbox">
         <input type="checkbox" name="remember" defaultChecked />
         <span>Remember credentials on this device</span>
-      </label> : null}
+      </label>
       <div><button className="primary" disabled={connection.connecting}>{connection.connecting ? 'Connecting…' : 'Connect Amazon'}</button><button className="text-btn" type="button" onClick={() => { cancelHostedConnection(); setOpen(false) }}>Cancel</button></div>
       <small>Connecting verifies authorization only. Orders, Finance and Catalog permissions are checked when you request those operations.</small>
     </form> : null}

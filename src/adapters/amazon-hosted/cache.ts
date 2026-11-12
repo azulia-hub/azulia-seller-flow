@@ -1,14 +1,31 @@
-import { sourceSnapshot } from '../amazon-shared/snapshot'
-import { sharedDelivery } from '../amazon-shared/client'
-import { sharedMeta, sharedLoad, sharedUpdateMeta, sharedCommitPage } from '../amazon-shared/cache'
 import { sameContent } from '../../core/sync/sameContent'
-import { mergeCoverage } from '../../core/sync/ranges'
+import { mergeCoverage, type SyncRange } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncSnapshot } from '../amazon-report-sync/protocol'
-import { text } from '../amazon-report-sync/money'
+import { object, text } from '../amazon-report-sync/money'
 
-import type { BrowserJob, CacheMeta, CatalogValue } from '../amazon-shared/contracts'
-export type { BrowserJob, CacheMeta, CatalogValue } from '../amazon-shared/contracts'
+export interface BrowserJob extends SyncRange {
+  id: string
+  scope: string
+  kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'
+  orderId?: string
+  asin?: string
+  nextToken: string | null
+  createdAt: number
+  state?: 'pending' | 'running' | 'completed' | 'retryLater' | 'failed'
+  runId?: string
+  failureReason?: string
+  retries?: number
+}
+export interface CacheMeta {
+  account: string; revision: number; updatedAt: string | null; lastSync: string | null
+  coverage: SyncRange[]; purchaseCoverage: SyncRange[]; jobs: BrowserJob[]
+  orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>; orderItemsChecked?: Record<string, number>
+  issues: string[]; orderDateIssues: number; catalogError: string | null
+  failedJobs?: Record<string, string>
+  leaseOwner?: string | null; leaseUntil?: number
+}
 interface StoredValue<T> { account: string; id: string; value: T }
+export interface CatalogValue { asin: string; title: string | null; imageUrl: string | null }
 let database: Promise<IDBDatabase> | undefined
 const empty = (account: string): CacheMeta => ({ account, revision: 0, updatedAt: null, lastSync: null, coverage: [], purchaseCoverage: [], jobs: [], orderChecked: {}, historyChecked: {}, nextAllowed: {}, dateFailures: {}, catalogChecked: {}, orderItemsChecked: {}, issues: [], orderDateIssues: 0, catalogError: null })
 function open() {
@@ -28,14 +45,12 @@ function open() {
 function result<T>(request: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Browser source storage could not be read or written.')) }) }
 function complete(transaction: IDBTransaction) { return new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onabort = transaction.onerror = () => reject(new Error('Browser source storage could not be saved. Previous checkpoints were retained.')) }) }
 export async function meta(account: string): Promise<CacheMeta> {
-  if (sharedDelivery) return sharedMeta(account)
   const db = await open(), tx = db.transaction('meta'), done = complete(tx)
   void done.catch(() => {})
   const value = await result(tx.objectStore('meta').get(account)) as CacheMeta | undefined
   await done; return value ?? empty(account)
 }
 export async function updateMeta(account: string, update: (value: CacheMeta) => void): Promise<CacheMeta> {
-  if (sharedDelivery) return sharedUpdateMeta(account,update)
   const db = await open()
   return new Promise((resolve, reject) => {
     const tx = db.transaction('meta', 'readwrite'), store = tx.objectStore('meta'), request = store.get(account)
@@ -46,7 +61,6 @@ export async function updateMeta(account: string, update: (value: CacheMeta) => 
   })
 }
 export async function loadCache(account: string) {
-  if (sharedDelivery) return sharedLoad(account)
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog']), done = complete(tx)
   void done.catch(() => {})
   const [state, records, orders, catalog] = await Promise.all([
@@ -57,11 +71,24 @@ export async function loadCache(account: string) {
   return { meta: state ?? empty(account), records: records.map(row => row.value), orders: orders.map(row => row.value), catalog: catalog.map(row => row.value) }
 }
 export async function snapshot(account: string): Promise<SyncSnapshot> {
-  return sourceSnapshot(account, await loadCache(account))
+  const cache = await loadCache(account), orders = new Map(cache.orders.map(order => [order.id, order])), catalog = new Map(cache.catalog.map(item => [item.asin, item]))
+  const records = cache.records.map((record): Record<string, unknown> => {
+    const ids = [...new Set((Array.isArray(record.relatedIdentifiers) ? record.relatedIdentifiers : []).map(object).filter(row => row.relatedIdentifierName === 'ORDER_ID').map(row => text(row.relatedIdentifierValue)).filter(Boolean))]
+    const asins = [...new Set((Array.isArray(record.items) ? record.items : []).map(object).flatMap(item => (Array.isArray(item.contexts) ? item.contexts : []).map(object).map(context => text(context.asin))).filter(Boolean))]
+    return { ...record, azuliaOrderPurchaseDate: ids.length === 1 ? orders.get(ids[0])?.purchased ?? null : null, azuliaCatalogImages: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.imageUrl ?? null])), azuliaCatalogTitles: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.title ?? null])) }
+  }).sort((a, b) => text(a.postedDate).localeCompare(text(b.postedDate)) || text(a.transactionId).localeCompare(text(b.transactionId)))
+  const enrichedOrders = cache.orders.map(order => {
+    const cat = order.asin ? catalog.get(order.asin) : undefined
+    return {
+      ...order,
+      title: order.title || cat?.title || null,
+      imageUrl: order.imageUrl || cat?.imageUrl || null,
+    }
+  })
+  return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: enrichedOrders, coverage: cache.meta.coverage }
 }
 export function assertLease(state: CacheMeta, owner: string) { if (state.leaseOwner !== owner || (state.leaseUntil ?? 0) < Date.now()) throw new Error('This sync session lost its browser lock. Resume from the saved checkpoint.') }
 export async function clearRecentHostedCache(account: string, cutoffIso?: string) {
-  if (sharedDelivery) throw new Error('Shared source history is retained. Use Sync now to refresh records without deleting them.')
   const db = await open(), tx = db.transaction(['meta', 'orders', 'records'], 'readwrite'), done = complete(tx)
   void done.catch(() => {})
   try {
@@ -89,7 +116,6 @@ export async function clearRecentHostedCache(account: string, cutoffIso?: string
 }
 
 export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number; price?: string | null; currency?: string | null }[] }) {
-  if (sharedDelivery) return sharedCommitPage(account,owner,job,page)
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite'), done = complete(tx)
   // Attach the rejection handler immediately; await the same promise after all writes.
   void done.catch(() => {})

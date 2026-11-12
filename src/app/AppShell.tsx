@@ -2,7 +2,6 @@ import { InstallButton, PwaStatus } from '../adapters/browser/pwa'
 import { BrandEntrance } from '../components/BrandEntrance'
 import { useEffect, useState, type ReactNode } from 'react'
 import { appNavigation, type AppPage } from './navigation'
-import { sharedDelivery } from '../adapters/amazon-shared/client'
 
 type Theme = 'dark' | 'light' | 'system'
 function storedTheme(): Theme { try { const value = localStorage.getItem('azulia-theme'); return value === 'dark' || value === 'light' ? value : 'system' } catch { return 'system' } }
@@ -49,7 +48,7 @@ export function AppShell({ active, search, syncStatus, mobileNavOpen, onToggleMo
         <div className="topbar-actions"><select className="theme-toggle" aria-label="Appearance" value={theme} onChange={event => setTheme(event.target.value as Theme)}><option value="light">Light</option><option value="dark">Dark</option><option value="system">System</option></select><button className={`current-report ${reportLoaded ? 'ready' : ''}`} onClick={() => onNavigate('Reports')} title={reportLoaded ? reportName : 'Upload a report'}><span className="report-indicator" /><span><small>{reportLoaded ? 'Active report' : 'Get started'}</small><strong>{reportLoaded ? reportName : 'Upload a report'}</strong></span><b>Change</b></button>{syncStatus}</div>
       </header>
       <div className="content"><PwaStatus />{children}</div>
-      <footer className="app-disclosure"><strong>{sharedDelivery ? 'Private seller workspace' : 'Private by design'}</strong><span>{sharedDelivery ? 'Amazon data and costs are saved in your shared account. This browser keeps a last reading for quick display.' : 'Reports and costs stay in this browser.'} Profit depends on source classifications and product-cost coverage.</span></footer>
+      <footer className="app-disclosure"><strong>Private by design</strong><span>Reports and costs stay in this browser. Profit depends on source classifications and product-cost coverage.</span></footer>
     </main>
     <nav className="mobile-bottom-nav" aria-label="Mobile navigation">{appNavigation.filter(item => item.bottom).map(item => <button key={item.page} className={active === item.page ? 'active' : ''} aria-current={active === item.page ? 'page' : undefined} onClick={() => onNavigate(item.page)}><span aria-hidden="true">{item.icon}</span><small>{item.mobileLabel ?? item.label}</small></button>)}</nav>
   </div>

@@ -155,11 +155,4 @@ The app has been restored to the pre-API report/PDF version (`34f5eac`). The loc
 
 ## Optional Netlify hosted mode
 
-The checked-in configuration now selects a shared seller workspace backed by
-**Netlify Database**. Use your existing Netlify account; no Supabase account is
-needed. Configure the owner app login and encryption key as described in
-[the shared setup guide](docs/shared-seller-setup.md). The native migration is
-prepared under `netlify/database/migrations/` for deployment. Legacy local/manual
-mode remains available separately. No tests, build, push or deployment have been
-run for this change. [NETLIFY_SETUP.md](NETLIFY_SETUP.md) describes the older
-browser-owned relay mode, not the current shared configuration.
+See [NETLIFY_SETUP.md](NETLIFY_SETUP.md). The checked-in Netlify configuration selects a stateless Amazon API relay and explicit browser-owned syncing/cache. No Amazon environment variables, cloud database or scheduled sync are required. Existing local mode remains available with the hosted build flag unset. This implementation is currently source-prepared only: no verification, commit/push or deployment has been performed for it.

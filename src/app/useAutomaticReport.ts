@@ -1,5 +1,4 @@
 import { hostedDelivery, hostedFetch } from '../adapters/amazon-hosted/client'
-import { sharedDelivery, sharedRequest } from '../adapters/amazon-shared/client'
 import { useEffect, useRef, useState } from 'react'
 import { mergeSnapshot } from '../adapters/amazon-report-sync/mergeSnapshot'
 import type { SourceOrderSummary, SyncSnapshot, SyncStatus } from '../adapters/amazon-report-sync/protocol'
@@ -28,34 +27,27 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
           key = info.connectionKey; setAppliedRevision(null); applied = -1; sourceRecords = null; sourceOrders = null; currentReading = null; mappingOutdated = false
           const saved = await loadReading(key)
           if (!active) return
-          if (saved) { mappingOutdated = saved.deliveryVersion !== deliveryVersion || sharedDelivery && saved.serverEngine !== info.engine; if (!mappingOutdated) { latest.current.onReading(saved); setAppliedRevision(saved.revision); setLastReading(saved.importedAt) } applied = saved.revision; sourceRecords = saved.sourceRecords ?? null; sourceOrders = saved.sourceOrders ?? null; currentReading = saved }
+          if (saved) { mappingOutdated = saved.deliveryVersion !== deliveryVersion; if (!mappingOutdated) { latest.current.onReading(saved); setAppliedRevision(saved.revision); setLastReading(saved.importedAt) } applied = saved.revision; sourceRecords = saved.sourceRecords ?? null; sourceOrders = saved.sourceOrders ?? null; currentReading = saved }
         }
         if (applied > info.revision) { applied = -1; sourceRecords = null; sourceOrders = null }
-        if (sharedDelivery && currentReading && currentReading.serverEngine !== info.engine) mappingOutdated=true
         if ((!mappingOutdated && applied === info.revision) || info.revision === 0) return
         const isSyncing = info.state === 'syncing'
         if (!mappingOutdated && applied >= 0 && isSyncing && Date.now() < nextCalculation) return
         setPhase('fetching')
         let snapshot: SyncSnapshot
-        let serverResult: (ReturnType<typeof toUnifiedReport> & {calculatedAt?:string}) | undefined
         {
           // A mapping migration needs the complete local snapshot, including Orders-only metadata.
           // This reads the local cache; it does not redownload Amazon history.
           const after = !mappingOutdated && sourceRecords ? applied : -1
-          if (sharedDelivery) {
-            const bundle = await sharedRequest<{snapshot:SyncSnapshot;normalized:ReturnType<typeof toUnifiedReport> & {calculatedAt?:string};engine:string}>('reading',{},abort.signal)
-            snapshot=bundle.snapshot;serverResult=bundle.normalized
-          } else {
           const data = await deliveryFetch(`/api/report-sync/data?after=${after}`, { cache: 'no-store', signal: AbortSignal.any([abort.signal, AbortSignal.timeout(30000)]) })
           if (data.status === 204) return
           if (!data.ok) throw new Error('Could not read the new activity. The last reading stays visible.')
           snapshot = await data.json() as SyncSnapshot
-          }
         }
         if (snapshot.connectionKey !== key) throw new Error('The account changed during delivery. Reopen the local connection.')
         const merged = mergeSnapshot(snapshot, sourceRecords, sourceOrders)
         const completeSnapshot = merged.snapshot
-        if (!sharedDelivery && !mappingOutdated && currentReading && !merged.changed) {
+        if (!mappingOutdated && currentReading && !merged.changed) {
           // Coverage/revision-only updates must not run the worker or replace React's dataset.
           setPhase('saving')
           try { currentReading = await advanceReading(currentReading, snapshot.revision, completeSnapshot.orders) }
@@ -67,7 +59,7 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
           return
         }
         setPhase('calculating')
-        const result = serverResult ?? await new Promise<ReturnType<typeof toUnifiedReport>>((resolve, reject) => {
+        const result = await new Promise<ReturnType<typeof toUnifiedReport>>((resolve, reject) => {
           worker = new Worker(new URL('../workers/reportDelivery.worker.ts', import.meta.url), { type: 'module' })
           const timeout = setTimeout(() => { abort.signal.removeEventListener('abort', stopped); reject(new Error('Calculation took longer than 60 seconds. The last saved reading is retained; the update will retry.')) }, 60000)
           const stopped = () => { clearTimeout(timeout); reject(new Error('Delivery stopped.')) }
@@ -84,7 +76,7 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
         if (!active || !latest.current.enabled) return
         setPhase('saving')
         let reading: AutomaticReading
-        try { reading = await saveReading(key!, snapshot.revision, result, completeSnapshot.records, completeSnapshot.orders, sharedDelivery ? info.engine : undefined) } catch { throw new Error('New activity was read, but this browser could not save its calculation. The last saved reading remains visible; check browser storage.') }
+        try { reading = await saveReading(key!, snapshot.revision, result, completeSnapshot.records, completeSnapshot.orders) } catch { throw new Error('New activity was read, but this browser could not save its calculation. The last saved reading remains visible; check browser storage.') }
         if (!active || !latest.current.enabled) return
         latest.current.onReading(reading); applied = snapshot.revision; setAppliedRevision(applied); nextCalculation = Date.now() + (isSyncing ? 1500 : 0); sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders; currentReading = reading; mappingOutdated = false; setLastReading(reading.importedAt); setError('')
       } catch (cause) { nextPoll = Date.now() + 15000; if (active && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'Automatic delivery is unavailable; use manual upload as a fallback.') }

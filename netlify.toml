@@ -5,7 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
-  VITE_AZULIA_DELIVERY = "shared"
+  VITE_AZULIA_DELIVERY = "netlify"
 
 [functions]
   node_bundler = "esbuild"

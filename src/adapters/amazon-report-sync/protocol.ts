@@ -1,6 +1,5 @@
 import type { SyncRange } from '../../core/sync/ranges'
 export interface SyncStatus {
-  engine?: string
   onDemand?: boolean
   connectionKey: string; configured: boolean; revision: number; records: number; missingWindows: number; coverage: SyncRange[]
   purchaseCoverage?: SyncRange[]

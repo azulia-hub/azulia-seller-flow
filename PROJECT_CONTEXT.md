@@ -1,22 +1,5 @@
 # Seller Analytics — Project Context
 
-## Current hosting decision (2026-11-11, ADR-075)
-
-The owner explicitly authorizes shared server storage to replace independent
-device caches for connected mode. Native Netlify Database and authenticated
-Netlify functions hold seller source data, encrypted Amazon credentials, sync
-checkpoints and shared calculation settings/results. Browser storage is a last
-reading cache. Owner-only app login uses a server-configured email/scrypt hash
-and hashed database sessions. The official `@netlify/database` driver selects the
-deployment branch and repository SQL migrations are applied on deployment.
-No Supabase account or external Auth service is needed. ADR-074's provider
-choice is superseded. Legacy offline uploads/local mode remain separate.
-This supersedes the no-cloud-storage statements below for shared connected mode.
-Owner authorized build/typechecking on 2026-11-12. Default and Netlify shared-mode
-production builds and backend TypeScript checks pass after compile fixes. Test
-suites, live API/database verification, restart, push and deployment remain
-deferred. See `docs/shared-seller-setup.md` for setup and limits.
-
 ## Product Vision
 
 Build a polished, mobile-friendly, local-first analytics web application for marketplace sellers. The app should let non-technical users upload reports, normalize data from different marketplaces, explore and manipulate data, create custom metrics without code, build dashboards, compare periods, forecast trends, inspect returns/ads/profitability, and receive deterministic insights and suggestions.

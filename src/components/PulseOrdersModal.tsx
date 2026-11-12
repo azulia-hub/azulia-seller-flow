@@ -400,7 +400,7 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                             ) : null}
                           </>
                         ) : (
-                          <span style={{ color: 'var(--muted)', fontSize: 12 }}>{order.isValueMissing ? 'Price not supplied' : '—'}</span>
+                          <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>
                         )}
                       </td>
                     </tr>

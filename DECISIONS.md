@@ -2,38 +2,6 @@
 
 This file records important decisions so future coding sessions do not silently reverse them.
 
-## ADR-075 — Native Netlify Database and owner workspace login (2026-11-11)
-
-Owner chooses to keep shared storage within the existing Netlify account instead
-of creating a Supabase account. Supersede ADR-074's provider/Auth implementation
-with native Netlify Database and the official `@netlify/database` connector.
-Use a server-only adapter with fixed SQL/bound values; do not add another driver
-or ORM. Netlify's native SQL migrations provision the schema during deployment
-and the connector selects the matching production/preview branch.
-
-For the current personal workspace, configure an app owner email and scrypt
-password hash privately in Netlify. This is not a Netlify or Amazon password.
-No public signup or separate provider account is required. A successful login
-creates the owner row. Store random access/refresh tokens only as hashes in the
-database; verify sessions and configured password version for every operation.
-Use 15-minute access, a fixed 12-hour refresh lifetime, online session revocation,
-and persisted per-IP/account login throttling. Trusted IP comes from function
-context. Password hashing and sessions use Node crypto without another package.
-Managed multi-user onboarding remains a separate future change behind the auth
-repository interface; no claim of public SaaS registration is made here.
-
-Keep the shared source/history, purchase-date recognition, encrypted Amazon
-credentials, permanent seller binding, compare-and-swap page checkpoints and
-versioned calculation contracts. All source queries remain scoped to the owner
-derived from authentication. RLS/PUBLIC revokes provide defense in depth; the
-server database-owner connection does not replace application authorization.
-
-The previous Supabase backend was unactivated. No remote data is deleted or
-silently migrated. Existing local caches remain intact. Only source, lockfile,
-migrations, setup instructions and unexecuted regressions are prepared. Tests,
-builds, push, deployment, provisioning and actual migration execution remain
-prohibited until the owner authorizes them.
-
 ## ADR-001 — Generic core, source-specific adapters
 
 Decision:
@@ -718,31 +686,3 @@ For this bring-your-own-credentials version, the browser accepts the user's own 
 An account-isolated IndexedDB source cache owns raw Finance records, previous versions, minimal order summaries, Catalog metadata, actual coverage, durable page jobs, rate cooldowns and a renewable writer lease. A hash of client ID and refresh token selects the cache; those values themselves are not persisted. Credentials are never in IndexedDB, web storage, URLs, logs or the service-worker cache. No cloud task survives the browser; stopping retains completed pages/checkpoints. Initial missing windows, bounded overlap refresh, missing purchase dates and due linked histories are fetched only as part of an explicit Sync action. Changing a filter does not itself contact Amazon in hosted mode.
 
 The existing report bridge, purchase-period all-recorded recognition, financial reconciliation, missing-cost policy and quiet updates are reused. A virtual browser transport supplies local status/snapshots to the existing calculation hook; it performs no network calls for status/reading polling. Hosted builds are selected through `VITE_AZULIA_DELIVERY=netlify` in `netlify.toml`; the local launcher remains available with the flag unset. Each browser/device/origin has an independent cache; localhost data is not silently uploaded or transferred to Netlify. Regression fixtures and mobile/desktop browser cases are authored but not executed. Deployment, commit/push and verification remain deferred.
-## ADR-074 — Shared seller source of truth (2026-11-11)
-
-Owner authorizes server storage so localhost and hosted/mobile clients can use
-one account dataset. Choose Supabase Postgres/Auth over ephemeral SQLite in
-Netlify functions. Use REST and SQL transactions without introducing a client
-SDK dependency. Credentials are encrypted with a server-only AES-256-GCM key;
-only workspace Auth sessions reach browser storage. Owner IDs come from verified
-Auth responses; all database operations are scoped to that identity. The same
-workspace login is required across personal devices.
-
-Store raw source records and previous versions, Orders/items, Catalog metadata,
-sync jobs/tokens, coverage, writer lease, costs and rules durably. Atomic
-compare-and-swap page writes prevent partial coverage or concurrent overwrite.
-Only content changes advance the source revision. Normalize on the server;
-version cached dashboard results by source/settings/engine/filter/day. Source
-cache differences must not select different sales formulas. Recorded order-value
-cards use Orders totals and explicit missing-value status, never historical SKU
-estimates or financial-posting fallback. Profit still uses the existing verified
-purchase-period ledger, excludes settlement transfers and exposes missing costs.
-
-Keep legacy local/manual modes and their caches intact for comparison and
-fallback. Do not silently import legacy source coverage as authoritative. No
-automatic data retention/deletion is enabled. This first personal-workspace
-implementation has bounded reading payloads; windowed/paged delivery and
-closed-browser scheduling remain follow-ups. Provider setup is documented but
-not performed. Tests, builds, pushes and deployments are explicitly prohibited
-until the owner authorizes them. ADR-073 is superseded only in shared mode.
-
