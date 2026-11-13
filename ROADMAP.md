@@ -1,5 +1,22 @@
 # Seller Analytics — Roadmap
 
+## Device-owned storage and Android app — ADR-076
+
+- [x] Extend existing desktop SQLite with durable costs/settings/completed readings; migrate browser values only into empty storage.
+- [x] Download product images into private files, reuse them offline, retain original URLs and preserve financial source records/calculations.
+- [x] Add one device transport contract and a trusted-origin Android WebView bridge, native Amazon HTTPS, encrypted credentials and persistent SQLite.
+- [x] Reuse the existing sync coordinator/normalizer in the APK; no cloud database, Netlify requirement, or phone-hosted Node server.
+- [ ] Add web/bridge compatibility checks, signed APK update download/installation and a manual APK build workflow.
+- [ ] Keep destructive migrations, automatic data deletion and credential embedding out of releases. Add backup/background-sync follow-ups explicitly where not yet implemented.
+- [x] Add basic Android JobScheduler Orders/Finance fetching with bounded durable staging, existing-parser ingestion on reopen, and credential-forget cancellation; version 0.1.1 signed APK compilation/signature verification passed; actual device scheduling unverified.
+- [x] Author focused regression cases; no test suites, emulator runs, live Amazon calls or push/publication until requested. Build checks may use the existing authorization.
+
+Stages 1 and 2 source are implemented. Stage 2 adds Android Keystore/native HTTPS, chunked SQLite source/workspace transactions, retained images, shared TypeScript readers/page reducer, trusted-origin WebView and an offline bundled UI. A manual APK build workflow and stable-signing scripts are present. Signed release APK compilation, signature verification and bundled-file inspection passed on 2026-11-12 after installing project-private build tools. Actual device/API verification remain pending. Signed APK update discovery/install UI, complete backup/export support and broader historical/enrichment background jobs remain pending. Basic closed-app Orders/Finance fetching is implemented; actual Android scheduling is unverified. Tests are authored, not run. See [device storage](docs/DEVICE_STORAGE.md).
+
+- [x] Replace whole-reading Java parsing with bounded chunk transport, preserve legacy data, remove native toolbar and use Azulia startup/launcher branding (ADR-080); signed v0.1.3 installed, fresh-launch logo and restored dashboard checked on Pixel with no new crash.
+- [x] Fix Android order title/image starvation and frozen popup data: prioritize requested/recent metadata, honor cooldowns and update open popups live (ADR-079).
+- [x] Fix large desktop completed-reading saves with bounded gzip transfer/storage; distinguish dashboard errors from backend sync failures (ADR-078).
+
 ## Phase 0 — Repository / Engineering Foundation
 
 - [x] Add AGENTS.md
@@ -486,3 +503,32 @@ Startup now acquires port 8788 before opening the source cache/background sync, 
 - [x] Keep local mode available and add deployment/privacy instructions and regression fixtures.
 - [ ] Execute typecheck/build, financial/cache/relay regressions and responsive browser checks when authorized.
 - [ ] Commit/push the prepared revision and publish/deploy only when authorized. The selected remote `main` does not automatically contain local work.
+
+- [x] Reduce shared desktop/Android status-poll work: stable coverage, indexed metadata lookup, no full-reading write or React dataset replacement for unchanged revisions (ADR-082).
+- [ ] Move remaining large reading serialization and dashboard calculations off the UI thread; profile real-change and first-load latency before claiming all freezes resolved.
+
+- [x] Whole-app cleanup/performance pass (ADR-083): off-thread reading codecs/desktop transfer, raw-byte backend reading GET, on-demand modal calculations, five unused UI modules removed, bounded development scanning, and restored exclusions popup.
+- [x] Focused regression checks: financial/sync/storage/codec/Android bridge tests and worker + desktop/mobile browser flows. Synthetic 3,000-order / 6,600-event benchmark: costs 7 ms, product aggregation 142 ms, search index 32 ms (single run, not an end-to-end latency guarantee).
+
+- [x] Android lifecycle sync repair and separate Pending → Unshipped confirmation alerts (ADR-084), with updated-time order refresh, coverage safety and bounded renderer recovery.
+- [x] Check the connected Pixel: service auto-restored, handoff fetched in background and resumed without manual Sync; no fresh crash observed. Historical Java OOM logs do not establish the current crash cause. Android 0.1.8 installed.
+
+## Approved unified sync and snapshot settings — ADR-085
+- [x] Implement snapshot Gross sales, Net earnings and separate Profit; preserve original purchase cohorts and separate pending/estimated values.
+- [x] Implement validated persistent preferences, immediate layout/calculation changes, card order/visibility, default dates, notification controls and 2–5 minute cadence.
+- [x] Implement pull-at-top/Alt+R refresh and remove routine sync/live toggles; advanced history rechecks retain source data.
+- [x] Implement shared completed-reading pipeline in desktop worker and bundled Android background runtime, with atomic reading metadata and stale-source protection.
+- [x] Keep Android timeout/system-stop/network restrictions authoritative; no cloud persistence added.
+- [ ] Final functional/device acceptance checks: owner explicitly stopped testing during implementation. Do not run more tests until asked. Compilation/packaging only continues.
+
+- [x] Owner correction: restore Sales/Profit period cards; place Net sale (Net Amazon Payout) in selected-period Business snapshot. Testing/build/install deferred to Antigravity.
+
+## Products and inventory parallel implementation (2026-11-14)
+- [x] Implement resistance-based pull-to-refresh orb/content feedback, portal overlay, cancel/queued/completion/error states and reduced-motion support; retain displayed data.
+- [x] Extend existing Product Performance list/profile with selectable figures, net marketplace proceeds and equal-length period comparisons. Only show deltas with known source-window coverage; provide explicit missing-history download action. Preserve existing financial cohorts and order drilldowns.
+- [ ] Inventory/restock implementation delegated to Antigravity within new-file ownership contract docs/INVENTORY_HANDOFF.md. Integrate shared app/storage/sync only after handoff.
+- [ ] Runtime validation and packaging pending explicit authorization. New regression sources authored but not executed.
+- [x] Integrate retained FBA/listing stock, per-identity physical counts/settings, bounded daily history, existing pipeline optional fetch phases and deduplicated in-app/native stock alerts.
+- [x] Replace legacy sales-only dashboard restock entry with the integrated inventory workspace; provide direct access from product details, including inventory-only catalog identities.
+- [x] Author covered-demand/manual-stock regression sources and update inbound fixtures for explicit arrival assumptions; no execution.
+- [ ] Antigravity: production compilation, same-key higher-version Android packaging and update installation. No functional tests or push authorised.

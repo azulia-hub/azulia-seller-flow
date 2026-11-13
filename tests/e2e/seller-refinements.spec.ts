@@ -22,6 +22,8 @@ for (const width of [1280, 390]) test(`seller refinements: purchase-date filters
     const controls = await page.locator('.global-filter-fields > label select').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top))
     expect(Math.max(...controls) - Math.min(...controls)).toBeLessThan(2)
   }
+  if (await nav.isVisible()) await nav.click()
+  await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('button', { name: /financial records excluded/ }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
@@ -33,6 +35,8 @@ for (const width of [1280, 390]) test(`seller refinements: purchase-date filters
   await page.keyboard.press('Escape')
   await expect(dialog).not.toBeVisible()
   await expect(page.locator('.compact-cohort-scope')).toContainText('orders in this purchase period')
+  if (await nav.isVisible()) await nav.click()
+  await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Dashboard', exact: true }).click()
   await expect(page.locator('.seller-products')).toContainText('Oak shelf')
   await expect(page.locator('.seller-products .product-thumbnail img').first()).toBeVisible()
   await page.screenshot({ path: `test-results/seller-filters-${width}.png`, animations: 'disabled' })

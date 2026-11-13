@@ -12,9 +12,10 @@ export function buildBusinessOverview(events: readonly CanonicalFinancialEvent[]
   const profitMargin = summary.grossSales ? profitAfterAds / summary.grossSales * 100 : 0
   const roi = costStatus.netCogs ? profitAfterAds / costStatus.netCogs * 100 : 0
   const unitEconomics = calculateUnitEconomics({ grossSales: summary.grossSales, netDeliveredQuantity: summary.netDeliveredQuantity, profitAfterAds, adsSpend: summary.adsSpend, profitReady: costStatus.profitReady })
+  const netMarketplaceProceeds = Math.round((summary.grossSales - summary.refundValue - summary.marketplaceCharges - summary.netEasyShipFee + summary.reimbursements) * 100) / 100
   const directOperating = summary.grossSales - summary.refundValue - summary.marketplaceCharges - summary.netEasyShipFee - summary.adsSpend + summary.reimbursements
   const adjustments = Math.round((summary.operatingNet - directOperating) * 100) / 100
-  return { summary, costStatus, profitAfterAds, profitBeforeAds, profitMargin, roi, unitEconomics, otherOperating: adjustments,
+  return { summary, netMarketplaceProceeds, costStatus, profitAfterAds, profitBeforeAds, profitMargin, roi, unitEconomics, otherOperating: adjustments,
     orderCount: new Set(orderIds ?? events.flatMap(event => event.orderId ? [event.orderId] : [])).size,
     financialRows: [
       { label: 'Customer sales (incl. tax)', value: summary.grossSales }, { label: 'Customer refunds', value: -summary.refundValue },

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-device-engine.mjs",
     "typecheck": "tsc -b && tsc -p server/local/tsconfig.json && tsc -p server/relay/tsconfig.json",
     "benchmark:analytics": "node scripts/benchmark-analytics.mjs",
     "test": "vitest run",
@@ -16,7 +16,10 @@
     "local:setup": "node --experimental-strip-types server/local/setup.ts",
     "local:start": "node --experimental-strip-types server/local/start.ts",
     "local:verify": "node --experimental-strip-types server/local/verify.ts",
-    "local": "bash start-azulia.sh"
+    "local": "bash start-azulia.sh",
+    "android:prepare": "npm run build && node scripts/prepare-android.mjs",
+    "android:signing": "node scripts/create-android-signing.mjs",
+    "android:apk": "npm run android:prepare && node scripts/build-android.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3",

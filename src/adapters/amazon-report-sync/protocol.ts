@@ -30,4 +30,4 @@ export interface SourceOrderSummary {
   imageUrl?: string | null
   items?: readonly SourceOrderItem[]
 }
-export interface SyncSnapshot { issues?: string[]; orders?: SourceOrderSummary[]; delta?: boolean; connectionKey: string; revision: number; updatedAt: string | null; records: Record<string, unknown>[]; coverage: SyncRange[] }
+export interface SyncSnapshot { purchaseCoverage?:SyncRange[]; issues?: string[]; orders?: SourceOrderSummary[]; delta?: boolean; connectionKey: string; revision: number; updatedAt: string | null; records: Record<string, unknown>[]; coverage: SyncRange[] }

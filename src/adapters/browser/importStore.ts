@@ -14,12 +14,19 @@ function openDatabase(): Promise<IDBDatabase> {
   })
 }
 
-export async function loadImports(): Promise<StoredImport[]> {
+export async function loadImports(includeAutomatic=true): Promise<StoredImport[]> {
   const database = await openDatabase()
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(storeName, 'readonly')
-    const request = transaction.objectStore(storeName).getAll()
-    request.onsuccess = () => resolve((request.result as StoredImport[]).sort((left, right) => right.importedAt.localeCompare(left.importedAt)))
+    const store=transaction.objectStore(storeName)
+    const sorted=(items:StoredImport[])=>resolve(items.sort((left,right)=>right.importedAt.localeCompare(left.importedAt)))
+    if(!includeAutomatic){
+      const keys=store.getAllKeys();keys.onerror=()=>reject(keys.error)
+      keys.onsuccess=()=>{const wanted=keys.result.filter(key=>typeof key!=='string'||!key.startsWith('api:'));if(!wanted.length){sorted([]);return}const items:StoredImport[]=[];let remaining=wanted.length;for(const key of wanted){const entry=store.get(key);entry.onsuccess=()=>{if(entry.result)items.push(entry.result);if(--remaining===0)sorted(items)};entry.onerror=()=>reject(entry.error)}}
+      transaction.oncomplete=()=>database.close();return
+    }
+    const request=store.getAll()
+    request.onsuccess=()=>sorted(request.result as StoredImport[])
     request.onerror = () => reject(request.error ?? new Error('Could not load import history.'))
     transaction.oncomplete = () => database.close()
   })

@@ -15,11 +15,12 @@ export async function createReportSync(options: { directory: string; connectionK
   const readCatalog = createCatalogReader(options.credentials, options.request)
   let catalogRunning = false, catalogNext = 0, catalogError: string | null = null
   const abort = new AbortController()
+  let refreshInterval=3*60000
   let running = false, stopped = false, state: SyncStatus['state'] = 'idle', error: string | null = store.get('error'), nextAttempt = Number(store.get('nextAttempt') ?? 0)
   let ordersRunning = false, ordersNext = 0, listNext = Number(store.get('orderListNext') ?? 0), orderError: string | null = store.get('orderError')
   if (error === 'Amazon authorization failed. Check the local credentials.') nextAttempt = 0
   const today = () => Date.parse(new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)) - 330 * 60000
-  const defaultRange = (): SyncRange => ({ from: new Date(today() - 29 * 86400000).toISOString(), to: new Date(Math.floor((Date.now() - 5 * 60000) / (15 * 60000)) * 15 * 60000).toISOString() })
+  const defaultRange = (): SyncRange => ({ from: new Date(today() - 29 * 86400000).toISOString(), to: new Date(Math.floor((Date.now() - 5 * 60000) / 60000) * 60000).toISOString() })
   const requested = (): SyncRange[] => JSON.parse(store.get('requested') ?? '[]') as SyncRange[]
   if (!requested().length) store.set('requested', JSON.stringify([defaultRange()]))
   function want(range: SyncRange) {
@@ -52,7 +53,7 @@ export async function createReportSync(options: { directory: string; connectionK
       if (!job && now >= listNext) {
         const gap = [...requested(), defaultRange()].flatMap(range => missingRanges(range, purchaseCoverage)).sort((a, b) => b.to.localeCompare(a.to))[0]
         if (gap) store.enqueue('purchases', gap)
-        else if (now - Number(store.get('lastPurchaseRefresh') ?? 0) > 15 * 60000) {
+        else if (now - Number(store.get('lastPurchaseRefresh') ?? 0) > refreshInterval) {
           const range = defaultRange()
           store.enqueue('purchases', { from: new Date(Math.max(Date.parse(range.from), now - 3 * 86400000)).toISOString(), to: range.to })
           store.set('lastPurchaseRefresh', String(now))
@@ -126,7 +127,7 @@ export async function createReportSync(options: { directory: string; connectionK
         const gaps = desired.flatMap(range => missingRanges({ from: range.from, to: new Date(Math.min(Date.parse(range.to), Date.parse(cutoff))).toISOString() }, coverage))
         // Recent head first; older backfill follows. Completed windows are never full-downloaded again.
         const gap = gaps.sort((a, b) => b.to.localeCompare(a.to))[0]
-        const refreshDue = now - Number(store.get('lastRefresh') ?? 0) >= 15 * 60000
+        const refreshDue = now - Number(store.get('lastRefresh') ?? 0) >= refreshInterval
         if (coverage.length && refreshDue) {
           const high = coverage.map(range => range.to).sort().at(-1)!
           store.enqueue('refresh', { from: new Date(Math.max(Date.parse(high) - 3 * 86400000, Date.parse(coverage[0].from))).toISOString(), to: cutoff })
@@ -157,8 +158,10 @@ export async function createReportSync(options: { directory: string; connectionK
   void tick(); void tickOrders(); void tickCatalog()
   return {
     want,
+    configure(minutes:number){refreshInterval=Math.max(2,Math.min(5,minutes))*60000},
+    refresh(range?:SyncRange,forceHistory=true){const selected=range??defaultRange();want(selected);const cutoff=new Date(Date.now()-5*60000).toISOString();if(forceHistory)for(const order of store.orders())if(order.purchased>=selected.from&&order.purchased<=selected.to)store.enqueue('history',{from:order.purchased,to:cutoff},order.id);store.set('lastRefresh','0');store.set('lastPurchaseRefresh','0');nextAttempt=0;void tick();void tickOrders()},
     status(): SyncStatus { return { connectionKey: options.connectionKey, configured: true, revision: store.revision(), records: store.count(), catalogPending: store.catalogPending(), catalogError, orderDateIssues: store.orderDateIssues(), pendingOrderDates: store.pendingOrderDates(), pendingOrderCycles: store.pendingOrderCycles(), orderDatesSyncing: ordersRunning, orderDatesError: orderError || null, purchaseHistoryPending: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[])).length, missingWindows: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, store.coverage())).length, coverage: store.coverage(), purchaseCoverage: JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[], state, lastSync: store.get('lastSync'), nextAttempt: nextAttempt ? new Date(nextAttempt).toISOString() : null, error } },
-    snapshot(since = -1): SyncSnapshot { const delta = Number.isSafeInteger(since) && since >= Number(store.get('deltaBase') ?? 0) && since <= store.revision(); return { delta, connectionKey: options.connectionKey, revision: store.revision(), updatedAt: store.get('updatedAt'), orders: store.orders(), records: delta ? store.changesSince(since) : store.records(), coverage: store.coverage() } },
+    snapshot(since = -1): SyncSnapshot { const delta = Number.isSafeInteger(since) && since >= Number(store.get('deltaBase') ?? 0) && since <= store.revision(); return { delta, connectionKey: options.connectionKey, revision: store.revision(), updatedAt: store.get('updatedAt'), orders: store.orders(), purchaseCoverage:JSON.parse(store.get('purchaseCoverage')??'[]') as SyncRange[], records: delta ? store.changesSince(since) : store.records(), coverage: store.coverage() } },
     async close() { stopped = true; clearInterval(timer); abort.abort(); while (running || ordersRunning || catalogRunning) await new Promise(resolve => setTimeout(resolve, 20)); store.close() },
   }
 }

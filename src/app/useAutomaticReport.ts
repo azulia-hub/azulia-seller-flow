@@ -1,3 +1,6 @@
+import { desktopDevice } from '../adapters/device/bridge'
+import { persistentDevice, completedReadingInfo } from '../adapters/device/workspace'
+import { sameContent } from '../core/sync/sameContent'
 import { hostedDelivery, hostedFetch } from '../adapters/amazon-hosted/client'
 import { useEffect, useRef, useState } from 'react'
 import { mergeSnapshot } from '../adapters/amazon-report-sync/mergeSnapshot'
@@ -20,7 +23,8 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Start npm run local to enable automatic delivery. Manual uploads remain available.')
         const info = await response.json() as SyncStatus
         if (!active) return
-        setStatus(info); setError('')
+        setStatus(previous => previous && sameContent(previous.purchaseCoverage, info.purchaseCoverage)
+          ? { ...info, purchaseCoverage: previous.purchaseCoverage } : info); setError('')
         if (!info.configured || !latest.current.enabled) return
         if (key !== info.connectionKey) {
           if (key !== null || latest.current.visibleConnectionKey && latest.current.visibleConnectionKey !== info.connectionKey) latest.current.onIdentityChange()
@@ -28,6 +32,19 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
           const saved = await loadReading(key)
           if (!active) return
           if (saved) { mappingOutdated = saved.deliveryVersion !== deliveryVersion; if (!mappingOutdated) { latest.current.onReading(saved); setAppliedRevision(saved.revision); setLastReading(saved.importedAt) } applied = saved.revision; sourceRecords = saved.sourceRecords ?? null; sourceOrders = saved.sourceOrders ?? null; currentReading = saved }
+        }
+        if(persistentDevice && latest.current.enabled) {
+          const completed=await completedReadingInfo(key!)
+          if(completed.pipeline){
+            if(completed.revision>=0 && (!currentReading || completed.revision!==applied || completed.calculatedAt!==currentReading.importedAt)){
+              setPhase('fetching')
+              const saved=await loadReading(key!)
+              if(saved&&active){currentReading=saved;sourceRecords=saved.sourceRecords??null;sourceOrders=saved.sourceOrders??null;applied=saved.revision;latest.current.onReading(saved);setAppliedRevision(applied);setLastReading(saved.importedAt)}
+            }
+            if(!currentReading)setPhase('calculating')
+            if(completed.error)throw new Error(completed.error)
+            return
+          }
         }
         if (applied > info.revision) { applied = -1; sourceRecords = null; sourceOrders = null }
         if ((!mappingOutdated && applied === info.revision) || info.revision === 0) return
@@ -51,11 +68,10 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
           // Coverage/revision-only updates must not run the worker or replace React's dataset.
           setPhase('saving')
           try { currentReading = await advanceReading(currentReading, snapshot.revision, completeSnapshot.orders) }
-          catch { throw new Error('The unchanged source revision could not be saved. Your previous reading remains available; check browser storage.') }
+          catch (cause) { throw new Error(cause instanceof Error ? cause.message : 'The unchanged source revision could not be saved. Your previous reading remains available; check device storage.') }
           if (!active || !latest.current.enabled) return
           applied = snapshot.revision; sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders
           setAppliedRevision(applied)
-          latest.current.onReading(currentReading)
           return
         }
         setPhase('calculating')
@@ -76,12 +92,13 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
         if (!active || !latest.current.enabled) return
         setPhase('saving')
         let reading: AutomaticReading
-        try { reading = await saveReading(key!, snapshot.revision, result, completeSnapshot.records, completeSnapshot.orders) } catch { throw new Error('New activity was read, but this browser could not save its calculation. The last saved reading remains visible; check browser storage.') }
+        try { reading = await saveReading(key!, snapshot.revision, result, completeSnapshot.records, completeSnapshot.orders) } catch (cause) { throw new Error(cause instanceof Error ? cause.message : 'New activity was read, but its calculation could not be saved. The last completed reading remains visible; check device storage and the local connection.') }
         if (!active || !latest.current.enabled) return
         latest.current.onReading(reading); applied = snapshot.revision; setAppliedRevision(applied); nextCalculation = Date.now() + (isSyncing ? 1500 : 0); sourceRecords = completeSnapshot.records; sourceOrders = completeSnapshot.orders; currentReading = reading; mappingOutdated = false; setLastReading(reading.importedAt); setError('')
       } catch (cause) { nextPoll = Date.now() + 15000; if (active && !abort.signal.aborted) setError(cause instanceof Error ? cause.message : 'Automatic delivery is unavailable; use manual upload as a fallback.') }
       finally { worker?.terminate(); worker = undefined; working = false; if (active) setPhase('idle') }
     }
+    if(desktopDevice&&latest.current.enabled)void fetch('/api/report-sync/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Azulia-Intent':'sync-report'},body:JSON.stringify({forceHistory:false})}).catch(()=>{})
     void poll()
     const timer = setInterval(() => { void poll() }, 3000)
     return () => { active = false; abort.abort(); worker?.terminate(); clearInterval(timer) }

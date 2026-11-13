@@ -1,9 +1,16 @@
+import type { BackgroundCalculation } from './backgroundRunner.ts'
 import type { ReportSync } from './sync/coordinator.ts'
 import { createServer, type ServerResponse } from 'node:http'
 import { readFile, realpath } from 'node:fs/promises'
 import { resolve, sep, extname } from 'node:path'
 import { checkPilotCredentials, pilotCredentialsConfigured, type PilotCredentials } from '../amazon/pilot.ts'
 import { createHash } from 'node:crypto'
+import { validWorkspaceKey, type DeviceStore } from './deviceStore.ts'
+import type { ImageStore } from './images.ts'
+import { gzip, gunzip } from 'node:zlib'
+import { promisify } from 'node:util'
+const zip=promisify(gzip),unzip=promisify(gunzip)
+const maximumReading=256*1024*1024,maximumCompressed=32*1024*1024
 
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Azulia local connection</title>
 <style>body{font:1rem/1.6 system-ui;margin:24px;background:#faf8f2;color:#27251e}main{max-width:640px;margin:32px auto}button{font:inherit;min-height:44px;padding:12px 18px}#result{overflow-wrap:anywhere}</style></head><body><main>
@@ -15,11 +22,11 @@ const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta n
 const script = `const button=document.getElementById('check'),result=document.getElementById('result');button.addEventListener('click',async()=>{button.disabled=true;result.textContent='Checking…';try{const response=await fetch('/api/amazon/check',{method:'POST',headers:{'X-Azulia-Intent':'check-connection'}});const data=await response.json();result.textContent=response.ok&&data.tokenExchangeVerified?'Amazon accepted the credentials. Orders and financial permissions still need verification.':data.error==='amazon_not_configured'?'Run npm run local:setup, then restart the launcher.':response.status===429?'A check is already running. Please wait.':'Amazon could not verify the credentials. Check the local configuration and Amazon authorization.';}catch{result.textContent='Cannot reach the local backend. Check that the launcher is running.';}finally{button.disabled=false;}});`
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.ttf': 'font/ttf', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.txt': 'text/plain' }
 
-export function createLocalServer(options: { port: number; dist: string; credentials: PilotCredentials; fetch?: typeof fetch; sync?: ReportSync }) {
+export function createLocalServer(options: { port: number; dist: string; credentials: PilotCredentials; fetch?: typeof fetch; sync?: ReportSync; device?: DeviceStore; calculation?:BackgroundCalculation; images?: ImageStore }) {
   let inFlight = false
   const connectionKey = createHash('sha256').update(JSON.stringify(options.credentials)).digest('hex')
-  function send(response: ServerResponse, status: number, body: string | Buffer, type = 'application/json; charset=utf-8') {
-    response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' })
+  function send(response: ServerResponse, status: number, body: string | Buffer, type = 'application/json; charset=utf-8',extra:Record<string,string>={}) {
+    response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',...extra })
     response.end(body)
   }
   function json(response: ServerResponse, status: number, body: unknown) { send(response, status, JSON.stringify(body)) }
@@ -34,6 +41,59 @@ export function createLocalServer(options: { port: number; dist: string; credent
       }
       if (request.headers.origin && request.headers.origin !== origin) { json(response, 403, { error: 'forbidden' }); return }
       const path = decodeURIComponent(new URL(request.url ?? '/', origin).pathname)
+      if(path==='/api/device/reading-status' && request.method==='GET'){
+        const account=new URL(request.url!,origin).searchParams.get('account')??''
+        if(!options.device||!/^[a-f0-9]{64}$/.test(account)){json(response,400,{error:'Invalid account.'});return}
+        json(response,200,{...options.device.readingStatus(account),pipeline:true,...options.calculation?.status()});return
+      }
+      if(path==='/api/report-sync/refresh' && request.method==='POST'){
+        if(request.headers.origin!==origin||request.headers['x-azulia-intent']!=='sync-report'){json(response,403,{error:'forbidden'});return}
+        let range:import('../../src/core/sync/ranges.ts').SyncRange|undefined
+        let forceHistory=true
+        let body='';for await(const chunk of request){body+=chunk.toString();if(body.length>4096){json(response,413,{error:'Refresh request too large.'});return}}
+        if(body){try{const input=JSON.parse(body);forceHistory=input.forceHistory!==false;if(input.from&&input.to){const from=Date.parse(`${input.from}T00:00:00+05:30`),to=Date.parse(`${input.to}T00:00:00+05:30`)+86400000;if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to)throw new Error();range={from:new Date(from).toISOString(),to:new Date(to).toISOString()}}}catch{json(response,400,{error:'Invalid refresh dates.'});return}}
+        options.sync?.refresh(range,forceHistory);options.calculation?.request();json(response,200,{queued:true});return
+      }
+      if (path === '/api/device/workspace') {
+        if (!options.device) { json(response, 503, { error: 'Device storage is starting.' }); return }
+        if (request.method === 'GET') {
+          const key = new URL(request.url!, origin).searchParams.get('key') ?? ''
+          if (!validWorkspaceKey(key)) { json(response, 400, { error: 'Unsupported storage key.' }); return }
+          if(new URL(request.url!,origin).searchParams.get('head')==='1'){json(response,200,{version:options.device.version(key)});return}
+          // Reuse stored JSON rather than parsing and stringifying a 200 MiB graph
+          // on Node's request thread. zlib work runs asynchronously.
+          const stored=options.device.encoded(key)
+          const raw=stored.raw===null?Buffer.from('null'):stored.raw.startsWith('gz:')
+            ?await unzip(Buffer.from(stored.raw.slice(3),'base64'),{maxOutputLength:maximumReading}):Buffer.from(stored.raw)
+          const value=Buffer.concat([Buffer.from(`{"version":${stored.version},"value":`),raw,Buffer.from('}')])
+          if(value.length>1024*1024 && /(?:^|[,\s])gzip(?:[,\s;]|$)/.test(request.headers['accept-encoding']??'')) send(response,200,await zip(value,{level:1}),'application/json; charset=utf-8',{'Content-Encoding':'gzip','Vary':'Accept-Encoding'})
+          else send(response,200,value)
+          return
+        }
+        if (request.method !== 'POST') { json(response, 405, { error: 'method_not_allowed' }); return }
+        if (request.headers.origin !== origin || request.headers['x-azulia-intent'] !== 'device-workspace' || request.headers['content-type'] !== 'application/json') { json(response, 403, { error: 'forbidden' }); return }
+        const compressed=request.headers['content-encoding']==='gzip'
+        if(request.headers['content-encoding'] && !compressed && request.headers['content-encoding']!=='identity') { json(response,415,{error:'Unsupported reading compression.'}); return }
+        const chunks: Buffer[] = []; let size = 0
+        for await (const chunk of request) { const bytes = Buffer.from(chunk); size += bytes.length; if (size > (compressed?maximumCompressed:maximumReading)) { json(response, 413, { error: 'Completed reading exceeds the supported storage size. Existing data is retained.' }); return }; chunks.push(bytes) }
+        try {
+          const wire=Buffer.concat(chunks)
+          const decoded=compressed?await unzip(wire,{maxOutputLength:maximumReading}):wire
+          const input = JSON.parse(decoded.toString('utf8'))
+          if (!input || typeof input.key !== 'string' || !validWorkspaceKey(input.key) || input.value === undefined || (input.version !== undefined && (!Number.isSafeInteger(input.version) || input.version < 0))) throw new Error('Invalid input')
+          json(response, 200, options.device.put(input.key, input.value, input.version));if(input.key==='settings')options.calculation?.request()
+        } catch (error) { const cause=error as {status?:number;code?:string};json(response, cause.status === 409 ? 409 : cause.code==='ERR_BUFFER_TOO_LARGE'?413:400, { error: cause.code==='ERR_BUFFER_TOO_LARGE'?'Completed reading exceeds the supported storage size. Existing data is retained.':'Device save failed. Previously saved data is retained.' }) }
+        return
+      }
+      if (path === '/api/device/image') {
+        if (request.method !== 'GET') { json(response, 405, { error: 'method_not_allowed' }); return }
+        if (!options.images) { json(response, 503, { error: 'Image storage is starting.' }); return }
+        try {
+          const image = await options.images.image(new URL(request.url!, origin).searchParams.get('url') ?? '')
+          send(response, 200, image.bytes, image.type)
+        } catch { json(response, 502, { error: 'Product image unavailable. Order data is unchanged.' }) }
+        return
+      }
       if (path === '/api/report-sync/range') {
         if (request.method !== 'POST') { json(response, 405, { error: 'method_not_allowed' }); return }
         if (request.headers.origin !== origin || request.headers['x-azulia-intent'] !== 'sync-report' || request.headers['content-type'] !== 'application/json') { json(response, 403, { error: 'forbidden' }); return }

@@ -30,3 +30,11 @@ supabase/.branches/
 
 # Netlify local account/project linking metadata
 .netlify/
+
+# Android build outputs and machine-specific SDK/signing configuration
+android/.gradle/
+android/local.properties
+android/**/build/
+android/app/src/main/assets/web/
+*.jks
+*.keystore

@@ -31,6 +31,9 @@ describe('businessOverview', () => {
     // Profit after ads & cogs (400) = 1000 - 400 = 600
     expect(result.profitAfterAds).toBe(600)
 
+    // Net sale (Net Amazon Payout) = gross (1230) - refunds (0) - marketplace (150) - shipping (70) + reimbursements (0) = 1010
+    expect(result.netMarketplaceProceeds).toBe(1010)
+
     // Financial rows sum (excluding cogs) must exactly equal operatingNet
     const directRowsSum = result.financialRows
       .filter(row => row.label !== 'Product costs')

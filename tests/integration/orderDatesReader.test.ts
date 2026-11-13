@@ -44,3 +44,14 @@ it('retains only order identity, status and value, excluding buyer and address i
   expect(order.summary).toEqual({ id, purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' })
   expect(JSON.stringify(order)).not.toContain('private')
 })
+
+it('fetches recently updated orders without changing their original purchase timestamp', async () => {
+  const request = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(Response.json({ payload: { Orders: [{ AmazonOrderId: id, PurchaseDate: '2026-08-01T10:00:00Z', OrderStatus: 'Unshipped' }] } }))
+  const job = { from: '2026-11-13T00:00:00Z', to: '2026-11-13T02:00:00Z', updatedOnly: true, nextToken: null }
+  const page = await createOrderDateReader(credentials, request).page(job, new AbortController().signal)
+  const url = new URL(String(request.mock.calls[1][0]))
+  expect(url.searchParams.get('LastUpdatedAfter')).toBe(job.from)
+  expect(url.searchParams.get('LastUpdatedBefore')).toBe(job.to)
+  expect(url.searchParams.has('CreatedAfter')).toBe(false)
+  expect(page.orders[0].purchased).toBe('2026-08-01T10:00:00Z')
+})

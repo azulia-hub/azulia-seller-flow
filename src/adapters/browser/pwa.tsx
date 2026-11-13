@@ -1,3 +1,4 @@
+import { androidDevice } from '../device/bridge'
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 
 interface InstallPrompt extends Event {
@@ -12,7 +13,7 @@ const PwaContext = createContext<PwaState>({ installed:false, busy:false, offlin
 export const usePwa = () => useContext(PwaContext)
 
 export function PwaProvider({ children }: { children:ReactNode }) {
-  const [installed,setInstalled] = useState(() => window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?:boolean }).standalone))
+  const [installed,setInstalled] = useState(() => androidDevice || window.matchMedia('(display-mode: standalone)').matches || Boolean((navigator as Navigator & { standalone?:boolean }).standalone))
   const [busy,setBusy] = useState(false)
   const [offline,setOffline] = useState(!navigator.onLine)
   const [help,setHelp] = useState(false)
@@ -35,7 +36,7 @@ export function PwaProvider({ children }: { children:ReactNode }) {
     }
   }, [])
   useEffect(() => {
-    if (!import.meta.env.PROD || !('serviceWorker' in navigator) || !window.isSecureContext) return
+    if (androidDevice || !import.meta.env.PROD || !('serviceWorker' in navigator) || !window.isSecureContext) return
     let disposed = false
     let installing:ServiceWorker | null = null
     const stateChanged = () => { if (!disposed && installing?.state === 'installed' && navigator.serviceWorker.controller) { installing.postMessage({ type:'ACTIVATE_UPDATE' }); setUpdateReady(true) } }

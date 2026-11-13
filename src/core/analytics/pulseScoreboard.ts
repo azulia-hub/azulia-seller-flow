@@ -1,3 +1,5 @@
+import { indexOrderHistory, selectOrderCohort } from './orderLifecycle'
+import { isCustomerRefund } from './dashboardSummary'
 import type { CanonicalFinancialEvent } from '../data/types'
 import type { ProductCost } from '../costs/types'
 import type { MissingCostPolicy } from '../costs/calculateCosts'
@@ -28,6 +30,14 @@ export interface PulsePeriodMetrics {
   readonly from: string
   readonly to: string
   readonly grossSales: number
+  readonly netEarnings: number
+  readonly profitReady: boolean
+  readonly estimatedPendingSales: number
+  readonly profitRows: readonly { label: string; value: number|null }[]
+  readonly financialRows: readonly { label: string; value: number }[]
+  readonly excludedOrderRecords: number
+  readonly missingPriceOrders: number
+  readonly awaitingFinancialOrders: number
   readonly pendingSales: number
   readonly totalSales: number
   readonly netProfit: number
@@ -71,27 +81,8 @@ export interface PulseScoreboardInput {
   readonly sourceOrders?: readonly PulseSourceOrder[]
   readonly anchorDate?: string
   readonly purchaseCoverage?: readonly SyncRange[]
-}
-
-function filterEventsByDateRange(
-  events: readonly CanonicalFinancialEvent[],
-  from: string,
-  to: string,
-  orderDates: Map<string, string>,
-): { matchedEvents: CanonicalFinancialEvent[]; orderIds: Set<string> } {
-  const matchedEvents: CanonicalFinancialEvent[] = []
-  const orderIds = new Set<string>()
-
-  for (const event of events) {
-    const orderDate = event.orderId ? orderDates.get(event.orderId) : undefined
-    const effectiveDate = orderDate ?? canonicalDateKey(event.orderPurchaseDate ?? null) ?? canonicalDateKey(event.date)
-    if (effectiveDate && effectiveDate >= from && effectiveDate <= to) {
-      matchedEvents.push(event)
-      if (event.orderId) orderIds.add(event.orderId)
-    }
-  }
-
-  return { matchedEvents, orderIds }
+  readonly includeCustomerTax?: boolean
+  readonly estimateMissingPrices?: boolean
 }
 
 export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreboard {
@@ -108,12 +99,10 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const asinImageMap = new Map<string, string>()
   const skuPriceMap = new Map<string, { total: number; count: number }>()
 
-  const orderDates = new Map<string, string>()
   const ordersByDate = new Map<string, PulseSourceOrder[]>()
   for (const order of input.sourceOrders ?? []) {
     if (!order.orderId || !order.purchaseDate) continue
     const dateKey = canonicalDateKey(order.purchaseDate) ?? order.purchaseDate.slice(0, 10)
-    orderDates.set(order.orderId, dateKey)
     const list = ordersByDate.get(dateKey) ?? []
     list.push(order)
     ordersByDate.set(dateKey, list)
@@ -233,8 +222,10 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     }
   }
 
+  const lifecycle = indexOrderHistory(input.events, (input.sourceOrders ?? []).map(order=>({orderId:order.orderId,purchaseDate:order.purchaseDate,status:order.status??null,fulfillmentType:order.fulfillmentType??null,orderValue:order.orderValue==null?null:String(order.orderValue),currency:null})))
   function evaluate(label: string, from: string, to: string): PulsePeriodMetrics {
-    const { matchedEvents, orderIds } = filterEventsByDateRange(input.events, from, to, orderDates)
+    const cohort = selectOrderCohort(lifecycle, { from, to }, 'ALL_RECORDED')
+    const matchedEvents = cohort.events, orderIds = new Set(cohort.orders.filter(order=>order.events.length).map(order=>order.orderId))
     const overview = buildBusinessOverview(
       matchedEvents,
       input.costs,
@@ -254,6 +245,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
 
     const totalOrderIds = new Set([...orderIds, ...periodOrders.map(o => o.orderId)])
 
+    const cohortEvents=new Map(cohort.orders.map(order=>[order.orderId,order.events]))
     // Build classified order summaries for popup list
     const ordersMap = new Map<string, PulseOrderSummary>()
     const periodOrdersMap = new Map(periodOrders.map(o => [o.orderId, o]))
@@ -261,8 +253,8 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
 
     for (const orderId of totalOrderIds) {
       const sourceOrder = periodOrdersMap.get(orderId) ?? allSourceOrdersMap.get(orderId)
-      const eventsForOrder = matchedEvents.filter(e => e.orderId === orderId)
-      const isSettled = eventsForOrder.length > 0
+      const eventsForOrder = cohortEvents.get(orderId)??[]
+      const isSettled = eventsForOrder.some(isCustomerSale)
       const orderSkus = [...new Set([
         ...eventsForOrder.flatMap(e => e.sku ? [e.sku] : []),
         ...(sourceOrder?.sku ? [sourceOrder.sku] : []),
@@ -293,7 +285,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       }
 
       // If order is pending/unsettled and Amazon did not provide orderValue (common for pending FBA orders)
-      if (orderValue === 0 && !isSettled) {
+      if (input.estimateMissingPrices && orderValue === 0 && !isSettled) {
         if (sourceOrder?.items?.length) {
           let verifiedPrice = 0
           let resolvedAll = true
@@ -326,7 +318,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
 
       const purchaseDate = sourceOrder?.purchaseDate
         ?? eventsForOrder.find(e => e.orderPurchaseDate)?.orderPurchaseDate
-        ?? eventsForOrder[0]?.date
+        ?? cohort.orders.find(order=>order.orderId===orderId)?.saleDate
         ?? from
 
       const raw = (sourceOrder?.status ?? (isSettled ? 'Shipped' : 'Pending')).trim()
@@ -381,14 +373,25 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     // Calculate pending sales: only active unsettled orders (UNSHIPPED or PENDING), strictly excluding CANCELED
     const pendingSales = Math.round(
       orderList
-        .filter(o => !orderIds.has(o.orderId) && (o.statusCategory === 'UNSHIPPED' || o.statusCategory === 'PENDING'))
+        .filter(o => !o.isSettled && o.statusCategory !== 'CANCELED')
         .reduce((sum, o) => sum + (o.orderValue > 0 ? o.orderValue : 0), 0) * 100,
     ) / 100
 
-    const grossSales = overview.summary.grossSales
+    const customerSalesTax = input.includeCustomerTax === false ? matchedEvents.filter(e=>e.amountType==='TAX' && isCustomerSale(e)).reduce((sum,e)=>sum+e.amount,0) : 0
+    const customerRefundTax = input.includeCustomerTax === false ? -matchedEvents.filter(e=>e.amountType==='TAX' && isCustomerRefund(e)).reduce((sum,e)=>sum+e.amount,0) : 0
+    const grossSales = Math.round((overview.summary.grossSales-customerSalesTax)*100)/100
+    const refunds = overview.summary.refundValue-customerRefundTax
+    const netEarnings = Math.round((grossSales-refunds-overview.summary.marketplaceCharges-overview.summary.netEasyShipFee+overview.summary.reimbursements)*100)/100
+    const estimatedPendingSales = Math.round(orderList.filter(o=>o.isValueEstimated && !o.isSettled && o.statusCategory!=='CANCELED').reduce((sum,o)=>sum+o.orderValue,0)*100)/100
+    const financialRows = [
+      {label:'Gross sales',value:grossSales},{label:'Customer refunds',value:-refunds},
+      {label:'Marketplace fees (after credits)',value:-overview.summary.marketplaceCharges},
+      {label:'Shipping fees (after credits)',value:-overview.summary.netEasyShipFee},
+      {label:'Reimbursements',value:overview.summary.reimbursements},
+    ]
     const totalSales = Math.round((grossSales + pendingSales) * 100) / 100
-    const netProfit = overview.profitAfterAds
-    const profitMargin = totalSales > 0 ? (netProfit / totalSales) * 100 : 0
+    const netProfit = Math.round((overview.profitAfterAds-customerSalesTax+customerRefundTax)*100)/100
+    const profitMargin = grossSales > 0 ? (netProfit / grossSales) * 100 : 0
     const unitsSold = overview.summary.soldQuantity
     const returnUnits = overview.summary.returnQuantity
     const ordersCount = confirmedOrdersCount + unshippedOrdersCount + pendingOrdersCount
@@ -404,7 +407,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       label,
       from,
       to,
-      grossSales,
+      grossSales, netEarnings, estimatedPendingSales, financialRows, profitRows:[{label:'Net earnings',value:netEarnings},{label:'Product costs',value:overview.costStatus.profitReady?-overview.costStatus.netCogs:null},{label:'Booked advertising',value:-overview.summary.adsSpend},{label:'Other operating adjustments',value:Math.round((netProfit-netEarnings+overview.costStatus.netCogs+overview.summary.adsSpend)*100)/100}], profitReady:overview.costStatus.profitReady, awaitingFinancialOrders:orderList.filter(o=>!o.isSettled&&o.statusCategory!=='CANCELED').length, missingPriceOrders:orderList.filter(o=>!o.isSettled&&o.statusCategory!=='CANCELED'&&o.orderValue===0).length, excludedOrderRecords:cohort.missingSale.length + (cohort.outsidePeriod?.length ?? 0),
       pendingSales,
       totalSales,
       netProfit,
@@ -429,7 +432,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
   const daysInMonth = new Date(year, month, 0).getDate()
   const multiplier = daysInMonth / elapsedDays
 
-  const monthTotalSales = thisMonth.totalSales
+  const monthTotalSales = thisMonth.grossSales
   const forecastSales = Math.round(monthTotalSales * multiplier)
   const forecastProfit = Math.round(thisMonth.netProfit * multiplier)
   const forecastOrders = Math.round(thisMonth.ordersCount * multiplier)
@@ -440,7 +443,9 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
     label: 'Month Forecast',
     from: monthStart,
     to: `${anchorDate.slice(0, 7)}-${String(daysInMonth).padStart(2, '0')}`,
-    grossSales: forecastSales,
+    missingPriceOrders:0,awaitingFinancialOrders:0,
+    profitRows:thisMonth.profitRows.map(row=>({...row,value:row.value===null?null:Math.round(row.value*multiplier)})),
+    grossSales: forecastSales, netEarnings:Math.round(thisMonth.netEarnings*multiplier), estimatedPendingSales:0, financialRows:thisMonth.financialRows.map(row=>({...row,value:Math.round(row.value*multiplier)})), profitReady:thisMonth.profitReady, excludedOrderRecords:thisMonth.excludedOrderRecords,
     pendingSales: 0,
     totalSales: forecastSales,
     netProfit: forecastProfit,

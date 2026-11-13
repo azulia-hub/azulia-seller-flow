@@ -116,25 +116,28 @@ describe('Pulse Scoreboard calculation', () => {
 
     // Today: 2 active orders (canceled excluded), total pending sales 649 + 550 = 1199
     expect(scoreboard.today.ordersCount).toBe(2)
-    expect(scoreboard.today.pendingOrdersCount).toBe(2)
+    expect(scoreboard.today.pendingOrdersCount).toBe(1)
+    expect(scoreboard.today.unshippedOrdersCount).toBe(1)
     expect(scoreboard.today.grossSales).toBe(0)
     expect(scoreboard.today.pendingSales).toBe(1199)
 
     // Yesterday: 2 active orders, pending sales 1200 + 850.50 = 2050.50
     expect(scoreboard.yesterday.ordersCount).toBe(2)
-    expect(scoreboard.yesterday.pendingOrdersCount).toBe(2)
+    expect(scoreboard.yesterday.pendingOrdersCount).toBe(0)
+    expect(scoreboard.yesterday.unshippedOrdersCount).toBe(2)
     expect(scoreboard.yesterday.grossSales).toBe(0)
     expect(scoreboard.yesterday.pendingSales).toBe(2050.5)
 
     // This month combines active orders
     expect(scoreboard.thisMonth.ordersCount).toBe(4)
-    expect(scoreboard.thisMonth.pendingOrdersCount).toBe(4)
+    expect(scoreboard.thisMonth.pendingOrdersCount).toBe(1)
+    expect(scoreboard.thisMonth.unshippedOrdersCount).toBe(3)
     expect(scoreboard.thisMonth.pendingSales).toBe(3249.5)
 
-    // Forecast extrapolates based on pending sales when gross sales is 0
+    // Forecast uses recorded gross sales only; pending values remain separate.
     // multiplier = 30 / 9 = 3.3333...
     // 3249.5 * (30/9) = ~10832
-    expect(scoreboard.forecast.grossSales).toBe(10832)
+    expect(scoreboard.forecast.grossSales).toBe(0)
     expect(scoreboard.forecast.ordersCount).toBe(13) // 4 * (30/9) = 13.33 -> 13
   })
 })

@@ -1,21 +1,18 @@
 import { useState } from 'react'
+import { formatMoney } from '../adapters/preferences/runtime'
 import type { PulseScoreboard as PulseData, PulsePeriodMetrics } from '../core/analytics/pulseScoreboard'
 import { PulseOrdersModal } from './PulseOrdersModal'
 
 interface Props {
   readonly scoreboard: PulseData
+  readonly onRequestDetails?: (ids: readonly string[], range: { from: string; to: string }) => void
   readonly onSelectPeriod?: (from: string, to: string) => void
 }
 
-function formatInr(value: number): string {
-  const rounded = Math.round(value)
-  const isNegative = rounded < 0
-  const abs = Math.abs(rounded)
-  return `${isNegative ? '-' : ''}₹${abs.toLocaleString('en-IN')}`
-}
+function formatInr(value: number): string { return formatMoney(value) }
 
-export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
-  const [modalPeriod, setModalPeriod] = useState<PulsePeriodMetrics | null>(null)
+export function PulseScoreboard({ scoreboard, onSelectPeriod, onRequestDetails }: Props) {
+  const [modalLabel, setModalLabel] = useState<string | null>(null)
 
   const periods = [
     scoreboard.today,
@@ -24,11 +21,14 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
     scoreboard.forecast,
   ]
 
+  const modalPeriod = periods.find(period => period.label === modalLabel) ?? null
+
   const handleCardClick = (period: PulsePeriodMetrics) => {
     if (period.label === 'Month Forecast') {
       if (onSelectPeriod) onSelectPeriod(period.from, period.to)
     } else {
-      setModalPeriod(period)
+      setModalLabel(period.label)
+      onRequestDetails?.(period.orders.map(order => order.orderId), { from: period.from, to: period.to })
     }
   }
 
@@ -94,7 +94,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
 
                   <div className="pulse-metric-secondary">
                     <small className="pulse-metric-label">Profit</small>
-                    {period.grossSales > 0 ? (
+                    {period.grossSales > 0 && period.profitReady ? (
                       <strong className={`pulse-profit-value ${isProfitable ? 'good' : 'bad'}`}>
                         {formatInr(period.netProfit)}
                         <span className="pulse-margin-pill">{period.profitMargin}%</span>
@@ -103,7 +103,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
                       <strong className="pulse-profit-value neutral">
                         <span
                           className="pulse-pending-profit"
-                          title="Final profit calculated after Amazon ships and posts settlement fees"
+                          title="Profit requires recorded financial activity and product costs"
                         >
                           Awaiting shipment
                         </span>
@@ -150,7 +150,7 @@ export function PulseScoreboard({ scoreboard, onSelectPeriod }: Props) {
       {modalPeriod ? (
         <PulseOrdersModal
           period={modalPeriod}
-          onClose={() => setModalPeriod(null)}
+          onClose={() => { setModalLabel(null); onRequestDetails?.([], { from: modalPeriod.from, to: modalPeriod.to }) }}
           onFilterDashboard={onSelectPeriod}
         />
       ) : null}

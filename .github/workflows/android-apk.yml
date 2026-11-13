@@ -1,0 +1,57 @@
+name: Build Android APK (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Build a signed release using the configured signing secrets
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - run: npm ci
+      - run: npm run android:prepare
+      - name: Assemble debug APK
+        if: ${{ !inputs.release }}
+        run: gradle -p android :app:assembleDebug --no-daemon
+      - name: Assemble signed release APK
+        if: ${{ inputs.release }}
+        env:
+          AZULIA_KEYSTORE_BASE64: ${{ secrets.AZULIA_KEYSTORE_BASE64 }}
+          AZULIA_STORE_PASSWORD: ${{ secrets.AZULIA_STORE_PASSWORD }}
+          AZULIA_KEY_ALIAS: ${{ secrets.AZULIA_KEY_ALIAS }}
+          AZULIA_KEY_PASSWORD: ${{ secrets.AZULIA_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZULIA_KEYSTORE_BASE64"
+          test -n "$AZULIA_STORE_PASSWORD"
+          test -n "$AZULIA_KEY_ALIAS"
+          test -n "$AZULIA_KEY_PASSWORD"
+          export AZULIA_KEYSTORE="$RUNNER_TEMP/azulia-release.jks"
+          trap 'rm -f "$AZULIA_KEYSTORE"' EXIT
+          umask 077
+          printf '%s' "$AZULIA_KEYSTORE_BASE64" | base64 --decode > "$AZULIA_KEYSTORE"
+          gradle -p android :app:assembleRelease --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: azulia-android-apk
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

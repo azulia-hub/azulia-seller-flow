@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { formatMoney } from '../adapters/preferences/runtime'
+import { useState, useMemo, useEffect } from 'react'
 import type { PulsePeriodMetrics, PulseOrderSummary, PulseOrderStatusCategory } from '../core/analytics/pulseScoreboard'
 import { ProductThumbnail } from './ProductThumbnail'
 
@@ -8,12 +9,7 @@ interface Props {
   readonly onFilterDashboard?: (from: string, to: string) => void
 }
 
-function formatInr(value: number): string {
-  const rounded = Math.round(value)
-  const isNegative = rounded < 0
-  const abs = Math.abs(rounded)
-  return `${isNegative ? '-' : ''}₹${abs.toLocaleString('en-IN')}`
-}
+function formatInr(value:number){return formatMoney(value)}
 
 function formatDateTimeIST(dateStr: string): string {
   if (!dateStr) return '—'
@@ -46,6 +42,14 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
   const [channelFilter, setChannelFilter] = useState<'ALL' | 'FBA' | 'FBM'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   const copyToClipboard = (orderId: string) => {
     navigator.clipboard?.writeText(orderId)
@@ -184,7 +188,7 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
             <small>Total Sales (All Orders & GST)</small>
             <strong>{formatInr(period.totalSales)}</strong>
             <span className="pulse-modal-kpi-sub">
-              Settled: {formatInr(period.grossSales)} · Pending/Unshipped: {formatInr(period.pendingSales)}
+              Recorded gross: {formatInr(period.grossSales)} · Awaiting financial sales: {formatInr(period.pendingSales)}
             </span>
           </div>
           <div className="pulse-modal-kpi-card">
@@ -325,7 +329,7 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                 {filteredOrders.map(order => {
                   const isFba = isFbaOrder(order.fulfillmentType)
                   const displayTitle = order.productTitle
-                    || (order.skus.length ? order.skus.join(', ') : `Amazon ${isFba ? 'FBA' : 'FBM'} Order`)
+                    || (order.skus.length ? order.skus.join(', ') : 'Product details pending')
 
                   return (
                     <tr key={order.orderId} className={`pulse-order-row ${order.statusCategory.toLowerCase()}`}>
@@ -367,8 +371,8 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           {renderStatusBadge(order)}
                           {order.isSettled ? (
-                            <span className="settlement-badge settled" title="Recorded in Amazon Financial Ledger">
-                              ✓ Settled in P&L
+                            <span className="settlement-badge settled" title="Recorded financial sales; released and deferred both included">
+                              ✓ Financial sale recorded
                             </span>
                           ) : (
                             <span className="settlement-badge awaiting" title="Awaiting Amazon Financial Posting">

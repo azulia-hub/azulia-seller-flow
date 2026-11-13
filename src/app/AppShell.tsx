@@ -1,12 +1,15 @@
+import type { AppPreferences } from '../core/settings/preferences'
+import { androidDevice, nativeRequest } from '../adapters/device/bridge'
 import { InstallButton, PwaStatus } from '../adapters/browser/pwa'
 import { BrandEntrance } from '../components/BrandEntrance'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { appNavigation, type AppPage } from './navigation'
 
 type Theme = 'dark' | 'light' | 'system'
-function storedTheme(): Theme { try { const value = localStorage.getItem('azulia-theme'); return value === 'dark' || value === 'light' ? value : 'system' } catch { return 'system' } }
 
 type Props = {
+  readonly preferences: AppPreferences
+  readonly onPreferencesChange: (patch:Partial<AppPreferences>)=>void
   readonly search?: ReactNode
   readonly syncStatus?: ReactNode
   readonly active: AppPage
@@ -18,14 +21,16 @@ type Props = {
   readonly children: ReactNode
 }
 
-export function AppShell({ active, search, syncStatus, mobileNavOpen, onToggleMobileNav, reportName, reportLoaded, onNavigate, children }: Props) {
-  const [theme, setTheme] = useState<Theme>(storedTheme)
+export function AppShell({ preferences, onPreferencesChange, active, search, syncStatus, mobileNavOpen, onToggleMobileNav, reportName, reportLoaded, onNavigate, children }: Props) {
+  const theme=preferences.theme, setTheme=(value:Theme)=>onPreferencesChange({theme:value})
+  useEffect(()=>{document.documentElement.dataset.density=preferences.compact?'compact':'comfortable'},[preferences.compact])
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = () => {
       const resolved = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme
       document.documentElement.dataset.theme = resolved
       document.documentElement.style.colorScheme = resolved
+      if (androidDevice) void nativeRequest('ui.theme', { dark: resolved === 'dark' }).catch(() => {})
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#191816' : '#f7f5ef')
     }
     apply()

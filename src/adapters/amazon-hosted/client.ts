@@ -1,18 +1,28 @@
+import { syncInventory } from '../amazon-inventory/syncInventory'
+import { inventoryStorage } from '../amazon-inventory/storage'
+import type { InventoryState } from '../amazon-inventory/workspaceTypes'
+import { currentPreferences } from '../preferences/runtime'
+export const backgroundEngine = typeof document !== 'undefined' && document.documentElement?.dataset.background === 'true'
+import { enrichmentTargets, pickSyncJob } from './enrichment'
 export { hostedDelivery } from './deliveryMode'
 import { object, text } from '../amazon-report-sync/money'
-import { assertLease, commitPage, loadCache, meta, snapshot, updateMeta, clearRecentHostedCache, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
+import { assertLease, commitPage, loadCache, recordCount, meta, snapshot, updateMeta, type BrowserJob, type CacheMeta, type CatalogValue } from './cache'
 import { missingRanges, type SyncRange } from '../../core/sync/ranges'
 import { toIndiaDateString, indiaDateToUtcIso, getIndiaToday, stableJobId, SyncRunTracker } from '../../core/sync/planner'
 import type { SourceOrderSummary, SyncStatus } from '../amazon-report-sync/protocol'
+import { androidDevice, nativeRequest, DEVICE_BRIDGE_VERSION } from '../device/bridge'
+import { androidAmazon } from '../device/amazon'
 interface Credentials { clientId: string; clientSecret: string; refreshToken: string }
 interface Session extends Credentials { account: string; accessToken: string; until: number }
-export interface HostedView { account: string | null; connected: boolean; busy: boolean; connecting: boolean; error: string; progress: string; records: number; state: CacheMeta | null; percent?: number }
+export interface HostedView { account: string | null; connected: boolean; busy: boolean; connecting: boolean; error: string; progress: string; records: number; state: CacheMeta | null; percent?: number; backgroundNote?: string }
 const STORAGE_ACCOUNT_KEY = 'azulia.hosted-account'
 const STORAGE_CREDS_KEY = 'azulia.hosted-creds'
 let view: HostedView = { account: null, connected: false, busy: false, connecting: false, error: '', progress: '', records: 0, state: null }
 let session: Session | null = null, run: AbortController | null = null, connecting: AbortController | null = null, initializing: Promise<void> | undefined
+let resumeAfterHandoff = false
 let wakeLock: { release: () => Promise<void> } | null = null
 async function acquireWakeLock() {
+  if(backgroundEngine)return
   try {
     if (typeof navigator !== 'undefined' && 'wakeLock' in navigator && typeof (navigator as any).wakeLock?.request === 'function') {
       wakeLock = await (navigator as any).wakeLock.request('screen')
@@ -44,6 +54,10 @@ async function digestAccount(clientId: string, refreshToken: string): Promise<st
 }
 class RelayError extends Error { constructor(message: string, readonly status: number, readonly retryAfter: number) { super(message) } }
 async function relay(body: Record<string, unknown>, signal: AbortSignal) {
+  if (androidDevice) {
+    try { return await androidAmazon(body, signal) }
+    catch (cause) { const error = cause as Error & { status?: number; retryAfter?: number }; throw new RelayError(error.message || 'Phone connection unavailable.', error.status ?? 0, error.retryAfter ?? 60) }
+  }
   const response = await fetch('/.netlify/functions/amazon', { method: 'POST', cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.any([signal, AbortSignal.timeout(50000)]), headers: { 'Content-Type': 'application/json', 'X-Azulia-Intent': 'amazon-relay' }, body: JSON.stringify(body) })
   if (!response.headers.get('content-type')?.includes('application/json')) throw new RelayError('The Amazon relay is unavailable. Check the Netlify function deployment.', response.status, 60)
   const value = object(await response.json())
@@ -53,17 +67,78 @@ async function relay(body: Record<string, unknown>, signal: AbortSignal) {
 async function refreshView() {
   if (!view.account) return
   const state = await meta(view.account)
+  if(androidDevice&&!backgroundEngine) {
+    const native=await nativeRequest<{busy:boolean;phase:string;message:string;error?:string;lastSuccess?:number}>('sync.status')
+    publish({busy:native.busy,progress:native.message,error:native.error||'',backgroundNote:native.lastSuccess?`Data and calculations saved: ${new Date(native.lastSuccess).toLocaleString('en-IN')}`:undefined})
+  }
   // Count is refreshed only when content changed, not during every local status poll.
-  const records = !view.state || state.revision !== view.state.revision ? (await loadCache(view.account)).records.length : view.records
+  const records = !view.state || state.revision !== view.state.revision ? await recordCount(view.account) : view.records
   publish({ state, records })
 }
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null
+const detailPriority=new Set<string>()
+let detailRequestVersion=0
+export function requestOrderDetails(orderIds:readonly string[],range:{from:string;to:string}) {
+  detailPriority.clear()
+  for(const id of orderIds.slice(0,250))if(/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id))detailPriority.add(id)
+  detailRequestVersion++
+  if(androidDevice&&!backgroundEngine){void nativeRequest('sync.details',{...range,orderIds:[...detailPriority]}).catch(()=>{});return}
+  if(!backgroundEngine && orderIds.length && session && !run && !view.connecting)void syncHosted(range,{silent:true})
+}
+
+let backgroundDrain: Promise<void> | null = null
+async function readBackgroundPages(account: string) {
+  const pages = await nativeRequest<{ id: string; job: BrowserJob }[]>('background.pending', { account })
+  if (!pages.length) return
+  const owner = crypto.randomUUID()
+  await updateMeta(account, state => {
+    if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('A sync is already running; background pages remain saved.')
+    state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000
+  })
+  let cancelled=false
+  const heartbeat=setInterval(() => { void updateMeta(account,state=>{ assertLease(state,owner);state.leaseUntil=Date.now()+120000 }).catch(()=>{cancelled=true}) },20000)
+  try {
+    for (const saved of pages) {
+      if (session?.account !== account || cancelled || (!backgroundEngine && document.visibilityState !== 'visible')) return
+      const page = await androidAmazon({ ...saved.job, action: saved.job.kind, backgroundId: saved.id, account }, AbortSignal.timeout(60000))
+      if (saved.job.kind === 'finance' && !Array.isArray(page.records) || saved.job.kind === 'purchases' && !Array.isArray(page.orders)) throw new Error('Background page could not be parsed. Its source is retained.')
+      let job = saved.job
+      await updateMeta(account, state => {
+        assertLease(state, owner)
+        const existing = state.jobs.find(item => item.kind === job.kind && item.from === job.from && item.to === job.to && item.nextToken === job.nextToken && Boolean(item.updatedOnly) === Boolean(job.updatedOnly))
+        if (existing) job = existing
+        else if (!state.jobs.some(item => item.id === job.id)) state.jobs.push(job)
+      })
+      const issues = Array.isArray(page.issues) ? page.issues.map(value => { const issue = object(value); return `${text(issue.reason)} Source evidence: ${text(issue.raw)}` }) : []
+      await commitPage(account, owner, job, { backgroundId: saved.id, nextToken: text(page.nextToken) || null,
+        records: Array.isArray(page.records) ? page.records.map(object) : undefined,
+        orders: Array.isArray(page.orders) ? page.orders.map(orderSummary) : undefined, issues })
+    }
+  } finally { clearInterval(heartbeat); await updateMeta(account, state => { if (state.leaseOwner === owner) { state.leaseOwner = null; state.leaseUntil = 0 } }).catch(() => {}) }
+}
+function consumeBackground(account: string) {
+  return backgroundDrain ??= readBackgroundPages(account).finally(() => { backgroundDrain = null })
+}
+async function resumeAndroid() {
+  if (!androidDevice || !session || !view.account || (!backgroundEngine && document.visibilityState !== 'visible')) return
+  if (run) return
+  try {
+    if(!backgroundEngine){await refreshView();const force=resumeAfterHandoff;resumeAfterHandoff=false;triggerRecentCheck(force);return}
+    await consumeBackground(view.account)
+    const native=await nativeRequest<{backgroundStatus?:{lastFetch?:number;error?:string}|null}>('session.status')
+    const backgroundNote=native.backgroundStatus?.error || (native.backgroundStatus?.lastFetch ? `Background data fetched: ${new Date(native.backgroundStatus.lastFetch).toLocaleString('en-IN')}` : undefined)
+    if(document.visibilityState!=='visible')return
+    const force=resumeAfterHandoff;resumeAfterHandoff=false
+    publish({progress:'',error:'',backgroundNote});await refreshView();triggerRecentCheck(force)
+  } catch { publish({ error: 'Saved background pages are waiting to be applied. Retrying automatically; data remains on this phone.' }) }
+}
 
 export function triggerRecentCheck(force = false) {
-  if (!session || !view.account || run || view.connecting) return
+  if(androidDevice&&!backgroundEngine){if(force&&session)void nativeRequest('sync.request',{force:false}).catch(()=>{});return}
+  if (!session || !view.account || run || backgroundDrain || view.connecting) return
   const state = view.state
   const last = state?.lastSync ? Date.parse(state.lastSync) : 0
-  if (force || !last || Date.now() - last > 2 * 60000) {
+  if (force || !last || Date.now() - last > currentPreferences().syncMinutes * 60000) {
     const today = getIndiaToday()
     const yesterday = toIndiaDateString(Date.now() - 86400000) ?? today
     void syncHosted({ from: yesterday, to: today }, { silent: true, forceRecent: force })
@@ -71,22 +146,37 @@ export function triggerRecentCheck(force = false) {
 }
 
 export function ensureAutoSyncLoop() {
+  if(backgroundEngine)return
   if (autoSyncTimer || typeof window === 'undefined') return
   autoSyncTimer = setInterval(() => {
     if (document.visibilityState === 'visible') {
-      triggerRecentCheck(false)
+      if (androidDevice) void resumeAndroid(); else triggerRecentCheck(false)
     }
   }, 45000)
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !backgroundEngine) {
   window.addEventListener('focus', () => {
-    triggerRecentCheck(false)
+    if (androidDevice) void resumeAndroid(); else triggerRecentCheck(false)
   })
+  document.addEventListener('visibilitychange', () => { if (androidDevice) { if (document.visibilityState === 'visible') void resumeAndroid(); else { if(run)resumeAfterHandoff=true; stopHosted('background') } } })
 }
 
 export function initializeHosted() {
   return initializing ??= (async () => {
+    if (androidDevice) {
+      const state = await nativeRequest<{ bridgeVersion: number; account: string | null; configured: boolean; backgroundStatus?: { error?: string; lastFetch?: number } | null }>('session.status')
+      if (state.bridgeVersion !== DEVICE_BRIDGE_VERSION) throw new Error('This website needs a compatible Android app update.')
+      if (state.account) {
+        session = state.configured ? { account: state.account, clientId: '', clientSecret: '', refreshToken: '', accessToken: 'native-managed', until: Infinity } : null
+        publish({ account: state.account, connected: Boolean(session), backgroundNote: state.backgroundStatus?.error || (state.backgroundStatus?.lastFetch ? `Background data fetched: ${new Date(state.backgroundStatus.lastFetch).toLocaleString('en-IN')}` : 'Background fetch is scheduled by Android.') })
+        ensureAutoSyncLoop()
+        if (session && backgroundEngine) { try { await consumeBackground(state.account) } catch { publish({error:'Saved background pages are waiting for their writer lease. Retrying automatically.'}) } }
+        await refreshView()
+        if(!backgroundEngine)setTimeout(() => triggerRecentCheck(true),1200)
+      }
+      return
+    }
     let account: string | null = null
     try { const stored = localStorage.getItem(STORAGE_ACCOUNT_KEY); if (stored && /^[a-f0-9]{64}$/.test(stored)) account = stored } catch { /* Cache selection can still be made by connecting. */ }
     let creds: Credentials | null = null
@@ -128,7 +218,7 @@ export function initializeHosted() {
       const isReload = typeof performance !== 'undefined' && (performance.getEntriesByType?.('navigation')?.[0] as PerformanceNavigationTiming | undefined)?.type === 'reload'
       setTimeout(() => triggerRecentCheck(Boolean(isReload)), isReload ? 1200 : 2500)
     }
-  })().catch(() => { initializing = undefined; publish({ error: 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
+  })().catch(cause => { initializing = undefined; publish({ error: androidDevice ? cause instanceof Error ? cause.message : 'Phone data could not be opened. Reopen the app.' : 'Saved browser data could not be opened. Allow website storage and reconnect.' }) })
 }
 export async function connectHosted(credentials: Credentials, remember = true) {
   await initializeHosted()
@@ -141,10 +231,10 @@ export async function connectHosted(credentials: Credentials, remember = true) {
     const account = await digestAccount(credentials.clientId, credentials.refreshToken)
     if (abort.signal.aborted || connecting !== abort) return
     await updateMeta(account, () => {})
-    session = { ...credentials, account, accessToken: token, until: Date.now() + 45 * 60000 }
+    session = androidDevice ? { account, clientId: '', clientSecret: '', refreshToken: '', accessToken: 'native-managed', until: Infinity } : { ...credentials, account, accessToken: token, until: Date.now() + 45 * 60000 }
     try {
-      localStorage.setItem(STORAGE_ACCOUNT_KEY, account)
-      if (remember) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
+      if (!androidDevice) localStorage.setItem(STORAGE_ACCOUNT_KEY, account)
+      if (remember && !androidDevice) localStorage.setItem(STORAGE_CREDS_KEY, JSON.stringify(credentials))
       else localStorage.removeItem(STORAGE_CREDS_KEY)
     } catch { /* This page's session remains usable. */ }
     publish({ account, connected: true, records: 0, state: null, progress: 'Connected. Choosing dates and synchronizing…' })
@@ -154,13 +244,13 @@ export async function connectHosted(credentials: Credentials, remember = true) {
   } catch (cause) { if (!abort.signal.aborted) { publish({ error: cause instanceof Error ? cause.message : 'Connection failed.' }); throw cause } }
   finally { if (connecting === abort) { connecting = null; publish({ connecting: false }) } }
 }
-export function cancelHostedConnection() { connecting?.abort(); connecting = null; publish({ connecting: false }) }
-export function stopHosted() { run?.abort(); publish({ progress: 'Stopping after the current request. Saved pages can be resumed.' }) }
-export function disconnectHosted() { if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null }; connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, connecting: false, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
+export function cancelHostedConnection() { connecting?.abort(); connecting = null; if (androidDevice) void nativeRequest('session.cancel').catch(() => {}); publish({ connecting: false }) }
+export function stopHosted(reason: 'manual' | 'background' = 'manual') { run?.abort(reason); publish({ progress: reason === 'background' ? 'Android continues fetching; saved updates apply when you return.' : 'Stopping after the current request. Saved pages can be resumed.' }) }
+export function disconnectHosted() { if (autoSyncTimer) { clearInterval(autoSyncTimer); autoSyncTimer = null }; connecting?.abort(); stopHosted(); session = null; initializing = undefined; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; if (androidDevice) void nativeRequest('session.forget').catch(() => publish({ error: 'Phone credentials could not be removed. Retry Forget credentials.' })); publish({ connected: false, connecting: false, backgroundNote: undefined, progress: 'Saved credentials forgotten. Cached results remain on this device.' }) }
 async function authorized(action: string, body: Record<string, unknown>, signal: AbortSignal, retry = true): Promise<Record<string, unknown>> {
   const current = session
   if (!current) throw new Error('Connect Amazon to start a sync. Cached results remain available.')
-  if (Date.now() >= current.until) {
+  if (!androidDevice && Date.now() >= current.until) {
     const auth = await relay({ action: 'connect', clientId: current.clientId, clientSecret: current.clientSecret, refreshToken: current.refreshToken }, signal)
     current.accessToken = text(auth.accessToken); current.until = Date.now() + 45 * 60000
     if (!current.accessToken) throw new Error('Reconnect Amazon to continue syncing.')
@@ -198,19 +288,21 @@ function appendJob(state: CacheMeta, job: BrowserJob) {
   if (old) { old.scope = job.scope; if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() } }
   else state.jobs.push(job)
 }
-export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean }) {
+export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean; forceHistory?:boolean; budgetMs?:number }) {
   await initializeHosted()
-  if (run || !session || !view.account || session.account !== view.account) return
+  if(androidDevice && !backgroundEngine) {await nativeRequest('sync.request',{...days,force:Boolean(options?.forceHistory),orderIds:[...detailPriority]});return}
+  if (run || backgroundDrain || !session || !view.account || session.account !== view.account) return
   const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000
   const start = Date.parse(indiaDateToUtcIso(days.from)), stop = Math.min(Date.parse(indiaDateToUtcIso(days.to, true)), requestCutoff)
   if (!Number.isFinite(start) || !Number.isFinite(stop) || start >= stop || stop - start > 5 * 366 * 86400000 || start < Date.UTC(2010, 0, 1)) { publish({ error: 'Choose a valid date range of at most five years.' }); return }
   const wanted = { from: new Date(start).toISOString(), to: new Date(stop).toISOString() }, scope = `${days.from}/${days.to}`, account = view.account, owner = crypto.randomUUID(), abort = new AbortController()
   const tracker = new SyncRunTracker(owner)
+  const deadline=Date.now()+(options?.budgetMs??Number.POSITIVE_INFINITY)
   run = abort; publish({ busy: true, error: '', progress: options?.silent ? 'Syncing latest Amazon orders…' : 'Preparing your requested sync…' })
   let heartbeat: ReturnType<typeof setInterval> | undefined
   const checkedUpdate = (update: (state: CacheMeta) => void) => updateMeta(account, state => { assertLease(state, owner); update(state) })
   const makeJob = (kind: BrowserJob['kind'], range: SyncRange, extra: Partial<BrowserJob> = {}): BrowserJob => ({
-    id: stableJobId(kind, range.from, range.to, extra.orderId ?? extra.asin ?? ''),
+    id: stableJobId(kind, range.from, range.to, extra.orderId ?? extra.asin ?? (extra.updatedOnly ? 'updated' : '')),
     scope,
     kind,
     ...range,
@@ -221,11 +313,42 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     retries: 0,
     ...extra,
   })
+  let metadataTracker=tracker,metadataIntent=-1
+  async function queueMetadata() {
+    if(metadataIntent!==detailRequestVersion){metadataTracker=detailPriority.size?new SyncRunTracker(owner+':details:'+detailRequestVersion):tracker;metadataIntent=detailRequestVersion}
+    const cache=await loadCache(account)
+    const visibleOrders=detailPriority.size?cache.orders.filter(order=>detailPriority.has(order.id)):cache.orders
+    const targets=enrichmentTargets(visibleOrders,cache.catalog,cache.meta,metadataTracker,detailPriority,Date.now())
+    const asins=new Set(targets.asins)
+    if(!detailPriority.size)for(const record of cache.records)for(const item of (Array.isArray(record.items)?record.items:[]).map(object))for(const context of (Array.isArray(item.contexts)?item.contexts:[]).map(object))if(/^[A-Z0-9]{10}$/.test(text(context.asin)))asins.add(text(context.asin))
+    await checkedUpdate(current=>{
+      const enqueue=(kind:'orderItems'|'catalog',resource:string,extra:Partial<BrowserJob>)=>{
+        const existing=current.jobs.find(job=>job.kind===kind && (kind==='orderItems'?job.orderId===resource:job.asin===resource))
+        if(existing){existing.scope=scope;if(Date.now()-existing.createdAt>23*3600000){existing.createdAt=Date.now();existing.nextToken=null};return}
+        if(!metadataTracker.canEnqueue(kind,resource))return
+        metadataTracker.recordEnqueued(kind,resource);appendJob(current,makeJob(kind,wanted,extra))
+      }
+      for(const order of targets.items.slice(0,10))enqueue('orderItems',order.id,{orderId:order.id})
+      if(!current.catalogError){
+        const known=new Map(cache.catalog.map(item=>[item.asin,item]))
+        let queued=0
+        for(const asin of asins){
+          if(queued>=10)break
+          if(Date.now()-(current.catalogChecked[asin]??0)<(known.get(asin)?.imageUrl?7*86400000:60000))continue
+          enqueue('catalog',asin,{asin});queued++
+        }
+      }
+    })
+  }
   try {
     await acquireWakeLock()
     await updateMeta(account, state => { if (state.leaseOwner && (state.leaseUntil ?? 0) > Date.now()) throw new Error('Another tab is syncing this account. Stop that sync or wait two minutes after closing the tab.'); state.leaseOwner = owner; state.leaseUntil = Date.now() + 120000 })
     heartbeat = setInterval(() => { void checkedUpdate(state => { state.leaseUntil = Date.now() + 120000 }).catch(() => abort.abort()) }, 20000)
     await checkedUpdate(state => {
+      // Later changes must be found even when the selected purchases are months old.
+      const recent={from:new Date(Math.max(0,requestCutoff-3*86400000)).toISOString(),to:new Date(requestCutoff).toISOString()}
+      appendJob(state,makeJob('finance',recent))
+      if(androidDevice)appendJob(state,makeJob('purchases',recent,{updatedOnly:true}))
       state.catalogError = null
       state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog' || job.kind === 'orderItems' || job.kind === 'order' || job.kind === 'history')
       for (const job of state.jobs) if (job.scope === scope && Date.now() - job.createdAt > 23 * 3600000) { job.nextToken = null; job.createdAt = Date.now() }
@@ -236,7 +359,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         for (const range of gaps) appendJob(state, makeJob(kind, range))
         const recentFrom = new Date(Math.max(start, stop - 3 * 86400000)).toISOString()
         if (kind === 'purchases') {
-          appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }))
+          appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }, androidDevice ? { updatedOnly: true } : {}))
         } else if (options?.forceRecent || (coverage.length && !pending.length && !gaps.length)) {
           appendJob(state, makeJob(kind, { from: recentFrom, to: wanted.to }))
         }
@@ -244,20 +367,18 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     })
     const next: Record<string, number> = { ...(await meta(account)).nextAllowed }
     const delays: Record<string, number> = { finance: 2000, purchases: 60000, order: 2000, orderItems: 2000, catalog: 2000 }
-    let totalPlanned = 0, completedCount = 0
-    while (!abort.signal.aborted) {
+    let totalPlanned = 0, completedCount = 0, metadataCount = -1, metadataVersion = -1
+    while (!abort.signal.aborted && Date.now()<deadline) {
+      if(metadataVersion!==detailRequestVersion || completedCount-metadataCount>=4){await queueMetadata();metadataCount=completedCount;metadataVersion=detailRequestVersion}
       const state = await meta(account)
       const jobs = state.jobs.filter(job => job.scope === scope)
       if (!jobs.length) {
-        const cache = await loadCache(account), known = new Map(cache.orders.map(order => [order.id, order])), references = new Set<string>(), asins = new Set<string>()
-        const catalogMap = new Map(cache.catalog.map(item => [item.asin, item]))
+        const cache = await loadCache(account), known = new Map(cache.orders.map(order => [order.id, order])), references = new Set<string>()
         for (const record of cache.records) {
           for (const related of (Array.isArray(record.relatedIdentifiers) ? record.relatedIdentifiers : []).map(object)) if (related.relatedIdentifierName === 'ORDER_ID') references.add(text(related.relatedIdentifierValue))
-          for (const item of (Array.isArray(record.items) ? record.items : []).map(object)) for (const context of (Array.isArray(item.contexts) ? item.contexts : []).map(object)) if (/^[A-Z0-9]{10}$/.test(text(context.asin))) asins.add(text(context.asin))
         }
-        for (const order of cache.orders) if (order.asin && /^[A-Z0-9]{10}$/.test(order.asin)) asins.add(order.asin)
 
-        const planned = await checkedUpdate(current => {
+        await checkedUpdate(current => {
           for (const id of references) if (id && !/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(id)) {
             const issue = `Unsupported order reference: ${id}. Its raw financial activity is retained for review.`
             if (!current.issues.includes(issue)) { current.issues.push(issue); current.orderDateIssues++ }
@@ -281,41 +402,17 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
             order.purchased >= wanted.from && order.purchased <= wanted.to
             && !isCovered(order.purchased)
             && tracker.canEnqueue('history', order.id)
-            && Date.now() - (current.historyChecked[order.id] ?? 0) > 6 * 3600000
+            && (options?.forceHistory || Date.now() - (current.historyChecked[order.id] ?? 0) > 6 * 3600000)
           ).slice(0, 10)
           for (const order of dueHistoryOrders) {
             tracker.recordEnqueued('history', order.id)
             appendJob(current, makeJob('history', wanted, { orderId: order.id }))
           }
 
-          // 2. Optional enrichment: Only queued if no pending essential jobs remain
-          const hasEssentialPending = current.jobs.some(j => j.scope === scope && (j.kind === 'finance' || j.kind === 'purchases' || j.kind === 'order' || j.kind === 'history'))
-          if (!hasEssentialPending) {
-            const missingItemOrders = cache.orders.filter(order =>
-              (!order.asin || !order.title)
-              && tracker.canEnqueue('orderItems', order.id)
-              && Date.now() - ((current.orderItemsChecked ?? {})[order.id] ?? 0) > 60000
-            ).slice(0, 10)
-            for (const order of missingItemOrders) {
-              tracker.recordEnqueued('orderItems', order.id)
-              appendJob(current, makeJob('orderItems', wanted, { orderId: order.id }))
-            }
 
-            if (!current.catalogError) {
-              const missingAsins = [...asins].filter(asin => {
-                const item = catalogMap.get(asin)
-                const hasImage = Boolean(item?.imageUrl)
-                const cooldown = hasImage ? 7 * 86400000 : 60000
-                return tracker.canEnqueue('catalog', asin) && syncStarted - (current.catalogChecked[asin] ?? 0) > cooldown
-              }).slice(0, 10)
-              for (const asin of missingAsins) {
-                tracker.recordEnqueued('catalog', asin)
-                appendJob(current, makeJob('catalog', wanted, { asin }))
-              }
-            }
-          }
         })
-        if (!planned.jobs.some(job => job.scope === scope)) break
+        await queueMetadata()
+        if (!(await meta(account)).jobs.some(job => job.scope === scope)) break
         continue
       }
       totalPlanned = Math.max(totalPlanned, completedCount + jobs.length)
@@ -329,7 +426,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         if (a.kind !== b.kind) return (order[a.kind] ?? 9) - (order[b.kind] ?? 9)
         return a.id.localeCompare(b.id)
       })
-      const job = jobs[0], operation = bucket(job), pause = (next[operation] ?? 0) - Date.now()
+      const job = pickSyncJob(jobs,next,completedCount,detailPriority,Date.now()), operation = bucket(job), pause = (next[operation] ?? 0) - Date.now()
       if (pause > 0) {
         const seconds = Math.ceil(pause / 1000)
         publish({ progress: `Waiting for Amazon allowance (${seconds}s) · ${jobs.length} check${jobs.length === 1 ? '' : 's'} remaining (${percent}%)`, percent })
@@ -346,7 +443,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
       while (!succeeded && !abort.signal.aborted) {
         try {
           const action = job.kind === 'history' ? 'finance' : job.kind
-          const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, nextToken: job.nextToken }, abort.signal)
+          const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, updatedOnly: job.updatedOnly, nextToken: job.nextToken }, abort.signal)
           if (abort.signal.aborted) break
           const nextToken = text(page.nextToken) || null
           if (nextToken && nextToken === job.nextToken) throw new Error('Amazon repeated a page token. Resume the saved checkpoint later.')
@@ -382,6 +479,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
           await refreshView()
         } catch (cause) {
           if (abort.signal.aborted) break
+          if (cause instanceof RelayError && (cause.status === 401 || cause.status === 403) && job.kind !== 'catalog') throw cause
           if (cause instanceof RelayError && cause.status === 429) {
             next[operation] = Date.now() + Math.max(cause.retryAfter, 5) * 1000
             await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
@@ -423,21 +521,25 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
             await wait(backoff, abort.signal)
             continue
           }
-          const issueMsg = `Window ${job.from.slice(0, 10)} to ${job.to.slice(0, 10)} (${job.kind}): ${cause instanceof Error ? cause.message : 'Temporarily unavailable'}`
-          await checkedUpdate(current => {
-            if (!current.issues.includes(issueMsg)) current.issues.push(issueMsg)
-            current.jobs = current.jobs.filter(j => j.id !== job.id)
+          const issueMsg = `Window ${job.from.slice(0,10)} to ${job.to.slice(0,10)} (${job.kind}): ${cause instanceof Error?cause.message:'Temporarily unavailable'}`
+          await checkedUpdate(current=>{
+            if(!current.issues.includes(issueMsg))current.issues.push(issueMsg)
+            const queued=current.jobs.find(value=>value.id===job.id);if(queued){queued.state='retryLater';queued.failureReason=issueMsg}
+            current.nextAllowed[operation]=Date.now()+60000
           })
-          if (job.orderId) tracker.recordFailed(job.kind, job.orderId, issueMsg)
-          else if (job.asin) tracker.recordFailed(job.kind, job.asin, issueMsg)
-          await refreshView()
-          break
+          throw cause
         }
       }
     }
+    if (!androidDevice && !abort.signal.aborted) {
+      try {
+        const stock=(await inventoryStorage.get<InventoryState>(`inventory:${account}`)).value
+        if (!stock || Object.values(stock.sources).some(value=>Date.parse(value!.nextAttempt)<=Date.now())) await syncInventory(account,await snapshot(account),inventoryStorage,(job,signal)=>authorized('inventory',{...job},AbortSignal.any([signal,abort.signal])),Boolean(options?.forceHistory))
+      } catch { /* Optional inventory cannot fail financial sync. */ }
+    }
     const finalIssues = (await meta(account)).issues.length
     const doneProgress = abort.signal.aborted
-      ? 'Sync stopped. Completed pages are saved; press Sync now to resume.'
+      ? androidDevice && abort.signal.reason === 'background' ? 'Android continues fetching. Foreground sync resumes automatically on return.' : 'Sync stopped. Completed pages are saved; press Sync now to resume.'
       : finalIssues > 0
         ? `Sync completed with ${finalIssues} item note${finalIssues === 1 ? '' : 's'}. Cached data is saved.`
         : options?.silent
@@ -451,21 +553,16 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     await updateMeta(account, state => { if (state.leaseOwner === owner) { state.leaseOwner = null; state.leaseUntil = 0 } }).catch(() => {})
     if (run === abort) run = null
     publish({ busy: false, percent: undefined }); await refreshView().catch(() => {})
+    if (androidDevice && resumeAfterHandoff && document.visibilityState === 'visible') setTimeout(() => { void resumeAndroid() }, 500)
   }
 }
-export async function clearAndResyncHosted(range?: { from: string; to: string }) {
-  await initializeHosted()
-  if (!view.account) return
-  if (run) stopHosted()
-  const today = getIndiaToday()
-  const yesterday = toIndiaDateString(Date.now() - 86400000) ?? today
-  const days = range ?? { from: yesterday, to: today }
-  const cutoff = indiaDateToUtcIso(days.from)
-  publish({ progress: 'Flushing cached orders and pulling fresh activity from Amazon…' })
-  await clearRecentHostedCache(view.account, cutoff)
-  await refreshView()
-  await syncHosted(days, { forceRecent: true })
+export async function clearAndResyncHosted(range?:{from:string;to:string}) {
+  await initializeHosted();if(!view.account||run)return
+  const today=getIndiaToday(),days=range??{from:toIndiaDateString(Date.now()-86400000)??today,to:today}
+  // Explicit recovery rechecks source activity; it never clears durable seller records.
+  await syncHosted(days,{forceRecent:true,forceHistory:true})
 }
+
 export async function hostedFetch(input: string, init?: RequestInit): Promise<Response> {
   await initializeHosted()
   if (input.startsWith('/api/report-sync/range')) {

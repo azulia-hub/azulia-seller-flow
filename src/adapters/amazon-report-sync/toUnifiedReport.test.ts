@@ -149,7 +149,7 @@ it('supplies real item titles and ASIN-specific images without presenting financ
 
 it('delivers order-only metadata without converting its total to sales', () => {
   const result = toUnifiedReport({ ...snapshot([]), orders: [{ id: '111-1234567-1234567', purchased: '2026-10-31T20:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }] })
-  expect(result.dataset.orders).toEqual([{ orderId: '111-1234567-1234567', purchaseDate: '2026-11-01', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }])
+  expect(result.dataset.orders).toEqual([{ orderId: '111-1234567-1234567', purchaseDate: '2026-10-31T20:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }])
   expect(result.dataset.events).toEqual([])
 })
 it('uses Orders metadata to date new financial activity in the original purchase period', () => {

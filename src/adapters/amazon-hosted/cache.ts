@@ -1,33 +1,14 @@
+import { empty, type BrowserJob, type CacheMeta, type CatalogValue } from './cacheTypes'
+export type { BrowserJob, CacheMeta, CatalogValue } from './cacheTypes'
+import { androidDevice, nativeRequest } from '../device/bridge'
+import { nativeMeta, nativeUpdateMeta, nativeLoadCache, nativePageTransaction, nativeClearRecent } from '../device/sourceStore'
 import { sameContent } from '../../core/sync/sameContent'
-import { mergeCoverage, type SyncRange } from '../../core/sync/ranges'
+import { mergeCoverage } from '../../core/sync/ranges'
 import type { SourceOrderSummary, SyncSnapshot } from '../amazon-report-sync/protocol'
 import { object, text } from '../amazon-report-sync/money'
 
-export interface BrowserJob extends SyncRange {
-  id: string
-  scope: string
-  kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'
-  orderId?: string
-  asin?: string
-  nextToken: string | null
-  createdAt: number
-  state?: 'pending' | 'running' | 'completed' | 'retryLater' | 'failed'
-  runId?: string
-  failureReason?: string
-  retries?: number
-}
-export interface CacheMeta {
-  account: string; revision: number; updatedAt: string | null; lastSync: string | null
-  coverage: SyncRange[]; purchaseCoverage: SyncRange[]; jobs: BrowserJob[]
-  orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>; orderItemsChecked?: Record<string, number>
-  issues: string[]; orderDateIssues: number; catalogError: string | null
-  failedJobs?: Record<string, string>
-  leaseOwner?: string | null; leaseUntil?: number
-}
 interface StoredValue<T> { account: string; id: string; value: T }
-export interface CatalogValue { asin: string; title: string | null; imageUrl: string | null }
 let database: Promise<IDBDatabase> | undefined
-const empty = (account: string): CacheMeta => ({ account, revision: 0, updatedAt: null, lastSync: null, coverage: [], purchaseCoverage: [], jobs: [], orderChecked: {}, historyChecked: {}, nextAllowed: {}, dateFailures: {}, catalogChecked: {}, orderItemsChecked: {}, issues: [], orderDateIssues: 0, catalogError: null })
 function open() {
   return database ??= new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('azulia-amazon-browser-source', 1)
@@ -45,12 +26,14 @@ function open() {
 function result<T>(request: IDBRequest<T>): Promise<T> { return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(new Error('Browser source storage could not be read or written.')) }) }
 function complete(transaction: IDBTransaction) { return new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onabort = transaction.onerror = () => reject(new Error('Browser source storage could not be saved. Previous checkpoints were retained.')) }) }
 export async function meta(account: string): Promise<CacheMeta> {
+  if (androidDevice) return nativeMeta(account)
   const db = await open(), tx = db.transaction('meta'), done = complete(tx)
   void done.catch(() => {})
   const value = await result(tx.objectStore('meta').get(account)) as CacheMeta | undefined
   await done; return value ?? empty(account)
 }
 export async function updateMeta(account: string, update: (value: CacheMeta) => void): Promise<CacheMeta> {
+  if (androidDevice) return nativeUpdateMeta(account, update)
   const db = await open()
   return new Promise((resolve, reject) => {
     const tx = db.transaction('meta', 'readwrite'), store = tx.objectStore('meta'), request = store.get(account)
@@ -60,7 +43,14 @@ export async function updateMeta(account: string, update: (value: CacheMeta) => 
     tx.onabort = tx.onerror = () => reject(failure ?? new Error('The browser sync checkpoint could not be saved.'))
   })
 }
+export async function recordCount(account: string): Promise<number> {
+  if(androidDevice)return (await nativeRequest<{count:number}>('source.count',{account})).count
+  const db=await open(),tx=db.transaction('records','readonly'),done=complete(tx)
+  const count=await result(tx.objectStore('records').index('account').count(account))
+  await done; return count
+}
 export async function loadCache(account: string) {
+  if (androidDevice) return nativeLoadCache(account)
   const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog']), done = complete(tx)
   void done.catch(() => {})
   const [state, records, orders, catalog] = await Promise.all([
@@ -78,17 +68,23 @@ export async function snapshot(account: string): Promise<SyncSnapshot> {
     return { ...record, azuliaOrderPurchaseDate: ids.length === 1 ? orders.get(ids[0])?.purchased ?? null : null, azuliaCatalogImages: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.imageUrl ?? null])), azuliaCatalogTitles: Object.fromEntries(asins.map(asin => [asin, catalog.get(asin)?.title ?? null])) }
   }).sort((a, b) => text(a.postedDate).localeCompare(text(b.postedDate)) || text(a.transactionId).localeCompare(text(b.transactionId)))
   const enrichedOrders = cache.orders.map(order => {
-    const cat = order.asin ? catalog.get(order.asin) : undefined
+    const first = order.items?.[0]
+    const asin = order.asin || first?.asin || null
+    const cat = asin ? catalog.get(asin) : undefined
     return {
       ...order,
-      title: order.title || cat?.title || null,
-      imageUrl: order.imageUrl || cat?.imageUrl || null,
+      asin,
+      sku: order.sku || first?.sku || null,
+      title: order.title || first?.title || cat?.title || null,
+      imageUrl: order.imageUrl || first?.imageUrl || cat?.imageUrl || null,
+      items: order.items?.map(item=>({...item,title:item.title || (item.asin?catalog.get(item.asin)?.title:null) || null,imageUrl:item.imageUrl || (item.asin?catalog.get(item.asin)?.imageUrl:null) || null})),
     }
   })
-  return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: enrichedOrders, coverage: cache.meta.coverage }
+  return { connectionKey: account, revision: cache.meta.revision, updatedAt: cache.meta.updatedAt, delta: false, records, issues: cache.meta.issues, orders: enrichedOrders, coverage: cache.meta.coverage, purchaseCoverage:cache.meta.purchaseCoverage }
 }
 export function assertLease(state: CacheMeta, owner: string) { if (state.leaseOwner !== owner || (state.leaseUntil ?? 0) < Date.now()) throw new Error('This sync session lost its browser lock. Resume from the saved checkpoint.') }
 export async function clearRecentHostedCache(account: string, cutoffIso?: string) {
+  if (androidDevice) return nativeClearRecent(account, cutoffIso)
   const db = await open(), tx = db.transaction(['meta', 'orders', 'records'], 'readwrite'), done = complete(tx)
   void done.catch(() => {})
   try {
@@ -115,12 +111,22 @@ export async function clearRecentHostedCache(account: string, cutoffIso?: string
   }
 }
 
-export async function commitPage(account: string, owner: string, job: BrowserJob, page: { records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number; price?: string | null; currency?: string | null }[] }) {
-  const db = await open(), tx = db.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite'), done = complete(tx)
+export async function commitPage(account: string, owner: string, job: BrowserJob, page: { backgroundId?: string; records?: Record<string, unknown>[]; orders?: SourceOrderSummary[]; issues?: string[]; nextToken: string | null; catalog?: CatalogValue; orderItems?: { asin?: string | null; sku?: string | null; title?: string | null; quantity?: number; price?: string | null; currency?: string | null }[] }) {
+  const native = androidDevice ? await nativePageTransaction(account, job, page) : null
+  const db = native ? null : await open(), tx = db?.transaction(['meta', 'records', 'orders', 'catalog', 'history'], 'readwrite')
+  const done = tx ? complete(tx) : Promise.resolve()
+  // Native persistence uses JSON: absent optional properties must not count as changes
+  // merely because an in-memory summary spells them as `undefined`.
+  const matches = (previous: unknown, next: unknown) => sameContent(previous, native ? JSON.parse(JSON.stringify(next)) : next)
+  const table = (name: 'meta' | 'records' | 'orders' | 'catalog' | 'history') => native ? native.table(name) : {
+    get: (key: string | string[]) => result(tx!.objectStore(name).get(key)),
+    put: (value: unknown) => { tx!.objectStore(name).put(value) },
+    add: (value: unknown) => { tx!.objectStore(name).add(value) },
+  }
   // Attach the rejection handler immediately; await the same promise after all writes.
   void done.catch(() => {})
   try {
-    const metadata = tx.objectStore('meta'), state = await result(metadata.get(account)) as CacheMeta
+    const metadata = table('meta'), state = await metadata.get(account) as CacheMeta
     assertLease(state, owner)
     const current = state.jobs.find(value => value.id === job.id)
     if (!current || current.nextToken !== job.nextToken) throw new Error('A newer source page already advanced this browser checkpoint.')
@@ -128,16 +134,16 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
     for (const record of page.records ?? []) {
       const id = text(record.transactionId)
       if (!id || !Number.isFinite(Date.parse(text(record.postedDate)))) throw new Error('Source transaction identity/date is unsupported. The checkpoint was retained.')
-      const store = tx.objectStore('records'), old = await result(store.get([account, id])) as StoredValue<Record<string, unknown>> | undefined
-      if (!old || !sameContent(old.value, record)) {
-        if (old) tx.objectStore('history').add({ account, id, value: old.value, observed: Date.now() })
+      const store = table('records'), old = await store.get([account, id]) as StoredValue<Record<string, unknown>> | undefined
+      if (!old || !matches(old.value, record)) {
+        if (old) table('history').add({ account, id, value: old.value, observed: Date.now() })
         store.put({ account, id, value: record }); changed = true
       }
     }
     for (const order of page.orders ?? []) {
       if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(order.id) || !Number.isFinite(Date.parse(order.purchased))) throw new Error('Unsupported order identity or date. The checkpoint was retained.')
       state.orderChecked[order.id] = Date.now()
-      const store = tx.objectStore('orders'), old = await result(store.get([account, order.id])) as StoredValue<SourceOrderSummary> | undefined
+      const store = table('orders'), old = await store.get([account, order.id]) as StoredValue<SourceOrderSummary> | undefined
       const value: SourceOrderSummary = {
         ...old?.value,
         ...order,
@@ -148,10 +154,10 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
         imageUrl: order.imageUrl ?? old?.value.imageUrl ?? null,
         items: order.items ?? old?.value.items,
       }
-      if (!old || !sameContent(old.value, value)) { store.put({ account, id: order.id, value }); changed = true }
+      if (!old || !matches(old.value, value)) { store.put({ account, id: order.id, value }); changed = true }
     }
     if (page.orderItems && job.orderId) {
-      const store = tx.objectStore('orders'), old = await result(store.get([account, job.orderId])) as StoredValue<SourceOrderSummary> | undefined
+      const store = table('orders'), old = await store.get([account, job.orderId]) as StoredValue<SourceOrderSummary> | undefined
       if (old?.value) {
         const existingItems = Array.isArray(old.value.items) ? old.value.items : []
         const items = job.nextToken ? [...existingItems, ...page.orderItems] : page.orderItems
@@ -169,7 +175,7 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
           currency: old.value.currency ?? (first?.currency ?? null),
           items: items.length ? items : old.value.items,
         }
-        if (!sameContent(old.value, value)) {
+        if (!matches(old.value, value)) {
           store.put({ account, id: job.orderId, value })
           changed = true
         }
@@ -178,8 +184,8 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       state.orderItemsChecked[job.orderId] = Date.now()
     }
     if (page.catalog) {
-      const item = page.catalog, store = tx.objectStore('catalog'), old = await result(store.get([account, item.asin])) as StoredValue<CatalogValue> | undefined
-      if (!old || !sameContent(old.value, item)) { store.put({ account, id: item.asin, value: item }); changed = true }
+      const item = page.catalog, store = table('catalog'), old = await store.get([account, item.asin]) as StoredValue<CatalogValue> | undefined
+      if (!old || !matches(old.value, item)) { store.put({ account, id: item.asin, value: item }); changed = true }
       state.catalogChecked[item.asin] = Date.now()
     }
     if (page.issues?.length) { const before = state.issues.length; state.issues = [...new Set([...state.issues, ...page.issues])]; state.orderDateIssues += state.issues.length - before }
@@ -190,7 +196,7 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       current.state = 'completed'
       state.jobs = state.jobs.filter(value => value.id !== job.id)
       if (job.kind === 'finance') state.coverage = mergeCoverage([...state.coverage, { from: job.from, to: job.to }])
-      if (job.kind === 'purchases') state.purchaseCoverage = mergeCoverage([...state.purchaseCoverage, { from: job.from, to: job.to }])
+      if (job.kind === 'purchases' && !job.updatedOnly) state.purchaseCoverage = mergeCoverage([...state.purchaseCoverage, { from: job.from, to: job.to }])
       if (job.kind === 'history' && job.orderId) state.historyChecked[job.orderId] = Date.now()
       if (job.kind === 'orderItems' && job.orderId) {
         state.orderItemsChecked = state.orderItemsChecked || {}
@@ -200,6 +206,7 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
     if (changed || state.revision === 0 && !page.nextToken) { state.revision++; state.updatedAt = new Date().toISOString() }
     state.lastSync = new Date().toISOString(); state.leaseUntil = Date.now() + 120000
     metadata.put(state)
+    if (native) await native.commit()
     await done
-  } catch (cause) { try { tx.abort() } catch { /* A failed transaction already aborted. */ } await done.catch(() => {}); throw cause }
+  } catch (cause) { native?.abort(); try { tx?.abort() } catch { /* A failed transaction already aborted. */ } await done.catch(() => {}); throw cause }
 }

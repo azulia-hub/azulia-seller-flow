@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
 import { startLabelCutter } from '../../adapters/browser/labelCutter'
 import type { CutterResult } from '../../adapters/amazon-labels/types'
+import { saveGeneratedFile } from './saveGeneratedFile'
+import { androidDevice } from '../../adapters/device/bridge'
 import './tools.css'
 
 function useDownloadUrl(data: Uint8Array<ArrayBuffer> | string | undefined, type: string) {
@@ -15,12 +17,27 @@ function useDownloadUrl(data: Uint8Array<ArrayBuffer> | string | undefined, type
   return url
 }
 function DownloadResult({ result }: { result: CutterResult }) {
-  const pdfUrl = useDownloadUrl(result.pdf, 'application/pdf')
-  const packingUrl = useDownloadUrl(result.packingPdf, 'application/pdf')
-  const csvUrl = useDownloadUrl(result.packingCsv, 'text/csv;charset=utf-8')
+  const pdfUrl = useDownloadUrl(androidDevice ? undefined : result.pdf, 'application/pdf')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [saveMessage, setSaveMessage] = useState('')
+  const mounted = useRef(true)
+  const savingNow = useRef(false)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  async function save(data: Uint8Array<ArrayBuffer> | string, name: string, mime: string) {
+    if (savingNow.current) return
+    savingNow.current = true; setSaving(true); setSaveError(''); setSaveMessage('')
+    try {
+      const outcome = await saveGeneratedFile(data, name, mime)
+      if (mounted.current) setSaveMessage(outcome === 'saved' ? `${name} saved.` : outcome === 'cancelled' ? 'Save cancelled. Your prepared files are still available.' : 'Download requested. Check your browser downloads.')
+    } catch (error) { if (mounted.current) setSaveError(error instanceof Error ? error.message : 'Could not save the file. Try again.') }
+    finally { savingNow.current = false; if (mounted.current) setSaving(false) }
+  }
   return <section className="pdf-result" aria-label="Prepared labels">
     <div role="status"><h3>Your labels are ready</h3><p><strong>{result.labels} labels</strong> · {result.units} ordered units · {result.pages} A4 {result.pages === 1 ? 'sheet' : 'sheets'}</p></div>
-    <div className="pdf-downloads">{pdfUrl ? <a className="primary" href={pdfUrl} download="amazon-labels.pdf">Download labels PDF</a> : null}{packingUrl ? <a className="secondary" href={packingUrl} download="amazon-labels-packing-list.pdf">Packing list PDF</a> : null}{csvUrl ? <a className="secondary" href={csvUrl} download="amazon-labels-packing-list.csv">Packing list CSV</a> : null}</div>
+    <div className="pdf-downloads" aria-busy={saving}><button className="primary" disabled={saving} onClick={() => void save(result.pdf, 'amazon-labels.pdf', 'application/pdf')}>{saving ? 'Saving…' : 'Download labels PDF'}</button>{result.packingPdf ? <button className="secondary" disabled={saving} onClick={() => void save(result.packingPdf!, 'amazon-labels-packing-list.pdf', 'application/pdf')}>Packing list PDF</button> : null}{result.packingCsv !== undefined ? <button className="secondary" disabled={saving} onClick={() => void save(result.packingCsv!, 'amazon-labels-packing-list.csv', 'text/csv')}>Packing list CSV</button> : null}</div>
+    {saveError ? <p className="pdf-error" role="alert">{saveError}</p> : null}{saveMessage ? <p role="status">{saveMessage}</p> : null}
+    {androidDevice ? <p>Choose a folder in Android’s Save file dialog, then tap Save.</p> : null}
     <p className="pdf-print-note"><strong>Print on A4 at actual size / 100%.</strong> Choose one PDF page per sheet; four labels are already arranged. Check a printed sample before a large batch.</p>
     <details><summary>View file counts and products</summary><ul>{result.sources.map((source, index) => <li key={index}>{source.name} — {source.labels} labels</li>)}</ul><div className="pdf-product-list">{result.products.map((p, index) => <div key={index}><span>{p.product}</span><strong>{p.quantity} units · {p.parcels} parcels</strong></div>)}</div></details>
     {pdfUrl ? <p><a href={pdfUrl} target="_blank" rel="noreferrer">Open PDF preview in a new tab</a></p> : null}

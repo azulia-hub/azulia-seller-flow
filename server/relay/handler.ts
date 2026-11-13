@@ -1,3 +1,4 @@
+import { createInventoryReader } from '../../src/adapters/amazon-inventory/reader'
 import { requirePilotAccessToken, TokenExchangeError } from '../amazon/pilot'
 import { createActivityReader, SourceError } from '../local/sync/reader'
 import { createOrderDateReader } from '../local/sync/orders'
@@ -35,9 +36,10 @@ export async function handleAmazonRelay(request: Request, upstream: typeof fetch
       const token = await requirePilotAccessToken({ AMAZON_SP_CLIENT_ID: value(body.clientId, 1024), AMAZON_SP_CLIENT_SECRET: value(body.clientSecret, 2048), AMAZON_SP_REFRESH_TOKEN: value(body.refreshToken) }, upstream)
       return json({ accessToken: token, expiresIn: 2700 })
     }
-    if (!['finance', 'purchases', 'order', 'orderItems', 'catalog'].includes(action)) return json({ error: 'Unsupported operation.' }, 400)
+    if (!['finance', 'purchases', 'order', 'orderItems', 'catalog', 'inventory'].includes(action)) return json({ error: 'Unsupported operation.' }, 400)
     const token = value(body.accessToken), credentials = {}, nextToken = body.nextToken === undefined || body.nextToken === null ? null : value(body.nextToken)
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(45000)])
+    if (action === 'inventory') return json(await createInventoryReader(credentials,upstream,token)({source:body.source==='listings'?'listings':'fba',sellerId:text(body.sellerId),nextToken:text(body.nextToken)||null},signal))
     if (action === 'catalog') return json(await createCatalogReader(credentials, upstream, token)(value(body.asin, 10), signal))
     if (action === 'order') return json(await createOrderDateReader(credentials, upstream, token).one(value(body.orderId, 19), signal))
     if (action === 'orderItems') return json(await createOrderDateReader(credentials, upstream, token).items(value(body.orderId, 19), signal, nextToken))

@@ -50,6 +50,7 @@ export interface SkuTrendPoint {
 }
 
 export interface SkuProfitSummary {
+  readonly customerRefunds?: number
   readonly fulfillmentFees?: number
   readonly sku: string
   readonly grossSales: number
@@ -240,6 +241,7 @@ function summarizeSkuEvents(skuEvents: readonly CanonicalFinancialEvent[], sku: 
   const skuReturns = returns.skuSummaries.find(item => item.sku === sku)
   return {
     sku,
+    customerRefunds: summary.refundValue,
     grossSales: summary.grossSales,
     netProductRevenue: summary.netProductRevenue,
     soldQuantity: summary.soldQuantity,

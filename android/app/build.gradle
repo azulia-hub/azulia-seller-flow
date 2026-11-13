@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'in.azulia.seller'
+    compileSdk 36
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'in.azulia.seller'
+        minSdk 28
+        targetSdk 36
+        versionCode 12
+        versionName '0.2.2'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    signingConfigs {
+        release {
+            if (System.getenv('AZULIA_KEYSTORE')) {
+                storeFile file(System.getenv('AZULIA_KEYSTORE'))
+                storePassword System.getenv('AZULIA_STORE_PASSWORD')
+                keyAlias System.getenv('AZULIA_KEY_ALIAS')
+                keyPassword System.getenv('AZULIA_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release { minifyEnabled false; if (System.getenv('AZULIA_KEYSTORE')) signingConfig signingConfigs.release }
+    }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.12.1' }

@@ -1,5 +1,16 @@
 # Seller Analytics — Project Context
 
+## Current direction — ADR-076
+
+The cloud-database architecture was reverted at the owner's request. Extend the
+existing local SQLite storage with retained workspace data/images and build an
+Android shell that loads the GitHub Pages UI while native code supplies Amazon
+requests, encrypted credentials and local SQLite/files. Native Android source is
+implemented (signed release APK compiled; device verification pending); see android/README.md. Reuse the current pure
+TypeScript calculations. Phone and desktop stores remain independent; no cloud
+database or automatic cross-device synchronization is implied. Website code can
+update without reinstalling; native/schema changes use a signed APK update.
+
 ## Product Vision
 
 Build a polished, mobile-friendly, local-first analytics web application for marketplace sellers. The app should let non-technical users upload reports, normalize data from different marketplaces, explore and manipulate data, create custom metrics without code, build dashboards, compare periods, forecast trends, inspect returns/ads/profitability, and receive deterministic insights and suggestions.
@@ -380,3 +391,7 @@ Keep cached/completed results visible through background API fetches and recalcu
 ## Optional Netlify mode — 2026-11-08 (ADR-073)
 
 The owner now requests hosted access without a local machine, persistent cloud seller storage or scheduled fetching. Netlify is an ephemeral API relay; all source/reading caches and sync checkpoints stay on the user's browser/device. Credentials are entered for each page session and never persisted by application code. Amazon calls occur only during explicit Connect/Sync actions; closing the browser stops the workflow. Existing local mode, manual imports and financial semantics remain available. Implementation and regression fixtures are authored; tests/build, commit/push, publishing and deployment remain deferred.
+
+## Current implementation update — ADR-085
+
+Unified automatic processing is implemented for desktop and Android: durable completed readings, shared TypeScript snapshot calculations, 2–5 minute preferences, pull refresh, runtime controls and explicit Gross/Amazon earnings/Profit. Android uses a bundled headless runtime; desktop uses a Node worker. Protocol 6 / Android 0.2.0. This final feature set has compilation checks, but final functional/device acceptance is pending because the owner explicitly stopped testing. Do not resume tests until asked. Gross currently remains recorded-financial sales with pending values separate, as previously agreed; a later question about all-order sales is awaiting the owner's definition.
