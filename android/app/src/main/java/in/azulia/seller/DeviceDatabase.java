@@ -23,7 +23,7 @@ final class DeviceDatabase extends SQLiteOpenHelper {
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { throw new IllegalStateException("Database migration required; existing data retained."); }
     static void account(String account) { if (!account.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid account."); }
     static void kind(String kind) { if (!kind.equals("records") && !kind.equals("orders") && !kind.equals("catalog")) throw new IllegalArgumentException("Invalid source collection."); }
-    static void workspace(String key) { if (!key.matches("(?:settings|(?:reading|inventory|inventory-config|inventory-alerts):[a-f0-9]{64})")) throw new IllegalArgumentException("Invalid workspace key."); }
+    static void workspace(String key) { if (!key.matches("(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})")) throw new IllegalArgumentException("Invalid workspace key."); }
     private long version(SQLiteDatabase db, String key) {
         try (Cursor cursor = db.rawQuery("SELECT version FROM retained WHERE name=?", new String[]{key})) { return cursor.moveToFirst() ? cursor.getLong(0) : 0; }
     }
@@ -57,7 +57,7 @@ final class DeviceDatabase extends SQLiteOpenHelper {
     JSONObject workspaceHead(String key) throws Exception { workspace(key);return new JSONObject().put("version",version(getReadableDatabase(),key)); }
     JSONObject workspaceGet(String key) throws Exception {
         workspace(key); SQLiteDatabase db=getReadableDatabase();
-        if (key.startsWith("reading:") || key.startsWith("inventory:")) {
+        if (key.startsWith("reading:") || key.startsWith("inventory:") || key.startsWith("reviews:")) {
             try (Cursor cursor=db.rawQuery("SELECT count(*) FROM chunks WHERE name=?",new String[]{key})) {
                 cursor.moveToFirst(); return new JSONObject().put("version",version(db,key)).put("value",JSONObject.NULL).put("chunked",true).put("parts",cursor.getInt(0));
             }
@@ -78,7 +78,7 @@ final class DeviceDatabase extends SQLiteOpenHelper {
         try {
             if (action.equals("begin")) {
                 String key=input.getString("key"); workspace(key);
-                if (!key.startsWith("reading:") && !key.startsWith("inventory:")) throw new IllegalArgumentException("Only readings use chunk uploads.");
+                if (!key.startsWith("reading:") && !key.startsWith("inventory:") && !key.startsWith("reviews:")) throw new IllegalArgumentException("Only readings use chunk uploads.");
                 int parts=input.getInt("parts"); if (parts<1 || parts>4096) throw new IllegalArgumentException("Reading exceeds supported size.");
                 long base=version(db,key); if (input.has("version") && !input.isNull("version") && input.getLong("version")!=base) throw new Conflict();
                 String id=UUID.randomUUID().toString(),name=uploadKey(id);

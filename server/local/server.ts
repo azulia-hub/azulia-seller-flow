@@ -1,4 +1,5 @@
-import type { BackgroundCalculation } from './backgroundRunner.ts'
+import {createReviewTransport} from '../../src/adapters/amazon-reviews/transport.ts'
+import type {BackgroundCalculation } from './backgroundRunner.ts'
 import type { ReportSync } from './sync/coordinator.ts'
 import { createServer, type ServerResponse } from 'node:http'
 import { readFile, realpath } from 'node:fs/promises'
@@ -23,6 +24,7 @@ const script = `const button=document.getElementById('check'),result=document.ge
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.ttf': 'font/ttf', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.txt': 'text/plain' }
 
 export function createLocalServer(options: { port: number; dist: string; credentials: PilotCredentials; fetch?: typeof fetch; sync?: ReportSync; device?: DeviceStore; calculation?:BackgroundCalculation; images?: ImageStore }) {
+  const reviewTransport=createReviewTransport(options.credentials,options.fetch??fetch)
   let inFlight = false
   const connectionKey = createHash('sha256').update(JSON.stringify(options.credentials)).digest('hex')
   function send(response: ServerResponse, status: number, body: string | Buffer, type = 'application/json; charset=utf-8',extra:Record<string,string>={}) {
@@ -53,6 +55,28 @@ export function createLocalServer(options: { port: number; dist: string; credent
         let body='';for await(const chunk of request){body+=chunk.toString();if(body.length>4096){json(response,413,{error:'Refresh request too large.'});return}}
         if(body){try{const input=JSON.parse(body);forceHistory=input.forceHistory!==false;if(input.from&&input.to){const from=Date.parse(`${input.from}T00:00:00+05:30`),to=Date.parse(`${input.to}T00:00:00+05:30`)+86400000;if(!Number.isFinite(from)||!Number.isFinite(to)||from>=to)throw new Error();range={from:new Date(from).toISOString(),to:new Date(to).toISOString()}}}catch{json(response,400,{error:'Invalid refresh dates.'});return}}
         options.sync?.refresh(range,forceHistory);options.calculation?.request();json(response,200,{queued:true});return
+      }
+      if(path==='/api/reviews/action'){
+        if(request.method!=='POST'||request.headers.origin!==origin||request.headers['x-azulia-intent']!=='review-request'||!options.device){json(response,403,{error:'Review action is not allowed.'});return}
+        let raw='';for await(const chunk of request){raw+=chunk.toString();if(raw.length>4096){json(response,413,{error:'Request too large.'});return}}
+        try{
+          const input=JSON.parse(raw);if(input.account!==connectionKey||typeof input.orderId!=='string'||!/^\w{3}-\d{7}-\d{7}$/.test(input.orderId))throw new Error('Invalid review identity.')
+          const signal=AbortSignal.timeout(18000)
+          if(input.action==='order'){json(response,200,await reviewTransport.order(input.orderId,signal));return}
+          if(input.action==='eligibility'){json(response,200,{eligible:await reviewTransport.eligible(input.orderId,signal)});return}
+          if(input.action!=='submit')throw new Error('Unsupported review action.')
+          const key=`review-attempt:${connectionKey}:${input.orderId}`,entry=options.device.get(key),claim=entry.value as {attemptId?:string;state?:string;source?:string}|null
+          if(!claim||claim.attemptId!==input.attemptId||claim.state!=='prepared')throw new Error('Submission is already dispatched or not claimed.')
+          if(claim.source==='automatic'){
+            const configEntry=options.device.get(`reviews-config:${connectionKey}`)
+            if(!(configEntry.value as {autoEnabled?:boolean}|null)?.autoEnabled)throw new Error('Automatic sending was disabled before dispatch.')
+          }
+          const reviewWorkspace=(options.device.get(`reviews:${connectionKey}`).value as {blocked?:Record<string,boolean>}|null)
+          if(reviewWorkspace?.blocked?.[input.orderId])throw new Error('Replacement chain was excluded before dispatch.')
+          options.device.put(key,{...claim,state:'dispatched'},entry.version)
+          await reviewTransport.submit(input.orderId,input.attemptId,signal);json(response,200,{accepted:true})
+        }catch(cause){const error=cause as {message?:string;status?:number};json(response,error.status&&error.status>=400?error.status:409,{error:error.message??'Review action was not confirmed.'})}
+        return
       }
       if (path === '/api/device/workspace') {
         if (!options.device) { json(response, 503, { error: 'Device storage is starting.' }); return }

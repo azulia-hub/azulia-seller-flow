@@ -8,7 +8,7 @@ import java.util.concurrent.Executors;
 
 /** One-way capabilities: no arbitrary URLs, filesystem paths, SQL, or secret-reading method. */
 final class DeviceBridge {
-    static final int VERSION=7;
+    static final int VERSION=9;
     private final Activity activity;
     private final android.content.Context context;
     private final HeadlessSync.Listener engine;
@@ -32,7 +32,7 @@ final class DeviceBridge {
             if (request.getInt("version")!=VERSION) { respond(reply,new JSONObject().put("id",id).put("status",409).put("error","Update the Android app before using this website.")); return; }
             JSONObject payload=request.optJSONObject("payload"); if (payload==null) payload=new JSONObject(); final JSONObject input=payload;
             if (action.equals("session.cancel")) session.cancel();
-            ExecutorService executor=action.equals("image.get")?media:action.equals("amazon.request") || action.equals("session.connect")?network:storage;
+            ExecutorService executor=action.equals("image.get")?media:action.equals("amazon.request") || action.equals("reviews.submit") || action.equals("session.connect")?network:storage;
             executor.execute(() -> {
                 JSONObject result=new JSONObject();
                 try { result.put("id",id).put("result",execute(action,input)); }
@@ -47,8 +47,9 @@ final class DeviceBridge {
             });
         } catch (Exception ignored) { /* Malformed messages never access capabilities or leak raw exceptions. */ }
     }
+    private static final class ReviewSubmission {}
     private Object execute(String action,JSONObject input) throws Exception {
-        if(engine!=null && !(action.startsWith("source.")||action.startsWith("workspace.")||action.startsWith("engine.")||action.equals("reading.status")||action.equals("session.status")||action.equals("amazon.request")||action.equals("inventory.notify")||action.startsWith("background.")))throw new IllegalArgumentException("Unsupported background capability.");
+        if(engine!=null && !(action.startsWith("source.")||action.startsWith("workspace.")||action.startsWith("engine.")||action.equals("reading.status")||action.equals("session.status")||action.equals("amazon.request")||action.equals("reviews.submit")||action.equals("inventory.notify")||action.startsWith("background.")))throw new IllegalArgumentException("Unsupported background capability.");
         switch (action) {
             case "session.status": {
                 JSONObject status=session.status(); if (status.optBoolean("configured")) BackgroundSync.schedule(context);
@@ -61,12 +62,40 @@ final class DeviceBridge {
             case "ui.theme": ((MainActivity)activity).applySystemTheme(input.optBoolean("dark")); return true;
             case "live.status": case "sync.status": return LiveSync.status(context);
             case "sync.details": {JSONObject safe=LiveSync.validateIntent(input);main.post(()->{HeadlessSync.prioritize(safe);if(!HeadlessSync.busy()&&safe.optJSONArray("orderIds")!=null&&safe.optJSONArray("orderIds").length()>0)LiveSync.request((MainActivity)activity,safe);});return true;}
-            case "sync.request": main.post(()->LiveSync.request((MainActivity)activity,input));return LiveSync.status(context);
+            case "sync.request-status": return LiveSync.requestStatus(context,input.getString("requestId"));
+            case "sync.request": LiveSync.registerRequest(context,input);main.post(()->LiveSync.request((MainActivity)activity,input));return LiveSync.status(context);
             case "reading.status": return database.readingStatus(input.getString("account"));
             case "engine.ready": if(engine!=null){database.discardUploadStaging();engine.ready();}return true;
             case "engine.phase": if(engine!=null)engine.phase(input);return true;
             case "engine.completed": if(engine!=null)engine.complete(input);return true;
             case "live.configure": activity.runOnUiThread(() -> LiveSync.configure((MainActivity)activity,input.optBoolean("enabled"))); return LiveSync.status(activity);
+            case "reviews.submit": {
+                if(engine!=null&&!LiveSync.networkAllowed(context))throw new AmazonSession.ApiError(0,"Waiting for an allowed connection.",60);
+                String account=session.status().getString("account"),id=input.getString("orderId");
+                if(!id.matches("[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}"))throw new IllegalArgumentException("Invalid order.");
+                synchronized(ReviewSubmission.class){
+                    String key="review-attempt:"+account+":"+id;
+                    Object saved=database.retained(key);
+                    if(!(saved instanceof JSONObject))throw new IllegalArgumentException("Submission claim missing.");
+                    JSONObject claim=(JSONObject)saved;
+                    if(!claim.optString("attemptId").equals(input.getString("attemptId"))||!claim.optString("state").equals("prepared"))
+                        throw new IllegalArgumentException("Submission already dispatched or not claimed.");
+                    if("automatic".equals(claim.optString("source"))){
+                        Object configObj=database.retained("reviews-config:"+account);
+                        if(configObj instanceof JSONObject && !((JSONObject)configObj).optBoolean("autoEnabled",false))
+                            throw new IllegalStateException("Automatic sending was disabled before dispatch.");
+                    }
+                    Object reviewsObj=database.retained("reviews:"+account);
+                    if(reviewsObj instanceof JSONObject){
+                        JSONObject blocked=((JSONObject)reviewsObj).optJSONObject("blocked");
+                        if(blocked!=null && blocked.optBoolean(id,false))
+                            throw new IllegalStateException("Replacement chain was excluded before dispatch.");
+                    }
+                    claim.put("state","dispatched");
+                    database.retain(key,claim);
+                }
+                return session.solicit(id);
+            }
             case "amazon.request": {
                 String url=input.getString("url");
                 if(engine!=null&&!LiveSync.networkAllowed(context))throw new AmazonSession.ApiError(0,"Waiting for an allowed internet connection; saved checkpoints are retained.",60);

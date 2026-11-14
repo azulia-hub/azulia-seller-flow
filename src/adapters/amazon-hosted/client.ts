@@ -1,3 +1,6 @@
+import {runReviewCycle} from '../amazon-reviews/service'
+import {reviewOrders} from '../amazon-reviews/orders'
+import type {ReviewOrder} from '../../core/review-requests/types'
 import { syncInventory } from '../amazon-inventory/syncInventory'
 import { inventoryStorage } from '../amazon-inventory/storage'
 import type { InventoryState } from '../amazon-inventory/workspaceTypes'
@@ -269,6 +272,8 @@ function wait(milliseconds: number, signal: AbortSignal) {
 function orderSummary(value: unknown): SourceOrderSummary {
   const row = object(value), summary = object(row.summary)
   return {
+    isReplacementOrder:typeof summary.isReplacementOrder==='boolean'?summary.isReplacementOrder:typeof row.isReplacementOrder==='boolean'?row.isReplacementOrder:null,
+    replacedOrderId:text(summary.replacedOrderId)||text(row.replacedOrderId)||null,earliestDeliveryDate:text(summary.earliestDeliveryDate)||text(row.earliestDeliveryDate)||null,latestDeliveryDate:text(summary.latestDeliveryDate)||text(row.latestDeliveryDate)||null,reviewMetadataCheckedAt:text(summary.reviewMetadataCheckedAt)||text(row.reviewMetadataCheckedAt)||null,
     id: text(row.id),
     purchased: text(row.purchased),
     status: text(summary.status) || text(row.status) || null,
@@ -285,14 +290,17 @@ function orderSummary(value: unknown): SourceOrderSummary {
 const bucket = (job: BrowserJob) => job.kind === 'history' ? 'finance' : job.kind
 function appendJob(state: CacheMeta, job: BrowserJob) {
   const old = state.jobs.find(value => value.id === job.id)
-  if (old) { old.scope = job.scope; if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() } }
-  else state.jobs.push(job)
+  if (old) {
+    old.scope = job.scope
+    if (job.lane) old.lane = job.lane
+    if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() }
+  } else state.jobs.push(job)
 }
 export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean; forceHistory?:boolean; budgetMs?:number }) {
   await initializeHosted()
   if(androidDevice && !backgroundEngine) {await nativeRequest('sync.request',{...days,force:Boolean(options?.forceHistory),orderIds:[...detailPriority]});return}
   if (run || backgroundDrain || !session || !view.account || session.account !== view.account) return
-  const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000
+  const syncStarted = Date.now(), requestCutoff = syncStarted - 5 * 60000, ordersCutoff = syncStarted - 2 * 60000
   const start = Date.parse(indiaDateToUtcIso(days.from)), stop = Math.min(Date.parse(indiaDateToUtcIso(days.to, true)), requestCutoff)
   if (!Number.isFinite(start) || !Number.isFinite(stop) || start >= stop || stop - start > 5 * 366 * 86400000 || start < Date.UTC(2010, 0, 1)) { publish({ error: 'Choose a valid date range of at most five years.' }); return }
   const wanted = { from: new Date(start).toISOString(), to: new Date(stop).toISOString() }, scope = `${days.from}/${days.to}`, account = view.account, owner = crypto.randomUUID(), abort = new AbortController()
@@ -346,9 +354,28 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     heartbeat = setInterval(() => { void checkedUpdate(state => { state.leaseUntil = Date.now() + 120000 }).catch(() => abort.abort()) }, 20000)
     await checkedUpdate(state => {
       // Later changes must be found even when the selected purchases are months old.
-      const recent={from:new Date(Math.max(0,requestCutoff-3*86400000)).toISOString(),to:new Date(requestCutoff).toISOString()}
-      appendJob(state,makeJob('finance',recent))
-      if(androidDevice)appendJob(state,makeJob('purchases',recent,{updatedOnly:true}))
+      const recentStart = new Date(Math.max(0, requestCutoff - 3 * 86400000)).toISOString()
+      const recentEnd = new Date(requestCutoff).toISOString()
+      const existingRecentFinance = state.jobs.find(job => job.kind === 'finance' && job.to >= new Date(requestCutoff - 24 * 3600000).toISOString())
+      if (existingRecentFinance) {
+        existingRecentFinance.scope = scope
+        if (Date.parse(existingRecentFinance.to) < Date.parse(recentEnd) - 60000) {
+          appendJob(state, makeJob('finance', { from: existingRecentFinance.to, to: recentEnd }))
+        }
+      } else {
+        appendJob(state, makeJob('finance', { from: recentStart, to: recentEnd }))
+      }
+      // One resumable recent-order stream across scopes. Never restart its pagination for each new clock cutoff.
+      const pendingRecent=state.jobs.find(job=>job.lane==='recent')
+      if(pendingRecent){pendingRecent.lane='recent';pendingRecent.scope=scope}
+      else {
+        const previous=Date.parse(state.recentOrdersThrough??'')
+        const latestStart=Math.max(Number.isFinite(previous)?previous-15*60000:ordersCutoff-3600000,ordersCutoff-3600000)
+        const from=new Date(latestStart).toISOString()
+        const catchupStart=Number.isFinite(previous)?previous-15*60000:ordersCutoff-3*86400000
+        if(catchupStart<latestStart)appendJob(state,makeJob('purchases',{from:new Date(Math.max(0,catchupStart)).toISOString(),to:from},{updatedOnly:true}))
+        appendJob(state,makeJob('purchases',{from,to:new Date(ordersCutoff).toISOString()},{updatedOnly:true,lane:'recent'}))
+      }
       state.catalogError = null
       state.jobs = state.jobs.filter(job => job.kind === 'finance' || job.kind === 'purchases' || job.kind === 'catalog' || job.kind === 'orderItems' || job.kind === 'order' || job.kind === 'history')
       for (const job of state.jobs) if (job.scope === scope && Date.now() - job.createdAt > 23 * 3600000) { job.nextToken = null; job.createdAt = Date.now() }
@@ -359,7 +386,8 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         for (const range of gaps) appendJob(state, makeJob(kind, range))
         const recentFrom = new Date(Math.max(start, stop - 3 * 86400000)).toISOString()
         if (kind === 'purchases') {
-          appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }, androidDevice ? { updatedOnly: true } : {}))
+          // Creation-date gaps above still backfill history. Current changes use the single recent stream.
+          if(!androidDevice && !state.recentOrdersThrough)appendJob(state, makeJob('purchases', { from: recentFrom, to: wanted.to }))
         } else if (options?.forceRecent || (coverage.length && !pending.length && !gaps.length)) {
           appendJob(state, makeJob(kind, { from: recentFrom, to: wanted.to }))
         }
@@ -369,7 +397,8 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     const delays: Record<string, number> = { finance: 2000, purchases: 60000, order: 2000, orderItems: 2000, catalog: 2000 }
     let totalPlanned = 0, completedCount = 0, metadataCount = -1, metadataVersion = -1
     while (!abort.signal.aborted && Date.now()<deadline) {
-      if(metadataVersion!==detailRequestVersion || completedCount-metadataCount>=4){await queueMetadata();metadataCount=completedCount;metadataVersion=detailRequestVersion}
+      const urgentRecent=(await meta(account)).jobs.some(job=>job.lane==='recent'&&job.scope===scope)
+      if(!urgentRecent&&(metadataVersion!==detailRequestVersion || completedCount-metadataCount>=4)){await queueMetadata();metadataCount=completedCount;metadataVersion=detailRequestVersion}
       const state = await meta(account)
       const jobs = state.jobs.filter(job => job.scope === scope)
       if (!jobs.length) {
@@ -440,7 +469,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
       next[operation] = Date.now() + opDelay
       await checkedUpdate(current => { current.nextAllowed[operation] = next[operation] })
       let retried = 0, succeeded = false
-      while (!succeeded && !abort.signal.aborted) {
+      while (!succeeded && !abort.signal.aborted && Date.now()<deadline) {
         try {
           const action = job.kind === 'history' ? 'finance' : job.kind
           const page = await authorized(action, { from: job.from, to: job.to, orderId: job.orderId, asin: job.asin, updatedOnly: job.updatedOnly, nextToken: job.nextToken }, abort.signal)
@@ -470,6 +499,11 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
             catalog: job.kind === 'catalog' ? page as unknown as CatalogValue : undefined,
             orderItems,
           })
+          if (job.lane === 'recent' && !nextToken && Date.parse(job.to) < ordersCutoff - 1000) {
+            await checkedUpdate(current => {
+              appendJob(current, makeJob('purchases', { from: new Date(Math.max(0, Date.parse(job.to) - 15 * 60000)).toISOString(), to: new Date(ordersCutoff).toISOString() }, { updatedOnly: true, lane: 'recent' }))
+            })
+          }
           if (job.kind === 'orderItems' && job.orderId) tracker.recordCompleted('orderItems', job.orderId)
           if (job.kind === 'catalog' && job.asin) tracker.recordCompleted('catalog', job.asin)
           if (job.kind === 'history' && job.orderId) tracker.recordCompleted('history', job.orderId)
@@ -537,15 +571,41 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
         if (!stock || Object.values(stock.sources).some(value=>Date.parse(value!.nextAttempt)<=Date.now())) await syncInventory(account,await snapshot(account),inventoryStorage,(job,signal)=>authorized('inventory',{...job},AbortSignal.any([signal,abort.signal])),Boolean(options?.forceHistory))
       } catch { /* Optional inventory cannot fail financial sync. */ }
     }
-    const finalIssues = (await meta(account)).issues.length
-    const doneProgress = abort.signal.aborted
-      ? androidDevice && abort.signal.reason === 'background' ? 'Android continues fetching. Foreground sync resumes automatically on return.' : 'Sync stopped. Completed pages are saved; press Sync now to resume.'
-      : finalIssues > 0
-        ? `Sync completed with ${finalIssues} item note${finalIssues === 1 ? '' : 's'}. Cached data is saved.`
-        : options?.silent
-          ? 'Synced with Amazon just now.'
-          : 'Requested sync complete. Up to date with Amazon.'
-    publish({ progress: doneProgress, percent: 100 })
+    const finalState = await meta(account)
+    if(!androidDevice&&!abort.signal.aborted)try{
+      const reviewSource=await snapshot(account)
+      await runReviewCycle(inventoryStorage,{account,orders:reviewOrders(reviewSource.orders??[]),freshOrdersAt:(await meta(account)).recentOrdersCheckedAt??null},{
+        order:async(id,signal)=>await authorized('reviewOrder',{orderId:id},signal) as unknown as ReviewOrder,
+        eligible:async(id,signal)=>(await authorized('reviewEligibility',{orderId:id},signal)).eligible===true,
+        submit:async(id,attemptId,signal)=>{const result=await authorized('reviewSubmit',{orderId:id,attemptId},signal,false);if(result.accepted!==true)throw new Error('Amazon did not confirm review submission.')},
+      })
+    }catch{/* Optional reviews never fail financial sync; automatic sending starts off. */}
+    const finalIssues = finalState.issues.length
+    const remainingScopeJobs = finalState.jobs.filter(job => job.scope === scope)
+    const recentPending = finalState.jobs.some(job => job.lane === 'recent')
+    const recentOrdersCaughtUp = Boolean(finalState.recentOrdersThrough && Date.parse(finalState.recentOrdersThrough) >= ordersCutoff - 1000 && !recentPending)
+    const workPending = remainingScopeJobs.length > 0 || recentPending
+
+    let doneProgress: string
+    let finalPercent = 100
+    if (abort.signal.aborted) {
+      doneProgress = androidDevice && abort.signal.reason === 'background'
+        ? 'Android continues fetching. Foreground sync resumes automatically on return.'
+        : 'Sync stopped. Completed pages are saved; press Sync now to resume.'
+      finalPercent = totalPlanned > 0 ? Math.min(99, Math.max(5, Math.round((completedCount / totalPlanned) * 100))) : 95
+    } else if (workPending) {
+      finalPercent = totalPlanned > 0 ? Math.min(95, Math.max(5, Math.round((completedCount / totalPlanned) * 100))) : 90
+      doneProgress = recentOrdersCaughtUp
+        ? 'Recent orders are up to date. Remaining history continues automatically.'
+        : 'Sync reached time budget. Saved progress will resume automatically.'
+    } else if (finalIssues > 0) {
+      doneProgress = `Sync completed with ${finalIssues} item note${finalIssues === 1 ? '' : 's'}. Cached data is saved.`
+    } else {
+      doneProgress = options?.silent
+        ? 'Synced with Amazon just now.'
+        : 'Requested sync complete. Up to date with Amazon.'
+    }
+    publish({ progress: doneProgress, percent: finalPercent })
   } catch (cause) { if (!abort.signal.aborted) { if (cause instanceof RelayError && cause.status === 401) { session = null; try { localStorage.removeItem(STORAGE_CREDS_KEY) } catch {}; publish({ connected: false, error: 'Amazon credentials expired or were revoked. Reconnect to continue.' }) } else { publish({ error: cause instanceof Error ? cause.message : 'Sync failed. Saved pages remain available.' }) } } }
   finally {
     releaseWakeLock()
@@ -611,3 +671,5 @@ export async function hostedFetch(input: string, init?: RequestInit): Promise<Re
   if (init?.signal?.aborted) throw new Error('Delivery stopped.')
   return Response.json({ error: 'Unsupported browser delivery request.' }, { status: 400 })
 }
+
+export async function hostedReviewAction(account:string,action:string,payload:Record<string,unknown>,signal:AbortSignal){await initializeHosted();if(session?.account!==account)throw new Error('Seller account changed. Reopen this order.');return authorized(action,payload,signal)}

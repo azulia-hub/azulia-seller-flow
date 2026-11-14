@@ -3,12 +3,15 @@ import { snapshot } from '../adapters/amazon-hosted/cache'
 import { nativeRequest } from '../adapters/device/bridge'
 import { readDeviceEntry, writeDeviceEntry } from '../adapters/device/workspace'
 import { calculateReading, calculationKey } from '../adapters/amazon-report-sync/calculateReading'
+import {runReviewCycle} from '../adapters/amazon-reviews/service'
+import {reviewOrders} from '../adapters/amazon-reviews/orders'
+import {nativeReviewTransport} from '../adapters/amazon-reviews/native'
 import { syncInventory } from '../adapters/amazon-inventory/syncInventory'
 import { androidAmazon } from '../adapters/device/amazon'
 import { currentPreferences, applyPreferences } from '../adapters/preferences/runtime'
 import type { DeviceSettings } from '../core/settings/deviceSettings'
 import { resolveTimePeriod } from '../core/analytics/timePeriods'
-interface Intent { from?:string;to?:string;force?:boolean;orderIds?:string[];budgetMs?:number }
+interface Intent { requestedThrough?:number; from?:string;to?:string;force?:boolean;orderIds?:string[];budgetMs?:number }
 let busy=false,activeRange={from:'',to:''}
 async function run(intent:Intent={}) {
   if(busy)return
@@ -20,6 +23,7 @@ async function run(intent:Intent={}) {
     await initializeHosted()
     const account=hostedView().account
     if(!account||!hostedView().connected)throw new Error('Connect Amazon to resume automatic syncing.')
+    const requiredThrough=intent.requestedThrough??Date.now()-2*60000
     const today=new Date(Date.now()+330*60000).toISOString().slice(0,10)
     const range=intent.from&&intent.to?{from:intent.from,to:intent.to}:resolveTimePeriod(currentPreferences().defaultPeriod,today).current
     activeRange=range
@@ -37,8 +41,9 @@ async function run(intent:Intent={}) {
       await writeDeviceEntry(`reading:${account}`,reading)
     }
     try { await nativeRequest('engine.phase',{phase:'inventory',message:'Updating stock; financial results are saved…'});const alerts=await syncInventory(account,source,{get:readDeviceEntry,put:writeDeviceEntry},(job,signal)=>androidAmazon({action:'inventory',...job},signal),Boolean(intent.force));if(alerts.length)await nativeRequest('inventory.notify',{account,alerts}) } catch { /* Financial completion is independent from optional stock access. */ }
+    try { await runReviewCycle({get:readDeviceEntry,put:writeDeviceEntry},{account,orders:reviewOrders(source.orders??[]),freshOrdersAt:hostedView().state?.recentOrdersCheckedAt??null},nativeReviewTransport) } catch { /* Reviews are optional and sending is opt-in. */ }
     const error=hostedView().error
-    await nativeRequest('engine.completed',{revision:source.revision,error:error||'',message:error?'Saved available data; Amazon will be checked again automatically.':hostedView().state?.jobs.some(job=>job.scope===`${range.from}/${range.to}`)?'Results saved. Remaining history continues automatically.':'Latest downloaded data and calculations are saved.'})
+    await nativeRequest('engine.completed',{ordersThrough:hostedView().state?.recentOrdersThrough??'',ordersCheckedAt:hostedView().state?.recentOrdersCheckedAt??'',ordersFresh:Date.parse(hostedView().state?.recentOrdersThrough??'')>=requiredThrough-1000,revision:source.revision,error:error||'',message:error?'Saved available data; Amazon will be checked again automatically.':hostedView().state?.jobs.some(job=>job.scope===`${range.from}/${range.to}`)?'Results saved. Remaining history continues automatically.':'Latest downloaded data and calculations are saved.'})
   } catch(cause) { await nativeRequest('engine.completed',{error:cause instanceof Error?cause.message:'Background processing will retry. Saved data is retained.'}).catch(()=>{}) }
   finally {busy=false}
 }

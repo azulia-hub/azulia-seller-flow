@@ -19,6 +19,8 @@ export function pickSyncJob(jobs: readonly BrowserJob[], next: Readonly<Record<s
   const allowance=(job:BrowserJob)=>next[job.kind==='history'?'finance':job.kind]??0
   const ready=jobs.filter(job=>allowance(job)<=now)
   if(!ready.length)return [...jobs].sort((a,b)=>allowance(a)-allowance(b))[0]
+  const recent=ready.find(job=>job.lane==='recent')
+  if(recent)return recent
   const metadata=ready.filter(job=>job.kind==='orderItems'||job.kind==='catalog')
   const visible=metadata.find(job=>job.orderId && priority.has(job.orderId))
   if(visible && completed%2===0)return visible

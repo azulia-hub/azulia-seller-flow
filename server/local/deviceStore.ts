@@ -3,7 +3,7 @@ import { mkdir,chmod } from 'node:fs/promises'
 import { join } from 'node:path'
 import { sameContent } from '../../src/core/sync/sameContent.ts'
 import { gzipSync,gunzipSync } from 'node:zlib'
-export const validWorkspaceKey=(key:string)=>/^(?:settings|(?:reading|inventory|inventory-config|inventory-alerts):[a-f0-9]{64})$/.test(key)
+export const validWorkspaceKey=(key:string)=>/^(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})$/.test(key)
 export async function openDeviceStore(directory:string) {
   await mkdir(directory,{recursive:true,mode:0o700})
   const path=join(directory,'workspace.sqlite'),db=new DatabaseSync(path)
@@ -32,7 +32,7 @@ export async function openDeviceStore(directory:string) {
       if(sameContent(old.value,value)){db.exec('COMMIT');return{version:old.version}}
       const next=old.version+1
       const serialized=JSON.stringify(value)
-      const raw=(key.startsWith('reading:') || key.startsWith('inventory:')) && serialized.length>1024*1024?'gz:'+gzipSync(serialized,{level:1}).toString('base64'):serialized
+      const raw=(key.startsWith('reading:') || key.startsWith('inventory:') || key.startsWith('reviews:') || key.startsWith('recovery-inspections:')) && serialized.length>1024*1024?'gz:'+gzipSync(serialized,{level:1}).toString('base64'):serialized
       db.prepare('INSERT INTO workspace_values VALUES(?,?,?,?) ON CONFLICT(name) DO UPDATE SET version=excluded.version,raw=excluded.raw,updated=excluded.updated').run(key,next,raw,new Date().toISOString())
       if(key.startsWith('reading:')){
         const reading=value as {revision?:number;importedAt?:string;precomputed?:{key?:string}}

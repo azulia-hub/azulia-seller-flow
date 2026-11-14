@@ -2,6 +2,24 @@ import type { CanonicalFinancialEvent, ReturnType } from '../data/types'
 import type { ProductCost } from '../costs/types'
 import { createProductCostResolver, type ProductCostResolver } from '../costs/calculateCosts'
 import { canonicalDateKey } from './dashboardSummary'
+import { calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
+
+function findReturnInspection(
+  inspections: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>,
+  orderId: string,
+  sku: string
+): ReturnInspectionRecord | undefined {
+  if (inspections instanceof Map) {
+    for (const record of inspections.values()) {
+      if (record.identity.orderId === orderId && record.identity.sku === sku) return record
+    }
+    return inspections.get(orderId)
+  }
+  for (const record of Object.values(inspections)) {
+    if (record?.identity?.orderId === orderId && record?.identity?.sku === sku) return record
+  }
+  return (inspections as Record<string, ReturnInspectionRecord>)[orderId]
+}
 
 export interface ReturnOrderSummary {
   readonly orderId: string
@@ -17,6 +35,7 @@ export interface ReturnOrderSummary {
   readonly evidence: string
   readonly reimbursements: number
   readonly cogsRecovered: number
+  readonly repairExpense?: number
   readonly returnLossBeforeReimbursement: number
   readonly returnLossAfterReimbursement: number
   readonly missingCost: boolean
@@ -111,7 +130,13 @@ export function filterSkuReturns(items: readonly SkuReturnSummary[], spec: SkuRe
   return [...filtered].sort((a, b) => direction * (value(a) - value(b)) || a.sku.localeCompare(b.sku))
 }
 
-export function summarizeReturns(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[] = [], normalizeSku: (sku: string) => string = (sku) => sku, resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku)) {
+export function summarizeReturns(
+  events: readonly CanonicalFinancialEvent[],
+  costs: readonly ProductCost[] = [],
+  normalizeSku: (sku: string) => string = (sku) => sku,
+  resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku),
+  inspections?: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>
+) {
   const refundEvents = events.filter((event) => event.event === 'REFUND' && event.amountType === 'PRODUCT_REVENUE' && event.amount < 0)
   const byOrder = new Map<string, CanonicalFinancialEvent[]>()
   events.forEach((event) => { if (event.orderId) { const group = byOrder.get(event.orderId); if (group) group.push(event); else byOrder.set(event.orderId, [event]) } })
@@ -128,12 +153,31 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
     const reimbursements = round(returnSideEvents.filter((event) => event.event === 'REIMBURSEMENT').reduce((sum, event) => sum + event.amount, 0))
     const beforeReimbursement = round(returnSideEvents.filter((event) => event.event !== 'REIMBURSEMENT').reduce((sum, event) => sum + event.amount, 0))
     let missingCost = false
+    let totalRepairExpense = 0
     const cogsRecovered = round(refunds.reduce((sum, event) => {
       if (!event.sku) { missingCost = true; return sum }
       const saleDate = canonicalDateKey(related.find(item => item.event === 'SALE' && item.amountType === 'PRODUCT_REVENUE' && item.sku === event.sku)?.date ?? null)
       const cost = resolveCost(event.sku, saleDate ?? canonicalDateKey(event.date))
       if (!cost) { missingCost = true; return sum }
-      return sum + cost.unitCost * (event.quantity ?? 0)
+      const returnedQty = event.quantity ?? 0
+
+      if (inspections) {
+        const inspection = findReturnInspection(inspections, refund.orderId ?? orderId, event.sku)
+        if (inspection) {
+          const recovery = calculateRecoveryCost({
+            identity: inspection.identity,
+            returnedQuantity: returnedQty,
+            unitCost: cost.unitCost,
+            inspection,
+          })
+          totalRepairExpense += recovery.totalRepairExpense
+          return sum + recovery.confirmedRecoveredCost
+        }
+        // Uninspected/provisional return retains consumed cost; 0 confirmed recovered COGS
+        return sum
+      }
+
+      return sum + cost.unitCost * returnedQty
     }, 0))
     const locationEvents = [...refunds, ...related]
     return {
@@ -148,9 +192,11 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
       netShipping: round(returnSideEvents.filter((event) => event.amountType === 'SHIPPING_FEE').reduce((sum, event) => sum + event.amount, 0)),
       marketplaceCharges: round(returnSideEvents.filter((event) => chargeTypes.has(event.amountType)).reduce((sum, event) => sum + event.amount, 0)),
       evidence: refund.returnEvidence ?? 'Source adapter did not provide return classification evidence',
-      reimbursements, cogsRecovered,
-      returnLossBeforeReimbursement: round(Math.max(0, -(beforeReimbursement + cogsRecovered))),
-      returnLossAfterReimbursement: round(Math.max(0, -(beforeReimbursement + reimbursements + cogsRecovered))),
+      reimbursements,
+      cogsRecovered,
+      repairExpense: inspections ? round(totalRepairExpense) : undefined,
+      returnLossBeforeReimbursement: round(Math.max(0, -(beforeReimbursement + cogsRecovered - totalRepairExpense))),
+      returnLossAfterReimbursement: round(Math.max(0, -(beforeReimbursement + reimbursements + cogsRecovered - totalRepairExpense))),
       missingCost,
     }
   }).sort((a, b) => (canonicalDateKey(b.date) ?? '').localeCompare(canonicalDateKey(a.date) ?? ''))
@@ -181,7 +227,23 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
       const saleDate = canonicalDateKey(related.find((item) => item.event === 'SALE' && item.amountType === 'PRODUCT_REVENUE' && item.sku === sku)?.date ?? null)
       const cost = resolveCost(sku, saleDate ?? canonicalDateKey(event.date))
       if (!cost) { skuMissingCost = true; return sum }
-      return sum + cost.unitCost * (event.quantity ?? 0)
+      const returnedQty = event.quantity ?? 0
+
+      if (inspections && event.orderId) {
+        const inspection = findReturnInspection(inspections, event.orderId, sku)
+        if (inspection) {
+          const recovery = calculateRecoveryCost({
+            identity: inspection.identity,
+            returnedQuantity: returnedQty,
+            unitCost: cost.unitCost,
+            inspection,
+          })
+          return sum + recovery.confirmedRecoveredCost
+        }
+        return sum
+      }
+
+      return sum + cost.unitCost * returnedQty
     }, 0))
     const reliability: SkuReturnSummary['reliability'] = sold < 10 || skuMissingCost ? 'LOW' : sold < 30 ? 'MEDIUM' : 'HIGH'
     return {
@@ -214,6 +276,7 @@ export function summarizeReturns(events: readonly CanonicalFinancialEvent[], cos
     marketplaceCharges: round(orders.reduce((sum, order) => sum + order.marketplaceCharges, 0)),
     reimbursements: round(orders.reduce((sum, order) => sum + order.reimbursements, 0)),
     cogsRecovered: round(orders.reduce((sum, order) => sum + order.cogsRecovered, 0)),
+    totalRepairExpense: round(orders.reduce((sum, order) => sum + (order.repairExpense ?? 0), 0)),
     returnLossBeforeReimbursement: round(orders.reduce((sum, order) => sum + order.returnLossBeforeReimbursement, 0)),
     returnLossAfterReimbursement: round(orders.reduce((sum, order) => sum + order.returnLossAfterReimbursement, 0)),
     rtoLoss: round(orders.filter((order) => order.type === 'RTO').reduce((sum, order) => sum + order.returnLossAfterReimbursement, 0)),

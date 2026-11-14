@@ -26,7 +26,7 @@ final class HeadlessSync {
     static boolean busy() { return active!=null; }
     static void start(Context context,JSONObject intent,Runnable finished) {
         main.post(()->{
-            if(active!=null) { finished.run(); return; }
+            if(active!=null) { LiveSync.continueRequest(context,intent);finished.run(); return; }
             active=new HeadlessSync(context.getApplicationContext(),intent,finished);
             try { active.open(); }catch(Exception failure){ active.complete(error("Background engine could not start. Saved data is retained; retrying automatically.")); }
         });
@@ -66,10 +66,15 @@ final class HeadlessSync {
     private void complete(JSONObject value) {
         if(closed)return;closed=true;main.removeCallbacks(timeout);
         String error=value.optString("error","");
-        LiveSync.prefs(context).edit().putString("phase",error.isEmpty()?"ready":"error").putString("error",error).putString("message",error.isEmpty()?value.optString("message","Amazon data and calculations are up to date."):error).putLong("lastCompleted",System.currentTimeMillis()).apply();
-        if(error.isEmpty())LiveSync.prefs(context).edit().putLong("lastSuccess",System.currentTimeMillis()).apply();
+        LiveSync.prefs(context).edit().putString("phase",error.isEmpty()?(value.optBoolean("ordersFresh",true)?"ready":"waiting"):"error").putString("error",error).putString("message",error.isEmpty()?value.optString("message","Amazon data and calculations are up to date."):error).putLong("lastCompleted",System.currentTimeMillis()).apply();
+        if(!value.optString("ordersThrough").isEmpty())LiveSync.prefs(context).edit().putString("ordersThrough",value.optString("ordersThrough")).putString("ordersCheckedAt",value.optString("ordersCheckedAt")).apply();
+        boolean ordersFresh=value.optBoolean("ordersFresh",true);
+        LiveSync.requestState(context,intent,!error.isEmpty()?"error":ordersFresh?"complete":"queued",error);
+        LiveSync.prefs(context).edit().remove("runningIntent").apply();
+        if(error.isEmpty()&&!ordersFresh)LiveSync.continueRequest(context,intent);
+        if(error.isEmpty()&&ordersFresh)LiveSync.prefs(context).edit().putLong("lastSuccess",System.currentTimeMillis()).apply();
         if(bridge!=null)bridge.close();if(web!=null){web.stopLoading();web.destroy();web=null;}
         if(active==this)active=null;
-        finished.run();
+        finished.run();LiveSync.kick();
     }
 }

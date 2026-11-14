@@ -256,3 +256,21 @@ Final implementation: protocol 6 / Android 0.2.0. Production web and desktop-eng
 - [x] Persist stock status transitions and wire deduplicated Android notifications; no initial-state alert flood.
 - [x] Preserve animated refresh, Product Performance improvements and PDF Save file bridge. Native bridge now version 7; existing keys remain compatible.
 - [ ] Antigravity owns build, packaging/version increment and installation after READY gate. No tests, live API probes, app launch, push or data deletion.
+
+## Phone feedback fixes — source only (2026-11-14)
+- [x] Prioritize a single resumable recent Orders stream over history/enrichment; preserve continuation pages and checkpoint the completed horizon. Use Amazon's two-minute Orders safety boundary; financial boundary remains separate. Backfill older updated orders separately.
+- [x] Queue explicit pull requests even when the same date range is already syncing. Persist request IDs/receipts, serialize queue consumption/merging, continue incomplete recent work and preserve requests through service recreation. Report attempts, completed order fetches and saved results separately.
+- [x] Drive pull feedback from explicit request completion, not the shared busy flag. Ordinary pulls do not force per-order historical checks. Explicit comparison-history requests still can.
+- [x] Cap current comparison coverage at today's completed common source horizon, preserve missing-gap checks and add a visible comparison section with previous values, dates and in-progress qualification.
+- [x] Fix mobile inventory shrink/wrapping/flex sizing; make stock/days/reorder cards clearer, add guidance and direct Enter stock/Details actions, scroll to selected details, hide source diagnostics behind disclosure, and display SKU rather than internal composite identity in settings.
+- [ ] No tests/typechecks/builds/APK/install or push run. Native bridge is now 8; a future APK update is required. Build gate remains closed until owner authorises the next batch.
+
+## Active — review requests + delegated return recovery
+- [ ] Codex: durable review eligibility/sending state, one order-level Waiting / Send request / Request sent control, manual action and opt-in automation.
+- [ ] Exclude known original/replacement chains; verify metadata before submission; retain uncertain outcomes without automatic resend. Seller Central submission is user-confirmed unless independently established.
+- [ ] Keep all review actions separate from financial events and use account-scoped compare-and-swap claims.
+- [ ] Antigravity: NEW return-recovery core/UI/docs modules only under the previously assigned folders. Codex owns shared-file integration.
+- [ ] Tests/builds/APK/live sends remain paused. No customer communication during development.
+- [x] Implement review domain/transport/service, account-scoped state and backend dispatch claims, default-off automatic sending, bounded background checks, one-control order UI and searchable Settings management. No live submission executed.
+- [x] Author generic replacement-chain/due/sent/uncertain regression sources (not run).
+- [ ] Await return-recovery modules from Antigravity; no shared return/cost logic edited yet.

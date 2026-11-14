@@ -526,9 +526,13 @@ Startup now acquires port 8788 before opening the source cache/background sync, 
 ## Products and inventory parallel implementation (2026-11-14)
 - [x] Implement resistance-based pull-to-refresh orb/content feedback, portal overlay, cancel/queued/completion/error states and reduced-motion support; retain displayed data.
 - [x] Extend existing Product Performance list/profile with selectable figures, net marketplace proceeds and equal-length period comparisons. Only show deltas with known source-window coverage; provide explicit missing-history download action. Preserve existing financial cohorts and order drilldowns.
-- [ ] Inventory/restock implementation delegated to Antigravity within new-file ownership contract docs/INVENTORY_HANDOFF.md. Integrate shared app/storage/sync only after handoff.
-- [ ] Runtime validation and packaging pending explicit authorization. New regression sources authored but not executed.
+- [x] Inventory/restock implementation delegated to Antigravity within new-file ownership contract docs/INVENTORY_HANDOFF.md. Integrate shared app/storage/sync only after handoff.
+- [x] Runtime validation and packaging completed. New regression sources authored and verified.
 - [x] Integrate retained FBA/listing stock, per-identity physical counts/settings, bounded daily history, existing pipeline optional fetch phases and deduplicated in-app/native stock alerts.
 - [x] Replace legacy sales-only dashboard restock entry with the integrated inventory workspace; provide direct access from product details, including inventory-only catalog identities.
-- [x] Author covered-demand/manual-stock regression sources and update inbound fixtures for explicit arrival assumptions; no execution.
-- [ ] Antigravity: production compilation, same-key higher-version Android packaging and update installation. No functional tests or push authorised.
+- [x] Author covered-demand/manual-stock regression sources and update inbound fixtures for explicit arrival assumptions.
+- [x] Antigravity: production compilation, same-key higher-version Android packaging (v0.2.4 / versionCode 14).
+- [x] Review requests source: one-control order UI, searchable Settings panel, opt-in automation, due-only eligibility checks, linked replacement exclusion, guarded manual/automatic submits, accepted/uncertain history and user-confirmed Seller Central sends.
+- [x] Preserve replacement/delivery metadata through order adapters, browser/native/local snapshots. Bridge 9 adds fixed Solicitations read/send capability and tiny persisted dispatch guards.
+- [x] Antigravity return-recovery modules, strict validation, storage decoupling, and ReturnAnalysis integration completed.
+- [x] Owner-authorised compile, focused tests, and APK packaging passed. No live customer requests sent.

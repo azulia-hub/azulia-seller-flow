@@ -1,4 +1,4 @@
-export const DEVICE_BRIDGE_VERSION = 7
+export const DEVICE_BRIDGE_VERSION = 9
 interface DeviceMessagePort { postMessage(message:string):void; onmessage:((event:{data:string})=>void)|null }
 declare global { interface Window { AzuliaDevice?:DeviceMessagePort } }
 export const androidDevice = typeof window!=='undefined' && Boolean(window.AzuliaDevice?.postMessage)

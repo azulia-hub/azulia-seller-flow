@@ -20,7 +20,7 @@ interface Props {
 type FilterTab = 'ALL' | 'REORDER_NEEDED' | 'OUT_OF_STOCK' | 'IN_STOCK'
 
 function formatQty(val: number | null | undefined): string {
-  if (val === null || val === undefined) return '—'
+  if (val === null || val === undefined) return 'Unknown'
   return val.toLocaleString('en-IN')
 }
 
@@ -268,7 +268,7 @@ export const InventoryTable: React.FC<Props> = ({
                           aria-label={`Settings for ${item.sku}`}
                           title="Configure lead time & replenishment rules"
                         >
-                          ⚙ Settings
+                          Restock settings
                         </button>
                       </td>
                     </tr>
@@ -297,12 +297,12 @@ export const InventoryTable: React.FC<Props> = ({
                         </div>
                       )}
                       <div>
-                        <strong
+                        <button type="button"
                           className="inventory-product-title"
                           onClick={() => onSelectSku?.(item.id)}
                         >
                           {title}
-                        </strong>
+                        </button>
                         <div className="inventory-id-tags">
                           <span className="inventory-sku-tag">{item.sku}</span>
                           <span className={`inventory-channel-pill ${item.fulfillmentChannel.toLowerCase()}`}>
@@ -316,15 +316,15 @@ export const InventoryTable: React.FC<Props> = ({
 
                   <div className="inventory-mobile-card-body">
                     <div className="inventory-mobile-stat">
-                      <small>Available</small>
-                      <strong>{formatQty(item.quantities.available)}</strong>
+                      <small>Stock on hand</small>
+                      <strong>{formatQty(rec?.usableStock ?? item.quantities.available)}</strong>
                     </div>
                     <div className="inventory-mobile-stat">
-                      <small>Inbound</small>
-                      <span>{formatQty(item.quantities.inbound)}</span>
+                      <small>{item.stockBasis==='MANUAL_PHYSICAL'?'Listed on Amazon':'Inbound stock'}</small>
+                      <span>{formatQty(item.stockBasis==='MANUAL_PHYSICAL'?item.quantities.listed:item.quantities.inbound)}</span>
                     </div>
                     <div className="inventory-mobile-stat">
-                      <small>Stock Cover</small>
+                      <small>Days remaining</small>
                       <span>
                         {rec?.stockCoverDays !== null && rec?.stockCoverDays !== undefined
                           ? `${rec.stockCoverDays.toFixed(0)}d`
@@ -332,7 +332,7 @@ export const InventoryTable: React.FC<Props> = ({
                       </span>
                     </div>
                     <div className="inventory-mobile-stat">
-                      <small>Suggested Order</small>
+                      <small>Suggested reorder</small>
                       <strong className={rec?.suggestedQuantity ? 'inventory-suggested-highlight' : ''}>
                         {rec?.suggestedQuantity !== null && rec?.suggestedQuantity !== undefined
                           ? rec.suggestedQuantity.toLocaleString('en-IN')
@@ -341,16 +341,18 @@ export const InventoryTable: React.FC<Props> = ({
                     </div>
                   </div>
 
+                  {rec?.urgency==='UNAVAILABLE'?<p className="inventory-missing-help">{item.stockBasis==='MANUAL_PHYSICAL'&&item.quantities.manualPhysical===null?'Enter your physical stock count to get a restock suggestion.':rec.dailyDemand===null?'Shipment history is incomplete. Your stock is saved; recommendations need more order data.':'Open details to see which stock or replenishment inputs are missing.'}</p>:null}
                   <footer className="inventory-mobile-card-footer">
                     <span className="inventory-demand-sub">
-                      Demand: {rec?.dailyDemand ? `${rec.dailyDemand.toFixed(1)}/day` : '—'}
+                      Shipped order rate: {rec?.dailyDemand!==null&&rec?.dailyDemand!==undefined ? `${rec.dailyDemand.toFixed(1)} units/day` : 'Unknown'}
                     </span>
+                    <button type="button" className="inventory-action-btn" onClick={()=>onSelectSku?.(item.id)}>{item.stockBasis==='MANUAL_PHYSICAL'&&item.quantities.manualPhysical===null?'Enter stock':'Details'}</button>
                     <button
                       type="button"
                       className="inventory-action-btn"
                       onClick={() => onEditSettings?.(item.id)}
                     >
-                      ⚙ Settings
+                      Restock settings
                     </button>
                   </footer>
                 </article>

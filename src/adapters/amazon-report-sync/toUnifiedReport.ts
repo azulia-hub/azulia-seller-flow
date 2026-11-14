@@ -108,6 +108,7 @@ export function toUnifiedReport(snapshot: SyncSnapshot) {
   const orders = (snapshot.orders ?? []).map(order => {
     if (!/^[A-Z0-9]{3}-\d{7}-\d{7}$/.test(order.id) || !Number.isFinite(Date.parse(order.purchased))) throw new Error('Unsupported order summary; the previous reading is retained.')
     return {
+      isReplacementOrder:order.isReplacementOrder,replacedOrderId:order.replacedOrderId,earliestDeliveryDate:order.earliestDeliveryDate,latestDeliveryDate:order.latestDeliveryDate,reviewMetadataCheckedAt:order.reviewMetadataCheckedAt,
       orderId: order.id,
       purchaseDate: order.purchased,
       status: order.status,

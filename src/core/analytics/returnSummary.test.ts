@@ -32,4 +32,51 @@ describe('return summary', () => {
     expect(filterSkuReturns(skus, { search: 'a', type: 'RTO', minimumReturnRate: 50 })).toHaveLength(1)
     expect(filterSkuReturns(skus, { type: 'UNKNOWN' })).toHaveLength(0)
   })
+
+  it('incorporates physical warehouse return inspections when provided', () => {
+    const costs = [{ sku: 'A', unitCost: 40, updatedAt: '' }]
+    // Order 1 is confirmed SELLABLE with 0 repair
+    // Order 2 is DAMAGED with 0 recovered value, 0 repair
+    const inspections = {
+      '1': {
+        identity: { sellerAccount: 'seller', marketplace: 'amazon.in', orderId: '1', sku: 'A' },
+        returnedQuantity: 1,
+        dispositions: [{
+          id: 'd1',
+          state: 'SELLABLE' as const,
+          quantity: 1,
+          recoveredValue: 40,
+          repairExpense: 0,
+          repairConfirmed: true,
+          inspectedAt: '2026-08-02',
+        }],
+        overallStatus: 'CONFIRMED' as const,
+        updatedAt: '2026-08-02',
+        version: 1,
+      },
+      '2': {
+        identity: { sellerAccount: 'seller', marketplace: 'amazon.in', orderId: '2', sku: 'A' },
+        returnedQuantity: 1,
+        dispositions: [{
+          id: 'd2',
+          state: 'DAMAGED' as const,
+          quantity: 1,
+          recoveredValue: 0,
+          repairExpense: 0,
+          repairConfirmed: true,
+          inspectedAt: '2026-08-02',
+        }],
+        overallStatus: 'CONFIRMED' as const,
+        updatedAt: '2026-08-02',
+        version: 1,
+      },
+    }
+
+    const summary = summarizeReturns(events, costs, sku => sku, undefined, inspections)
+    // Order 1: cogsRecovered = 40. Order 2: cogsRecovered = 0. Total cogsRecovered = 40 (vs 80 in legacy)
+    expect(summary.cogsRecovered).toBe(40)
+    expect(summary.totalRepairExpense).toBe(0)
+    expect(summary.orders.find(o => o.orderId === '1')?.cogsRecovered).toBe(40)
+    expect(summary.orders.find(o => o.orderId === '2')?.cogsRecovered).toBe(0)
+  })
 })

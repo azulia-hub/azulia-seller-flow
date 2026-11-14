@@ -20,3 +20,7 @@ export function calculateReading(snapshot:SyncSnapshot,settings:DeviceSettings,a
 
 export { syncInventory } from '../amazon-inventory/syncInventory'
 export { createInventoryReader } from '../amazon-inventory/reader'
+
+export { runReviewCycle } from '../amazon-reviews/service'
+export { reviewOrders } from '../amazon-reviews/orders'
+export { createReviewTransport } from '../amazon-reviews/transport'

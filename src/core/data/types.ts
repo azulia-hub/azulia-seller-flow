@@ -102,6 +102,12 @@ export interface CanonicalOrderItem {
 }
 
 export interface CanonicalOrder {
+  isReplacementOrder?:boolean|null
+  replacedOrderId?:string|null
+  earliestDeliveryDate?:string|null
+  latestDeliveryDate?:string|null
+  reviewMetadataCheckedAt?:string|null
+
   readonly orderId: string
   readonly purchaseDate: string
   readonly status: string | null

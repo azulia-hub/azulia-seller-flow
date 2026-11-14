@@ -4,6 +4,7 @@ export interface BrowserJob extends SyncRange {
   id: string
   scope: string
   kind: 'finance' | 'purchases' | 'order' | 'history' | 'catalog' | 'orderItems'
+  lane?: 'recent'
   updatedOnly?: boolean
   orderId?: string
   asin?: string
@@ -15,6 +16,7 @@ export interface BrowserJob extends SyncRange {
   retries?: number
 }
 export interface CacheMeta {
+  recentOrdersCheckedAt?: string; recentOrdersThrough?: string
   account: string; revision: number; updatedAt: string | null; lastSync: string | null
   coverage: SyncRange[]; purchaseCoverage: SyncRange[]; jobs: BrowserJob[]
   orderChecked: Record<string, number>; historyChecked: Record<string, number>; nextAllowed: Record<string, number>; dateFailures: Record<string, number>; catalogChecked: Record<string, number>; orderItemsChecked?: Record<string, number>

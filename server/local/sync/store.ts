@@ -67,6 +67,7 @@ export async function openSyncStore(directory: string, key: string) {
       const raw = JSON.stringify({
         id,
         purchased: normalized,
+        isReplacementOrder:summary.isReplacementOrder??prevParsed?.isReplacementOrder??null,replacedOrderId:summary.replacedOrderId??prevParsed?.replacedOrderId??null,earliestDeliveryDate:summary.earliestDeliveryDate??prevParsed?.earliestDeliveryDate??null,latestDeliveryDate:summary.latestDeliveryDate??prevParsed?.latestDeliveryDate??null,
         status: summary.status,
         fulfillmentType: summary.fulfillmentType,
         orderValue: summary.orderValue,

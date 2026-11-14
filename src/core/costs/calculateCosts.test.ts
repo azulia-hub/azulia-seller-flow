@@ -56,6 +56,42 @@ describe('cost calculation', () => {
     expect(result.netCogs).toBe(0)
     expect(result.appliedCosts.map((item) => item.unitCost)).toEqual([20, 20])
   })
+
+  it('adjusts refund COGS according to warehouse return inspection records', () => {
+    const sale: CanonicalFinancialEvent = { ...base, id: 'sale-1', orderId: 'ORDER-1', sku: 'A', date: '2026-03-10', event: 'SALE', quantity: 1, amount: 100 }
+    const refund: CanonicalFinancialEvent = { ...base, id: 'refund-1', orderId: 'ORDER-1', sku: 'A', date: '2026-03-15', event: 'REFUND', quantity: 1, amount: -100 }
+    const costs = [{ sku: 'A', unitCost: 100, updatedAt: '' }]
+
+    // 1. Without inspections: full reversal (legacy)
+    const legacy = calculateCosts([sale, refund], costs)
+    expect(legacy.netCogs).toBe(0)
+
+    // 2. With inspections provided, but ORDER-1 is uninspected: remains provisional, consumed cost is retained (cogs reversal = 0, so netCogs = 100)
+    const provisional = calculateCosts([sale, refund], costs, 'BLOCK', sku => sku, undefined, {})
+    expect(provisional.netCogs).toBe(100)
+
+    // 3. With confirmed inspection: recovered to SELLABLE with ₹20 repair expense
+    const confirmed = calculateCosts([sale, refund], costs, 'BLOCK', sku => sku, undefined, {
+      'ORDER-1': {
+        identity: { sellerAccount: 'seller', marketplace: 'amazon.in', orderId: 'ORDER-1', sku: 'A' },
+        returnedQuantity: 1,
+        dispositions: [{
+          id: 'd1',
+          state: 'SELLABLE',
+          quantity: 1,
+          recoveredValue: 100,
+          repairExpense: 20,
+          repairConfirmed: true,
+          inspectedAt: '2026-03-16T00:00:00Z',
+        }],
+        overallStatus: 'CONFIRMED',
+        updatedAt: '2026-03-16T00:00:00Z',
+        version: 1,
+      },
+    })
+    // Sale COGS: +100. Refund COGS reversal: -(100 - 20) = -80. Net COGS: 100 - 80 = 20.
+    expect(confirmed.netCogs).toBe(20)
+  })
 })
 
 it('uses verified purchase-date cost for a later release and refund', () => {

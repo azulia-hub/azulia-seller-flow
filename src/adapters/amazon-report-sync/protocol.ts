@@ -1,5 +1,6 @@
 import type { SyncRange } from '../../core/sync/ranges'
 export interface SyncStatus {
+  ordersCheckedAt?:string|null
   onDemand?: boolean
   connectionKey: string; configured: boolean; revision: number; records: number; missingWindows: number; coverage: SyncRange[]
   purchaseCoverage?: SyncRange[]
@@ -18,6 +19,12 @@ export interface SourceOrderItem {
 }
 /** Allowlisted Orders metadata; no buyer/address information. */
 export interface SourceOrderSummary {
+  isReplacementOrder?:boolean|null
+  replacedOrderId?:string|null
+  earliestDeliveryDate?:string|null
+  latestDeliveryDate?:string|null
+  reviewMetadataCheckedAt?:string|null
+
   id: string
   purchased: string
   status: string | null
@@ -30,4 +37,4 @@ export interface SourceOrderSummary {
   imageUrl?: string | null
   items?: readonly SourceOrderItem[]
 }
-export interface SyncSnapshot { purchaseCoverage?:SyncRange[]; issues?: string[]; orders?: SourceOrderSummary[]; delta?: boolean; connectionKey: string; revision: number; updatedAt: string | null; records: Record<string, unknown>[]; coverage: SyncRange[] }
+export interface SyncSnapshot { ordersCheckedAt?:string|null; purchaseCoverage?:SyncRange[]; issues?: string[]; orders?: SourceOrderSummary[]; delta?: boolean; connectionKey: string; revision: number; updatedAt: string | null; records: Record<string, unknown>[]; coverage: SyncRange[] }

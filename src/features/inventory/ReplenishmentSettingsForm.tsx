@@ -3,6 +3,7 @@ import type { ReplenishmentConfig } from '../../core/inventory/types'
 import { DEFAULT_REPLENISHMENT_CONFIG } from '../../core/inventory/replenishment'
 
 interface Props {
+  readonly displaySku?:string
   readonly sku: string
   readonly productTitle?: string | null
   readonly initialConfig?: Partial<ReplenishmentConfig> | null
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export const ReplenishmentSettingsForm: React.FC<Props> = ({
-  sku,
+  sku,displaySku,
   productTitle,
   initialConfig,
   onSave,
@@ -71,7 +72,7 @@ export const ReplenishmentSettingsForm: React.FC<Props> = ({
           <div>
             <h3 id="replenishment-settings-title">Replenishment Settings</h3>
             <p className="inventory-settings-sku">
-              <strong>{sku}</strong>
+              <strong>{displaySku??sku}</strong>
               {productTitle ? ` · ${productTitle}` : ''}
             </p>
           </div>

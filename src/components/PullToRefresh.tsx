@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-interface Props { enabled: boolean; busy: boolean; error?: string; onRefresh: () => Promise<void> }
-type Phase = 'idle' | 'pulling' | 'armed' | 'refreshing' | 'done' | 'error'
+interface Props { enabled: boolean; error?: string; onRefresh: (onProgress: (message: string) => void, signal?: AbortSignal) => Promise<unknown> }
+type Phase = 'idle' | 'pulling' | 'armed' | 'refreshing' | 'done' | 'error' | 'queued'
 const threshold = 64
 function atTop(target: EventTarget | null) {
   let node = target instanceof Element ? target : null
@@ -18,7 +18,8 @@ export function PullToRefresh(props: Props) {
   const [message, setMessage] = useState('')
   useEffect(() => {
     let start: { x: number; y: number } | null = null, pull = 0, frame = 0
-    let active = false, disposed = false, observedBusy = false, acknowledged = false, settling = false
+    let active = false, disposed = false
+    let activeController: AbortController | null = null
     let timer: ReturnType<typeof setTimeout> | undefined
     const root = document.documentElement
     const previous = root.style.overscrollBehaviorY
@@ -30,36 +31,29 @@ export function PullToRefresh(props: Props) {
       indicator.current?.style.setProperty('--pull-rotation', `${distance * 4}deg`)
     }
     const reset = () => { active = false; paint(0); if (!disposed) setPhase('idle') }
-    const finish = () => {
-      if (!acknowledged || !observedBusy || latest.current.busy || !active || settling) return
-      settling = true; clearTimeout(timer); setPhase(latest.current.error ? 'error' : 'done'); if (latest.current.error) setMessage('Refresh needs attention. Your saved results remain available.'); paint(50)
-      timer = setTimeout(reset, 650)
-    }
-    const status = setInterval(() => {
-      if (!active) return
-      if (latest.current.busy) observedBusy = true
-      finish()
-    }, 150)
     const refresh = () => {
-      if (active || latest.current.busy || !latest.current.enabled) return
-      active = true; observedBusy = false; acknowledged = false; settling = false
+      if (active || !latest.current.enabled) return
+      active = true
       setPhase('refreshing'); setMessage('Refreshing data'); paint(60)
-      void latest.current.onRefresh().then(() => {
+      activeController?.abort()
+      const controller = new AbortController()
+      activeController = controller
+      void latest.current.onRefresh(message => { if (!disposed) setMessage(message) }, controller.signal).then(outcome => {
         if (disposed) return
-        acknowledged = true; observedBusy ||= latest.current.busy; finish()
-        // Some transports acknowledge a queued job before it starts. Never claim it completed.
-        if (!observedBusy) timer = setTimeout(() => {
-          if (!observedBusy) { setMessage('Refresh requested; background status shows progress.'); reset() }
-        }, 10000)
-      }).catch(() => {
+        const queued = outcome === 'queued'
+        setMessage(queued ? 'Refresh is queued. Saved results remain visible.' : 'Refresh complete')
+        setPhase(queued ? 'queued' : 'done'); paint(50)
+        timer = setTimeout(reset, queued ? 2500 : 650)
+      }).catch(cause => {
         if (disposed) return
+        if (cause instanceof DOMException && cause.name === 'AbortError') return
         clearTimeout(timer); active = false; setPhase('error'); paint(50)
-        setMessage('Could not refresh. Your saved results remain available. Pull to retry.')
+        setMessage(cause instanceof Error ? cause.message : 'Could not refresh. Your saved results remain available. Pull to retry.')
         timer = setTimeout(reset, 1800)
       })
     }
     const begin = (event: TouchEvent) => {
-      if (active || latest.current.busy || !latest.current.enabled || event.touches.length !== 1 || !atTop(event.target)) return
+      if (active || !latest.current.enabled || event.touches.length !== 1 || !atTop(event.target)) return
       if (event.target instanceof Element && event.target.closest('dialog,input,textarea,select,button,a,[role="slider"],.table-scroll,svg,canvas')) return
       clearTimeout(timer); start = { x: event.touches[0].clientX, y: event.touches[0].clientY }; pull = 0
     }
@@ -81,11 +75,11 @@ export function PullToRefresh(props: Props) {
     document.addEventListener('touchmove', move, { passive: false })
     document.addEventListener('touchend', end); document.addEventListener('touchcancel', cancel); document.addEventListener('keydown', keyboard)
     return () => {
-      disposed = true; clearTimeout(timer); clearInterval(status); cancelAnimationFrame(frame)
+      disposed = true; activeController?.abort(); clearTimeout(timer); cancelAnimationFrame(frame)
       root.style.overscrollBehaviorY = previous; root.style.removeProperty('--refresh-offset'); delete root.dataset.refreshDragging
       document.removeEventListener('touchstart', begin); document.removeEventListener('touchmove', move)
       document.removeEventListener('touchend', end); document.removeEventListener('touchcancel', cancel); document.removeEventListener('keydown', keyboard)
     }
   }, [])
-  return createPortal(<><div ref={indicator} className="pull-refresh-orb" data-phase={phase} aria-hidden="true"><svg viewBox="0 0 32 32"><circle className="pull-refresh-track" cx="16" cy="16" r="11"/><circle className="pull-refresh-arc" cx="16" cy="16" r="11"/><path className="pull-refresh-check" d="m9 16 5 5 9-10"/></svg></div>{phase === 'error' ? <div className="pull-refresh-notice">{message}</div> : null}<span className="pull-refresh-announcement" role="status" aria-live="polite">{phase === 'armed' ? 'Release to refresh' : phase === 'done' ? 'Refresh complete' : message}</span></>, document.body)
+  return createPortal(<><div ref={indicator} className="pull-refresh-orb" data-phase={phase} aria-hidden="true"><svg viewBox="0 0 32 32"><circle className="pull-refresh-track" cx="16" cy="16" r="11"/><circle className="pull-refresh-arc" cx="16" cy="16" r="11"/><path className="pull-refresh-check" d="m9 16 5 5 9-10"/></svg></div>{phase === 'error' || phase === 'queued' || phase === 'refreshing' ? <div className="pull-refresh-notice">{message}</div> : null}<span className="pull-refresh-announcement" role="status" aria-live="polite">{phase === 'armed' ? 'Release to refresh' : phase === 'done' ? 'Refresh complete' : message}</span></>, document.body)
 }

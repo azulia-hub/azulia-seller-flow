@@ -1,12 +1,30 @@
 import type { CanonicalFinancialEvent } from '../data/types'
 import type { ProductCost } from './types'
 import { canonicalDateKey } from '../analytics/dashboardSummary'
+import { calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
 
 export type MissingCostPolicy = 'BLOCK' | 'ASSUME_ZERO'
 
 export interface AppliedProductCost { readonly eventId: string; readonly sku: string; readonly eventDate: string | null; readonly costDate: string | null; readonly unitCost: number; readonly quantity: number; readonly cogs: number; readonly fallback: boolean }
 
 export type ProductCostResolver = (sku: string, date: string | null) => ProductCost | undefined
+
+function findInspection(
+  inspections: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>,
+  orderId: string,
+  sku: string
+): ReturnInspectionRecord | undefined {
+  if (inspections instanceof Map) {
+    for (const record of inspections.values()) {
+      if (record.identity.orderId === orderId && record.identity.sku === sku) return record
+    }
+    return inspections.get(orderId)
+  }
+  for (const record of Object.values(inspections)) {
+    if (record?.identity?.orderId === orderId && record?.identity?.sku === sku) return record
+  }
+  return (inspections as Record<string, ReturnInspectionRecord>)[orderId]
+}
 
 /** One immutable-input lookup index per analysis; no shared mutable analytics state. */
 export function createProductCostResolver(costs: readonly ProductCost[], normalizeSku: (sku: string) => string = value => value): ProductCostResolver {
@@ -36,7 +54,14 @@ export function resolveProductCost(costs: readonly ProductCost[], sku: string, d
   return createProductCostResolver(costs, normalizeSku)(sku, date)
 }
 
-export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs: readonly ProductCost[], policy: MissingCostPolicy = 'BLOCK', normalizeSku: (sku: string) => string = (sku) => sku, resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku)) {
+export function calculateCosts(
+  events: readonly CanonicalFinancialEvent[],
+  costs: readonly ProductCost[],
+  policy: MissingCostPolicy = 'BLOCK',
+  normalizeSku: (sku: string) => string = (sku) => sku,
+  resolveCost: ProductCostResolver = createProductCostResolver(costs, normalizeSku),
+  inspections?: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>
+) {
   const skuKey = (sku: string) => normalizeSku(sku).trim().toLocaleLowerCase()
   const inventoryEvents = events.filter((event) => event.sku && event.amountType === 'PRODUCT_REVENUE' && (event.event === 'SALE' || event.event === 'REFUND'))
   const requiredSkus = [...new Set(inventoryEvents.flatMap((event) => event.sku ? [event.sku] : []))].sort()
@@ -51,7 +76,30 @@ export function calculateCosts(events: readonly CanonicalFinancialEvent[], costs
     const cost = event.sku ? resolveCost(event.sku, costDate) : undefined
     if (!cost) { missingEvents.push(event); return total }
     const quantity = event.quantity ?? 0
-    const cogs = (event.event === 'REFUND' ? -quantity : quantity) * cost.unitCost
+    let cogs: number
+    if (event.event === 'REFUND') {
+      if (inspections && event.orderId && event.sku) {
+        const inspection = findInspection(inspections, event.orderId, event.sku)
+        if (inspection) {
+          const recovery = calculateRecoveryCost({
+            identity: inspection.identity,
+            returnedQuantity: quantity,
+            unitCost: cost.unitCost,
+            inspection,
+          })
+          cogs = -(recovery.confirmedRecoveredCost - recovery.totalRepairExpense)
+        } else {
+          // Unconfirmed recovery remains provisional: original consumed product cost is retained
+          cogs = 0
+        }
+      } else if (inspections) {
+        cogs = 0
+      } else {
+        cogs = -quantity * cost.unitCost
+      }
+    } else {
+      cogs = quantity * cost.unitCost
+    }
     appliedCosts.push({ eventId: event.id, sku: event.sku!, eventDate, costDate: cost.effectiveFrom ?? null, unitCost: cost.unitCost, quantity, cogs: round(cogs), fallback: !cost.effectiveFrom })
     return total + cogs
   }, 0)

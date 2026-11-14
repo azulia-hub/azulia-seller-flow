@@ -11,7 +11,8 @@ export function parseOrderDate(row: Record<string, unknown>) {
   if (row.MarketplaceId !== undefined && row.MarketplaceId !== 'A21TJRUUN4KGV') throw new SourceError('Order marketplace differs from the configured India account.')
   const total = object(row.OrderTotal), amount = text(total.Amount)
   const summary: SourceOrderSummary = { id, purchased, status: text(row.OrderStatus) || null, fulfillmentType: text(row.FulfillmentChannel) || null,
-    orderValue: amount || null, currency: text(total.CurrencyCode) || null }
+    orderValue: amount || null, currency: text(total.CurrencyCode) || null,
+    isReplacementOrder: typeof row.IsReplacementOrder==='boolean'?row.IsReplacementOrder:null,replacedOrderId:text(row.ReplacedOrderId)||null,earliestDeliveryDate:text(row.EarliestDeliveryDate)||null,latestDeliveryDate:text(row.LatestDeliveryDate)||null }
   return { id, purchased, ...(row.OrderStatus !== undefined || row.OrderTotal !== undefined || row.FulfillmentChannel !== undefined ? { summary } : {}) }
 }
 export function createOrderDateReader(credentials: PilotCredentials, request: typeof fetch = fetch, sessionToken?: string) {

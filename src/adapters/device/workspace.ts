@@ -15,7 +15,7 @@ export async function readDeviceEntry<T>(key:string):Promise<DeviceEntry<T>> {
 }
 export async function writeDeviceEntry(key:string,value:unknown,version?:number):Promise<{version:number}> {
   if(androidDevice){
-    if(!key.startsWith('reading:')&&!key.startsWith('inventory:'))return nativeRequest('workspace.put',{key,value,version})
+    if(!key.startsWith('reading:')&&!key.startsWith('inventory:')&&!key.startsWith('reviews:'))return nativeRequest('workspace.put',{key,value,version})
     const raw=await workspaceTask<string>({action:'encode',value})
     const chunks:string[]=[]
     for(let offset=0;offset<raw.length;){let end=Math.min(offset+120000,raw.length);const last=raw.charCodeAt(end-1);if(end<raw.length && last>=0xd800 && last<=0xdbff)end--;chunks.push(raw.slice(offset,end));offset=end}

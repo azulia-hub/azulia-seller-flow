@@ -1,3 +1,4 @@
+import { ReviewOrderControl } from '../features/review-requests/ReviewOrderControl'
 import { formatMoney } from '../adapters/preferences/runtime'
 import { useState, useMemo, useEffect } from 'react'
 import type { PulsePeriodMetrics, PulseOrderSummary, PulseOrderStatusCategory } from '../core/analytics/pulseScoreboard'
@@ -342,7 +343,7 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                               {displayTitle}
                             </div>
                             <div className="pulse-order-subline">
-                              <strong>{order.orderId}</strong>
+                              <strong>{order.orderId}</strong><ReviewOrderControl orderId={order.orderId}/>
                               <button
                                 type="button"
                                 className="copy-order-btn"

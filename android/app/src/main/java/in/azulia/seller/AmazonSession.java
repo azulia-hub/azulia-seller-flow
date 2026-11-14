@@ -81,14 +81,18 @@ final class AmazonSession {
         JSONObject credentials=decrypt(); if (credentials==null) throw new ApiError(401,"Connect Amazon to continue.",60);
         access=exchange(credentials); until=System.currentTimeMillis()+45*60000; return access;
     }
-    JSONObject request(String value) throws Exception {
+    JSONObject request(String value) throws Exception { return request(value,"GET"); }
+    JSONObject solicit(String orderId) throws Exception { if(!orderId.matches("[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}"))throw new IllegalArgumentException("Invalid order.");return request("https://sellingpartnerapi-eu.amazon.com/solicitations/v1/orders/"+orderId+"/solicitations/productReviewAndSellerFeedback?marketplaceIds=A21TJRUUN4KGV","POST"); }
+    private JSONObject request(String value,String method) throws Exception {
         URL url=new URL(value);
         if (!url.getProtocol().equals("https") || !url.getHost().equals("sellingpartnerapi-eu.amazon.com") || url.getPort()!=-1 || url.getUserInfo()!=null || url.getRef()!=null) throw new IllegalArgumentException("Unsupported Amazon host.");
         String path=url.getPath();
-        if (!path.equals("/fba/inventory/v1/summaries") && !path.matches("/listings/2021-08-01/items/[A-Z0-9]{8,32}") && !path.equals("/finances/2024-06-19/transactions") && !path.equals("/orders/v0/orders") && !path.matches("/orders/v0/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}(/orderItems)?") && !path.matches("/catalog/2022-04-01/items/[A-Z0-9]{10}")) throw new IllegalArgumentException("Unsupported Amazon operation.");
+        boolean reviewGet=method.equals("GET")&&path.matches("/solicitations/v1/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}");
+        boolean reviewPost=method.equals("POST")&&path.matches("/solicitations/v1/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}/solicitations/productReviewAndSellerFeedback");
+        if (!reviewGet && !reviewPost && !path.equals("/fba/inventory/v1/summaries") && !path.matches("/listings/2021-08-01/items/[A-Z0-9]{8,32}") && !path.equals("/finances/2024-06-19/transactions") && !path.equals("/orders/v0/orders") && !path.matches("/orders/v0/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}(/orderItems)?") && !path.matches("/catalog/2022-04-01/items/[A-Z0-9]{10}")) throw new IllegalArgumentException("Unsupported Amazon operation.");
         if (value.length()>24000) throw new IllegalArgumentException("Amazon request exceeds limit.");
-        for (int attempt=0;attempt<2;attempt++) {
-            HttpsURLConnection connection=open(value);
+        for (int attempt=0;attempt<(method.equals("POST")?1:2);attempt++) {
+            HttpsURLConnection connection=open(value);connection.setRequestMethod(method);
             try {
                 connection.setRequestProperty("x-amz-access-token",token()); connection.setRequestProperty("User-Agent","AzuliaAndroid/0.1");
                 int status=connection.getResponseCode();

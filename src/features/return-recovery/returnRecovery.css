@@ -1,0 +1,639 @@
+/* Return Recovery Feature Styles — Scoped to .recovery-* */
+
+/* Badges */
+.recovery-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.recovery-badge-positive {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--positive, #10b981);
+}
+
+.recovery-badge-warning {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--warning, #f59e0b);
+}
+
+.recovery-badge-negative {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--negative, #ef4444);
+}
+
+.recovery-badge-neutral {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--muted, #6b7280);
+}
+
+.recovery-badge-provisional {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent, #6366f1);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+}
+
+/* Portfolio Summary */
+.recovery-summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.recovery-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.recovery-kpi-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recovery-kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #6b7280);
+  font-weight: 600;
+}
+
+.recovery-kpi-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text, #111827);
+}
+
+.recovery-kpi-hint {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  line-height: 1.3;
+}
+
+.recovery-kpi-positive .recovery-kpi-value {
+  color: var(--positive, #10b981);
+}
+
+.recovery-kpi-negative .recovery-kpi-value {
+  color: var(--negative, #ef4444);
+}
+
+.recovery-kpi-accent .recovery-kpi-value {
+  color: var(--accent, #6366f1);
+}
+
+/* Tabs Bar */
+.recovery-tabs-bar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  -webkit-overflow-scrolling: touch;
+}
+
+.recovery-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.recovery-tab:hover {
+  color: var(--text, #111827);
+}
+
+.recovery-tab-active {
+  color: var(--accent, #6366f1);
+  border-bottom-color: var(--accent, #6366f1);
+  font-weight: 600;
+}
+
+/* Toolbar */
+.recovery-table-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recovery-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.recovery-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  padding: 6px 10px;
+  flex: 1;
+  min-width: 240px;
+  max-width: 480px;
+}
+
+.recovery-search-box input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text, #111827);
+  width: 100%;
+}
+
+.recovery-toolbar-count {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+/* Desktop vs Mobile display */
+.recovery-table-desktop {
+  display: block;
+}
+
+.recovery-cards-mobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .recovery-table-desktop {
+    display: none;
+  }
+
+  .recovery-cards-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+/* Product cell */
+.recovery-product-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recovery-thumb-tiny {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--border, #e5e7eb);
+}
+
+.recovery-badge-inline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recovery-disp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.recovery-text-positive {
+  color: var(--positive, #10b981);
+}
+
+.recovery-text-negative {
+  color: var(--negative, #ef4444);
+}
+
+/* Mobile Item Card */
+.recovery-item-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recovery-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.recovery-card-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recovery-order-id {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text, #111827);
+}
+
+.recovery-order-date {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-card-product {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recovery-thumb-small {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border, #e5e7eb);
+  flex-shrink: 0;
+}
+
+.recovery-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg, #f3f4f6);
+  font-size: 20px;
+}
+
+.recovery-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.recovery-card-sku {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text, #111827);
+}
+
+.recovery-card-asin {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-card-title {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recovery-card-dispositions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg, #f9fafb);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.recovery-disp-label {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-badge-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recovery-badge-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.recovery-repair-tag {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning, #f59e0b);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.recovery-claim-tag {
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent, #6366f1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.recovery-financial-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 8px;
+}
+
+.recovery-strip-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recovery-strip-col small {
+  font-size: 10px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-strip-col span,
+.recovery-strip-col strong {
+  font-size: 12px;
+}
+
+.recovery-card-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.recovery-action-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 12px;
+}
+
+/* Inspection Modal */
+.recovery-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+
+.recovery-modal-card {
+  background: var(--panel, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.recovery-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.recovery-modal-header h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.recovery-modal-subtitle {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  margin: 2px 0 0;
+}
+
+.recovery-icon-button {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  padding: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recovery-product-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg, #f9fafb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.recovery-product-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border, #e5e7eb);
+}
+
+.recovery-product-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.recovery-product-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recovery-product-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recovery-context-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-form {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  gap: 16px;
+}
+
+.recovery-dispositions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.recovery-disposition-card {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel, #ffffff);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recovery-disposition-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-danger-btn {
+  color: var(--negative, #ef4444);
+}
+
+.recovery-form-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+}
+
+.recovery-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recovery-form-field span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-form-field input,
+.recovery-form-field select {
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text, #111827);
+  background: var(--panel, #ffffff);
+  min-height: 40px;
+}
+
+.recovery-field-hint {
+  font-size: 10px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-condition-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg, #f9fafb);
+  border-radius: 6px;
+}
+
+.recovery-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text, #111827);
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.recovery-repair-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recovery-form-actions-inline {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.recovery-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 14px;
+  margin-top: 8px;
+}
+
+.recovery-footer-status {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+}
+
+.recovery-footer-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.recovery-alert {
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 12px 20px 0;
+}
+
+.recovery-alert-error {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--negative, #ef4444);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.recovery-empty-state {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--muted, #6b7280);
+  font-size: 13px;
+}

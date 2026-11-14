@@ -148,6 +148,7 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
         ...old?.value,
         ...order,
         purchased: new Date(order.purchased).toISOString(),
+        isReplacementOrder:order.isReplacementOrder??old?.value.isReplacementOrder??null,replacedOrderId:order.replacedOrderId??old?.value.replacedOrderId??null,earliestDeliveryDate:order.earliestDeliveryDate??old?.value.earliestDeliveryDate??null,latestDeliveryDate:order.latestDeliveryDate??old?.value.latestDeliveryDate??null,
         sku: order.sku ?? old?.value.sku ?? null,
         asin: order.asin ?? old?.value.asin ?? null,
         title: order.title ?? old?.value.title ?? null,
@@ -201,6 +202,11 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
       if (job.kind === 'orderItems' && job.orderId) {
         state.orderItemsChecked = state.orderItemsChecked || {}
         state.orderItemsChecked[job.orderId] = Date.now()
+      }
+      if (job.lane === 'recent') {
+        state.recentOrdersCheckedAt = new Date().toISOString()
+        state.recentOrdersThrough = job.to
+        state.jobs = state.jobs.filter(value => !(value.kind === 'purchases' && value.updatedOnly && !value.nextToken && value.lane !== 'recent' && value.from >= job.from && value.to <= job.to))
       }
     }
     if (changed || state.revision === 0 && !page.nextToken) { state.revision++; state.updatedAt = new Date().toISOString() }
