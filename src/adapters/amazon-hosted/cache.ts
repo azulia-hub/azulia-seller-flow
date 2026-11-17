@@ -148,7 +148,7 @@ export async function commitPage(account: string, owner: string, job: BrowserJob
         ...old?.value,
         ...order,
         purchased: new Date(order.purchased).toISOString(),
-        isReplacementOrder:order.isReplacementOrder??old?.value.isReplacementOrder??null,replacedOrderId:order.replacedOrderId??old?.value.replacedOrderId??null,earliestDeliveryDate:order.earliestDeliveryDate??old?.value.earliestDeliveryDate??null,latestDeliveryDate:order.latestDeliveryDate??old?.value.latestDeliveryDate??null,
+        shipmentStatus:order.shipmentStatus??old?.value.shipmentStatus??null,isReplacementOrder:order.isReplacementOrder??old?.value.isReplacementOrder??null,replacedOrderId:order.replacedOrderId??old?.value.replacedOrderId??null,earliestDeliveryDate:order.earliestDeliveryDate??old?.value.earliestDeliveryDate??null,latestDeliveryDate:order.latestDeliveryDate??old?.value.latestDeliveryDate??null,
         sku: order.sku ?? old?.value.sku ?? null,
         asin: order.asin ?? old?.value.asin ?? null,
         title: order.title ?? old?.value.title ?? null,

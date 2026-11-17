@@ -107,6 +107,7 @@ export interface CanonicalOrder {
   earliestDeliveryDate?:string|null
   latestDeliveryDate?:string|null
   reviewMetadataCheckedAt?:string|null
+  shipmentStatus?:string|null
 
   readonly orderId: string
   readonly purchaseDate: string

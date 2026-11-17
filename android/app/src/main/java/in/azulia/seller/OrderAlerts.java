@@ -73,40 +73,129 @@ final class OrderAlerts {
     private static String text(JSONObject object,String key) {String value=object.optString(key,"");return "null".equals(value)?"":value;}
     private static void notify(Context c,DeviceDatabase db,String account,String key,String id,String label,int color) throws Exception {
         if(Build.VERSION.SDK_INT>=33 && c.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED)return;
-        String title="Order "+id,image="";
         Object raw=db.retained("source:"+account+":orders:"+id);
-        if(raw instanceof JSONObject) {
-            JSONObject order=(JSONObject)raw;
-            title=text(order,"title").isEmpty()?title:text(order,"title"); image=text(order,"imageUrl");
-            JSONArray items=order.optJSONArray("items");
-            if(items!=null && items.length()>0) {
-                JSONObject item=items.getJSONObject(0); if(!text(item,"title").isEmpty())title=text(item,"title"); if(image.isEmpty())image=text(item,"imageUrl");
-                Object cat=db.retained("source:"+account+":catalog:"+text(item,"asin"));
-                if(cat instanceof JSONObject) { JSONObject catalog=(JSONObject)cat;if(!text(catalog,"title").isEmpty())title=text(catalog,"title"); if(image.isEmpty())image=text(catalog,"imageUrl"); }
-            }
-        }
+        JSONObject order=raw instanceof JSONObject?(JSONObject)raw:null;
         Object extra=db.retained("alert-meta:"+account+":"+id);
-        if(extra instanceof JSONObject) {JSONObject metadata=(JSONObject)extra;if(!text(metadata,"title").isEmpty())title=text(metadata,"title");if(image.isEmpty())image=text(metadata,"imageUrl");}
-        String storage="alert:"+account+":"+key;Object prior=db.retained(storage);
+        JSONObject extraMeta=extra instanceof JSONObject?(JSONObject)extra:null;
+
+        String contentTitle;
+        String contentText;
+        String expandedText;
+        String image="";
+
+        if(key.startsWith("refund:")) {
+            contentTitle=label;
+            contentText=id;
+            expandedText=label+"\n"+id;
+            if(order!=null) {
+                String t=text(order,"title");
+                if(!t.isEmpty()){contentText=t;expandedText=label+"\n"+t+"\n"+id;}
+                image=text(order,"imageUrl");
+            }
+            if(extraMeta!=null) {
+                String t=text(extraMeta,"title");
+                if(!t.isEmpty()){contentText=t;expandedText=label+"\n"+t+"\n"+id;}
+                if(image.isEmpty())image=text(extraMeta,"imageUrl");
+            }
+        } else {
+            OrderNoticePolicy.CatalogLookup catLookup = (asin) -> {
+                try {
+                    Object cat = db.retained("source:"+account+":catalog:"+asin);
+                    return cat instanceof JSONObject ? (JSONObject)cat : null;
+                } catch (Exception e) {
+                    return null;
+                }
+            };
+            OrderNoticePolicy.MultiSkuOrderNotice summary = OrderNoticePolicy.summarizeOrder(id, order, extraMeta, catLookup);
+            String eventPrefix = label.startsWith("Order confirmed") ? "Order confirmed" : "New order";
+            contentTitle = eventPrefix + " · " + summary.compactSummary;
+            String channel = "";
+            int lastSep = label.lastIndexOf(" · ");
+            if(lastSep >= 0 && lastSep + 3 < label.length()) {
+                channel = label.substring(lastSep + 3).trim();
+            }
+            contentText = id + (channel.isEmpty() || channel.equals(eventPrefix) ? "" : " · " + channel);
+            expandedText = contentText + "\n" + summary.expandedText;
+            image = summary.primaryImage;
+        }
+
+        String storage="alert:"+account+":"+key;
+        Object prior=db.retained(storage);
         JSONObject previous=prior instanceof JSONObject?(JSONObject)prior:null;
-        Bitmap bitmap=null;if(!image.isEmpty())try{bitmap=new ProductImages(c).bitmapCached(image);}catch(Exception ignored){}
-        if(previous!=null && (image.isEmpty()||previous.optBoolean("hasImage")||bitmap==null) && label.equals(previous.optString("label")) && title.equals(previous.optString("title")) && image.equals(previous.optString("image")))return;
+        Bitmap bitmap=null;
+        if(!image.isEmpty())try{bitmap=new ProductImages(c).bitmapCached(image);}catch(Exception ignored){}
+
+        if(previous!=null && (image.isEmpty()||previous.optBoolean("hasImage")||bitmap==null)
+            && label.equals(previous.optString("label"))
+            && contentTitle.equals(previous.optString("title"))
+            && expandedText.equals(previous.optString("expanded"))
+            && image.equals(previous.optString("image"))) {
+            return;
+        }
+
         NotificationManager nm=c.getSystemService(NotificationManager.class);
         NotificationChannel channel=new NotificationChannel("seller-alerts","Orders & refunds",NotificationManager.IMPORTANCE_DEFAULT);
-        channel.setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION).build());nm.createNotificationChannel(channel);
-        PendingIntent open=PendingIntent.getActivity(c,0,new Intent(c,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        channel.setSound(android.provider.Settings.System.DEFAULT_NOTIFICATION_URI,new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION).build());
+        nm.createNotificationChannel(channel);
+
+        PendingIntent open;
+        try {
+            if (key.startsWith("refund:")) {
+                String transaction = key.substring(7);
+                open = NotificationNav.refundDetail(c, account, id, transaction);
+            } else {
+                open = NotificationNav.orderDetail(c, account, id);
+            }
+        } catch (Exception e) {
+            open = PendingIntent.getActivity(c, 0, new Intent(c, MainActivity.class), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        }
+
         boolean sound=LiveSync.prefs(c).getBoolean("notificationSound",true);
-        if(!sound){NotificationChannel quiet=new NotificationChannel("seller-alerts-quiet","Order and refund alerts (quiet)",NotificationManager.IMPORTANCE_LOW);quiet.setSound(null,null);nm.createNotificationChannel(quiet);}
-        Notification.Builder notice=new Notification.Builder(c,sound?"seller-alerts":"seller-alerts-quiet").setSmallIcon(R.drawable.ic_notification).setContentTitle(label).setContentText(title)
-            .setStyle(new Notification.BigTextStyle().bigText(title+"\n"+id)).setColor(color).setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true);
+        if(!sound){
+            NotificationChannel quiet=new NotificationChannel("seller-alerts-quiet","Order and refund alerts (quiet)",NotificationManager.IMPORTANCE_LOW);
+            quiet.setSound(null,null);
+            nm.createNotificationChannel(quiet);
+        }
+
+        Notification.Builder notice=new Notification.Builder(c,sound?"seller-alerts":"seller-alerts-quiet")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(contentTitle)
+            .setContentText(contentText)
+            .setStyle(new Notification.BigTextStyle().bigText(expandedText))
+            .setColor(color)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true);
+
+        if(bitmap!=null) {
+            notice.setLargeIcon(bitmap);
+        }
+
+        JSONObject record = new JSONObject()
+            .put("order", id)
+            .put("label", label)
+            .put("title", contentTitle)
+            .put("expanded", expandedText)
+            .put("image", image)
+            .put("hasImage", bitmap != null)
+            .put("color", color);
+
         if(previous!=null) {
             boolean active=false;
             for(android.service.notification.StatusBarNotification entry:nm.getActiveNotifications())if((account+":"+key).equals(entry.getTag()))active=true;
-            if(!active) { db.retain(storage,new JSONObject().put("order",id).put("label",label).put("title",title).put("image",image).put("hasImage",bitmap!=null).put("color",color)); return; }
+            if(!active) {
+                db.retain(storage, record);
+                return;
+            }
         }
-        if(bitmap!=null)notice.setLargeIcon(bitmap).setStyle(new Notification.BigPictureStyle().bigPicture(bitmap).setSummaryText(title));
-        nm.notify(account+":"+key,0,notice.build());
-        db.retain(storage,new JSONObject().put("order",id).put("label",label).put("title",title).put("image",image).put("hasImage",bitmap!=null).put("color",color));
-        if(previous==null) { Object old=db.retained("alert-index:"+account);JSONArray index=old instanceof JSONArray?(JSONArray)old:new JSONArray();index.put(key);db.retain("alert-index:"+account,index); }
+
+        nm.notify(account+":"+key, 0, notice.build());
+        db.retain(storage, record);
+        if(previous==null) {
+            Object old=db.retained("alert-index:"+account);
+            JSONArray index=old instanceof JSONArray?(JSONArray)old:new JSONArray();
+            index.put(key);
+            db.retain("alert-index:"+account, index);
+        }
     }
 }

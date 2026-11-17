@@ -273,7 +273,7 @@ function orderSummary(value: unknown): SourceOrderSummary {
   const row = object(value), summary = object(row.summary)
   return {
     isReplacementOrder:typeof summary.isReplacementOrder==='boolean'?summary.isReplacementOrder:typeof row.isReplacementOrder==='boolean'?row.isReplacementOrder:null,
-    replacedOrderId:text(summary.replacedOrderId)||text(row.replacedOrderId)||null,earliestDeliveryDate:text(summary.earliestDeliveryDate)||text(row.earliestDeliveryDate)||null,latestDeliveryDate:text(summary.latestDeliveryDate)||text(row.latestDeliveryDate)||null,reviewMetadataCheckedAt:text(summary.reviewMetadataCheckedAt)||text(row.reviewMetadataCheckedAt)||null,
+    shipmentStatus:text(summary.shipmentStatus)||text(row.shipmentStatus)||null,replacedOrderId:text(summary.replacedOrderId)||text(row.replacedOrderId)||null,earliestDeliveryDate:text(summary.earliestDeliveryDate)||text(row.earliestDeliveryDate)||null,latestDeliveryDate:text(summary.latestDeliveryDate)||text(row.latestDeliveryDate)||null,reviewMetadataCheckedAt:text(summary.reviewMetadataCheckedAt)||text(row.reviewMetadataCheckedAt)||null,
     id: text(row.id),
     purchased: text(row.purchased),
     status: text(summary.status) || text(row.status) || null,
@@ -574,7 +574,7 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     const finalState = await meta(account)
     if(!androidDevice&&!abort.signal.aborted)try{
       const reviewSource=await snapshot(account)
-      await runReviewCycle(inventoryStorage,{account,orders:reviewOrders(reviewSource.orders??[]),freshOrdersAt:(await meta(account)).recentOrdersCheckedAt??null},{
+      await runReviewCycle(inventoryStorage,{account,orders:reviewOrders(reviewSource.orders??[],reviewSource.records),freshOrdersAt:(await meta(account)).recentOrdersCheckedAt??null},{
         order:async(id,signal)=>await authorized('reviewOrder',{orderId:id},signal) as unknown as ReviewOrder,
         eligible:async(id,signal)=>(await authorized('reviewEligibility',{orderId:id},signal)).eligible===true,
         submit:async(id,attemptId,signal)=>{const result=await authorized('reviewSubmit',{orderId:id,attemptId},signal,false);if(result.accepted!==true)throw new Error('Amazon did not confirm review submission.')},

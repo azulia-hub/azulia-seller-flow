@@ -12,6 +12,7 @@ export function parseOrderDate(row: Record<string, unknown>) {
   const total = object(row.OrderTotal), amount = text(total.Amount)
   const summary: SourceOrderSummary = { id, purchased, status: text(row.OrderStatus) || null, fulfillmentType: text(row.FulfillmentChannel) || null,
     orderValue: amount || null, currency: text(total.CurrencyCode) || null,
+    shipmentStatus:text(row.EasyShipShipmentStatus)||null,
     isReplacementOrder: typeof row.IsReplacementOrder==='boolean'?row.IsReplacementOrder:null,replacedOrderId:text(row.ReplacedOrderId)||null,earliestDeliveryDate:text(row.EarliestDeliveryDate)||null,latestDeliveryDate:text(row.LatestDeliveryDate)||null }
   return { id, purchased, ...(row.OrderStatus !== undefined || row.OrderTotal !== undefined || row.FulfillmentChannel !== undefined ? { summary } : {}) }
 }

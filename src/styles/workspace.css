@@ -424,3 +424,50 @@ html[data-refresh-dragging=true] .pull-refresh-orb{transition:none}
 .product-history-request{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:12px 0}.product-history-request small{color:var(--muted)}
 .pull-refresh-notice{position:fixed;z-index:151;top:140px;left:50%;transform:translateX(-50%);max-width:min(90vw,400px);padding:10px 14px;border-radius:10px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:0 3px 14px #0003;font-size:.8rem}
 .product-comparison-panel{padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--panel);margin:14px 0}.product-comparison-panel h3{margin:0 0 8px}.product-comparison-panel p{line-height:1.6;overflow-wrap:anywhere}.product-comparison-panel label{display:flex;gap:10px;align-items:center;min-height:42px}.product-comparison-panel input{width:18px;height:18px}.product-comparison-panel small{display:block;color:var(--muted);line-height:1.6;margin-top:8px}
+
+/* Arabic invocation banner on top */
+.app-arabic-banner {
+  text-align: center;
+  padding: 6px 16px 5px;
+  background: var(--glass);
+  border-bottom: 1px solid var(--line);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.arabic-line-bismillah {
+  font-family: 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--text);
+  font-weight: 300;
+  letter-spacing: 0;
+  opacity: 0.92;
+}
+.arabic-line-husayn {
+  font-family: 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: #c43131;
+}
+html[data-theme='dark'] .arabic-line-husayn {
+  color: #ff8585;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme='light']) .arabic-line-husayn {
+    color: #ff8585;
+  }
+}
+@media (max-width: 600px) {
+  .app-arabic-banner {
+    padding: 5px 10px 4px;
+  }
+  .arabic-line-bismillah {
+    font-size: 13px;
+  }
+  .arabic-line-husayn {
+    font-size: 11.5px;
+  }
+}

@@ -3,6 +3,8 @@ import { Writable } from 'node:stream'
 import { mkdir, writeFile, rename, lstat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { dirname } from 'node:path'
+import { credentialsPath } from './credentials.ts'
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
   console.error('Run setup in your own interactive terminal. Do not pipe credentials or put them in command arguments.')
@@ -19,13 +21,14 @@ if (!process.stdin.isTTY || !process.stdout.isTTY) {
       if (!answer || answer.length > 8192) throw new Error()
       values[key] = answer
     }
-    const directory = fileURLToPath(new URL('../../.local/', import.meta.url))
+    const destination = await credentialsPath(fileURLToPath(new URL('../../.local/amazon-credentials.json', import.meta.url)))
+    const directory = dirname(destination)
     await mkdir(directory, { recursive: true, mode: 0o700 })
     const stat = await lstat(directory)
     if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0) throw new Error()
     const temporary = `${directory}/${randomUUID()}.json`
     await writeFile(temporary, JSON.stringify(values), { mode: 0o600, flag: 'wx' })
-    await rename(temporary, `${directory}/amazon-credentials.json`)
+    await rename(temporary, destination)
     console.log('Saved locally with owner-only permissions. Credentials are not encrypted at rest; protect your computer and backups. Restart Azulia to use them.')
   } catch {
     console.error('Setup was not completed. Use nonempty values and ensure .local is private (mode 700).')

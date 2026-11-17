@@ -29,3 +29,13 @@ Built-in `node:sqlite` stores account-partitioned source records, changed versio
 Loopback-only hosting, exact Host/Origin checks and explicit mutation intent remain in place. Local APIs expose sync status, cached source data and bounded history requests; callers cannot supply arbitrary Amazon URLs or tokens. A changed credential fingerprint selects a separate cache. Browser readings are saved under a stable per-account import ID and preserve the original manual report history.
 
 Implementation is unverified: tests, builds, browser/mobile checks and live Amazon requests were not executed during this work, per owner instruction.
+
+### Repositories on NTFS drives
+
+The credentials loader prefers `AZULIA_CREDENTIALS_FILE` when explicitly set,
+then an existing `~/.config/azulia/amazon-credentials.json`, then the legacy
+repository `.local/amazon-credentials.json`. Setup updates the same selected file.
+All locations still require a regular, non-symlink file with owner-only permissions.
+If the project drive reports every file as mode 777 and ignores chmod, keep the
+credential file on a Linux filesystem (directory 700, file 600). Existing cached
+reports remain in the project directory; credentials do not need to be re-entered.

@@ -15,7 +15,8 @@ parentPort!.on('message',async ({snapshot,forceInventory})=>{
       device.put(`reading:${snapshot.connectionKey}`,reading,version)
     }
     try { await engine.syncInventory(snapshot.connectionKey,snapshot,{get:async(key:string)=>device.get(key),put:async(key:string,value:unknown,version?:number)=>device.put(key,value,version)},engine.createInventoryReader(workerData.credentials),Boolean(forceInventory)) } catch { /* Optional inventory failures never block completed financial readings. */ }
-    try { await engine.runReviewCycle({get:async(key:string)=>device.get(key),put:async(key:string,value:unknown,version?:number)=>device.put(key,value,version)},{account:snapshot.connectionKey,orders:engine.reviewOrders(snapshot.orders??[]),freshOrdersAt:snapshot.ordersCheckedAt??null},engine.createReviewTransport(workerData.credentials)) } catch { /* Optional review processing never invalidates financial data. */ }
-    parentPort!.postMessage({ok:true,interval:preferences(settings.preferences).syncMinutes})
+    let reviewsPending=false
+    try { reviewsPending=(await engine.runReviewCycle({get:async(key:string)=>device.get(key),put:async(key:string,value:unknown,version?:number)=>device.put(key,value,version)},{account:snapshot.connectionKey,orders:engine.reviewOrders(snapshot.orders??[],snapshot.records),freshOrdersAt:snapshot.ordersCheckedAt??null},engine.createReviewTransport(workerData.credentials))).pending } catch { /* Optional review processing never invalidates financial data. */ }
+    parentPort!.postMessage({ok:true,reviewsPending,interval:preferences(settings.preferences).syncMinutes})
   }catch{parentPort!.postMessage({ok:false})}
 })

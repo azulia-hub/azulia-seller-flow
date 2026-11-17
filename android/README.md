@@ -81,3 +81,32 @@ Amazon connection automatically starts one fetch → merge → calculate → sav
 The engine is bundled; existing supported preferences apply without reinstalling, but changes to native capabilities or the bundled financial engine require a compatible APK. Android service timeouts, notification permission, explicit system Stop and network restrictions still apply. New-order/confirmation/refund sound preferences choose Android notification channels; system channel/DND settings remain authoritative. All seller source records, credentials, costs and committed readings are retained. Only incomplete upload staging can be discarded before a fresh engine run.
 
 Final acceptance tests were stopped at the owner's explicit request; do not describe the new headless runtime as device-verified merely because it compiles.
+
+### Review POST repair (0.2.6 / versionCode 16)
+The native Solicitations POST now explicitly uses `Content-Type: application/json`,
+`Accept: application/hal+json` and a zero-byte body. Android URLConnection otherwise
+adds a form content type, which caused HTTP 400 InvalidInput while the same account's
+desktop submissions worked. No body parameter is invented. Eligibility, durable
+claims, single-dispatch handling and uncertain history are retained. Same-key update
+installed in place and a fresh eligible order successfully displayed Request sent
+in the owner-authorized on-phone test. Failed submissions were not replayed.
+
+### Daily review queue and notifications (0.2.7 / versionCode 17 / bridge 10)
+Settings → Review requests includes a daily India-time picker, default 14:53.
+Automatic sending remains opt-in; existing opt-in state is preserved. One durable
+daily queue drains in paced slices through the existing headless runtime, with
+fresh metadata/eligibility checks and no replay of uncertain submissions. Active
+sync notices the daily clock on its scheduler tick; Android restrictions can delay
+execution and missed starts resume when available. Accepted counts update a native
+Review requests sent notification after each batch; blocked notifications retry
+without resending orders. Manual accepted sends also notify. Manual sending remains
+available outside the automatic schedule. No uninstall/data clear is needed.
+
+### Background review notification correction (0.2.8 / versionCode 18)
+The headless bridge now allows `reviews.notify`, which was implemented but omitted
+from the background capability list in 0.2.7. Notification exceptions also no longer
+interrupt the daily queue's continuation result. Saved accepted/uncertain submission
+history remains authoritative; no order is reset for a notification retry. Scoped
+background-capability checks cover permitted engine calls and rejected interactive
+account/UI calls. Phone reconnection and actual daily-run/notification verification
+remain pending; source diagnosis alone does not establish today's accepted count.

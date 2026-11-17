@@ -1,7 +1,7 @@
 import { createCatalogReader } from './catalog.ts'
 import { createActivityReader, SourceError } from './reader.ts'
 import { createOrderDateReader, parseOrderDate } from './orders.ts'
-import { openSyncStore } from './store.ts'
+import { openSyncStore,orderReadJob } from './store.ts'
 import { missingRanges, mergeCoverage, type SyncRange } from '../../../src/core/sync/ranges.ts'
 import type { SyncStatus, SyncSnapshot } from '../../../src/adapters/amazon-report-sync/protocol.ts'
 import type { PilotCredentials } from '../../amazon/pilot.ts'
@@ -49,7 +49,16 @@ export async function createReportSync(options: { directory: string; connectionK
     let lookupId: string | null = null
     try {
       const now = Date.now(), purchaseCoverage = JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[]
-      let job = store.jobs().find(job => job.kind === 'purchases')
+      // Recent changes have their own resumable stream and cannot sit behind purchase backfill.
+      const ordersCutoff=now-2*60000
+      if(!store.jobs().some(job=>job.kind==='recent-orders')&&now-Number(store.get('lastRecentOrdersRefresh')??0)>=refreshInterval){
+        const previous=Date.parse(store.get('recentOrdersThrough')??'')
+        const recentFrom=Math.max(Number.isFinite(previous)?previous-15*60000:ordersCutoff-3600000,ordersCutoff-3600000)
+        const catchupFrom=Number.isFinite(previous)?previous-15*60000:ordersCutoff-3*86400000
+        if(catchupFrom<recentFrom&&!store.jobs().some(job=>job.kind==='updated-orders'))store.enqueue('updated-orders',{from:new Date(Math.max(0,catchupFrom)).toISOString(),to:new Date(recentFrom).toISOString()})
+        store.enqueue('recent-orders',{from:new Date(recentFrom).toISOString(),to:new Date(ordersCutoff).toISOString()})
+      }
+      let job = store.jobs().find(job=>job.kind==='recent-orders')??store.jobs().find(orderReadJob)
       if (!job && now >= listNext) {
         const gap = [...requested(), defaultRange()].flatMap(range => missingRanges(range, purchaseCoverage)).sort((a, b) => b.to.localeCompare(a.to))[0]
         if (gap) store.enqueue('purchases', gap)
@@ -58,13 +67,13 @@ export async function createReportSync(options: { directory: string; connectionK
           store.enqueue('purchases', { from: new Date(Math.max(Date.parse(range.from), now - 3 * 86400000)).toISOString(), to: range.to })
           store.set('lastPurchaseRefresh', String(now))
         }
-        job = store.jobs().find(job => job.kind === 'purchases')
+        job = store.jobs().find(job=>job.kind==='recent-orders')??store.jobs().find(orderReadJob)
       }
       if (job && now >= listNext) {
         // Orders list allowance is independent of single-order and Finance allowances.
         listNext = now + 60000; store.set('orderListNext', String(listNext))
-        if (now - job.createdAt > 23 * 3600000) store.discardJob(job.id)
-        else { const page = await orderReader.page(job, abort.signal); store.commitOrderPage(job, page.orders, page.nextToken, page.issues);if(!page.nextToken&&Date.parse(job.to)>=Date.now()-15*60000)store.set('lastOrdersScanAt',new Date().toISOString()) }
+        if (now - job.createdAt > 23 * 3600000) {if(job.kind==='purchases')store.discardJob(job.id);else store.restartOrderJob(job.id)}
+        else { const page = await orderReader.page({...job,updatedOnly:job.kind!=='purchases'}, abort.signal); store.commitOrderPage(job, page.orders, page.nextToken, page.issues) }
       } else {
         const missingItems = store.missingOrderItems()
         if (missingItems) {
@@ -122,7 +131,7 @@ export async function createReportSync(options: { directory: string; connectionK
       const now = Date.now(), cutoff = new Date(now - 5 * 60000).toISOString()
       const coverage = store.coverage()
       store.acknowledgeCoveredOrderHistories()
-      if (!store.jobs().some(job => job.kind !== 'purchases')) {
+      if (!store.jobs().some(job => !orderReadJob(job))) {
         const desired = [...requested(), defaultRange()]
         const gaps = desired.flatMap(range => missingRanges({ from: range.from, to: new Date(Math.min(Date.parse(range.to), Date.parse(cutoff))).toISOString() }, coverage))
         // Recent head first; older backfill follows. Completed windows are never full-downloaded again.
@@ -138,7 +147,7 @@ export async function createReportSync(options: { directory: string; connectionK
           if (due) store.enqueue('order', { from: cutoff, to: cutoff }, due.id)
         }
       }
-      const job = store.jobs().find(job => job.kind !== 'purchases')
+      const job = store.jobs().find(job => !orderReadJob(job))
       if (!job) { state = 'idle'; nextAttempt = Date.now() + 60000; return }
       if (Date.now() - job.createdAt > 23 * 3600000) { store.discardJob(job.id); nextAttempt = Date.now() + 3000; return }
       const result = await read(job, abort.signal)
@@ -159,7 +168,7 @@ export async function createReportSync(options: { directory: string; connectionK
   return {
     want,
     configure(minutes:number){refreshInterval=Math.max(2,Math.min(5,minutes))*60000},
-    refresh(range?:SyncRange,forceHistory=true){const selected=range??defaultRange();want(selected);const cutoff=new Date(Date.now()-5*60000).toISOString();if(forceHistory)for(const order of store.orders())if(order.purchased>=selected.from&&order.purchased<=selected.to)store.enqueue('history',{from:order.purchased,to:cutoff},order.id);store.set('lastRefresh','0');store.set('lastPurchaseRefresh','0');nextAttempt=0;void tick();void tickOrders()},
+    refresh(range?:SyncRange,forceHistory=true){const selected=range??defaultRange();want(selected);const cutoff=new Date(Date.now()-5*60000).toISOString();if(forceHistory)for(const order of store.orders())if(order.purchased>=selected.from&&order.purchased<=selected.to)store.enqueue('history',{from:order.purchased,to:cutoff},order.id);store.set('lastRefresh','0');store.set('lastPurchaseRefresh','0');store.set('lastRecentOrdersRefresh','0');nextAttempt=0;void tick();void tickOrders()},
     status(): SyncStatus { return { connectionKey: options.connectionKey, configured: true, ordersCheckedAt:store.get('lastOrdersScanAt'), revision: store.revision(), records: store.count(), catalogPending: store.catalogPending(), catalogError, orderDateIssues: store.orderDateIssues(), pendingOrderDates: store.pendingOrderDates(), pendingOrderCycles: store.pendingOrderCycles(), orderDatesSyncing: ordersRunning, orderDatesError: orderError || null, purchaseHistoryPending: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[])).length, missingWindows: mergeCoverage([...requested(), defaultRange()]).flatMap(range => missingRanges(range, store.coverage())).length, coverage: store.coverage(), purchaseCoverage: JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[], state, lastSync: store.get('lastSync'), nextAttempt: nextAttempt ? new Date(nextAttempt).toISOString() : null, error } },
     snapshot(since = -1): SyncSnapshot { const delta = Number.isSafeInteger(since) && since >= Number(store.get('deltaBase') ?? 0) && since <= store.revision(); return { ordersCheckedAt:store.get('lastOrdersScanAt'), delta, connectionKey: options.connectionKey, revision: store.revision(), updatedAt: store.get('updatedAt'), orders: store.orders(), purchaseCoverage:JSON.parse(store.get('purchaseCoverage')??'[]') as SyncRange[], records: delta ? store.changesSince(since) : store.records(), coverage: store.coverage() } },
     async close() { stopped = true; clearInterval(timer); abort.abort(); while (running || ordersRunning || catalogRunning) await new Promise(resolve => setTimeout(resolve, 20)); store.close() },

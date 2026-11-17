@@ -8,7 +8,7 @@ import java.util.concurrent.Executors;
 
 /** One-way capabilities: no arbitrary URLs, filesystem paths, SQL, or secret-reading method. */
 final class DeviceBridge {
-    static final int VERSION=9;
+    static final int VERSION=10;
     private final Activity activity;
     private final android.content.Context context;
     private final HeadlessSync.Listener engine;
@@ -49,7 +49,7 @@ final class DeviceBridge {
     }
     private static final class ReviewSubmission {}
     private Object execute(String action,JSONObject input) throws Exception {
-        if(engine!=null && !(action.startsWith("source.")||action.startsWith("workspace.")||action.startsWith("engine.")||action.equals("reading.status")||action.equals("session.status")||action.equals("amazon.request")||action.equals("reviews.submit")||action.equals("inventory.notify")||action.startsWith("background.")))throw new IllegalArgumentException("Unsupported background capability.");
+        if(engine!=null && !BackgroundCapabilities.allows(action))throw new IllegalArgumentException("Unsupported background capability.");
         switch (action) {
             case "session.status": {
                 JSONObject status=session.status(); if (status.optBoolean("configured")) BackgroundSync.schedule(context);
@@ -69,6 +69,10 @@ final class DeviceBridge {
             case "engine.phase": if(engine!=null)engine.phase(input);return true;
             case "engine.completed": if(engine!=null)engine.complete(input);return true;
             case "live.configure": activity.runOnUiThread(() -> LiveSync.configure((MainActivity)activity,input.optBoolean("enabled"))); return LiveSync.status(activity);
+            case "reviews.notify": {
+                if(!session.status().getString("account").equals(input.getString("account")))throw new IllegalArgumentException("Review account mismatch.");
+                return new JSONObject().put("delivered",ReviewAlerts.show(context,input));
+            }
             case "reviews.submit": {
                 if(engine!=null&&!LiveSync.networkAllowed(context))throw new AmazonSession.ApiError(0,"Waiting for an allowed connection.",60);
                 String account=session.status().getString("account"),id=input.getString("orderId");
@@ -84,6 +88,11 @@ final class DeviceBridge {
                         Object configObj=database.retained("reviews-config:"+account);
                         if(configObj instanceof JSONObject && !((JSONObject)configObj).optBoolean("autoEnabled",false))
                             throw new IllegalStateException("Automatic sending was disabled before dispatch.");
+                        if(!(configObj instanceof JSONObject))throw new IllegalStateException("Automatic sending is off.");
+                        String dailyTime=((JSONObject)configObj).optString("dailyTime","14:53");
+                        if(!dailyTime.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]"))dailyTime="14:53";
+                        String now=java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.ROOT));
+                        if(now.compareTo(dailyTime)<0)throw new IllegalStateException("Waiting for the daily review request time (IST).");
                     }
                     Object reviewsObj=database.retained("reviews:"+account);
                     if(reviewsObj instanceof JSONObject){
@@ -108,7 +117,7 @@ final class DeviceBridge {
             case "inventory.notify": InventoryAlerts.show(context,input);return new JSONObject().put("saved",true);
             case "workspace.head": return database.workspaceHead(input.getString("key"));
             case "workspace.get": return database.workspaceGet(input.getString("key"));
-            case "workspace.put": { Object result=database.workspacePut(input);if("settings".equals(input.optString("key")))LiveSync.applySettings(context,input.getJSONObject("value"));return result; }
+            case "workspace.put": { Object result=database.workspacePut(input);if("settings".equals(input.optString("key")))LiveSync.applySettings(context,input.getJSONObject("value"));if(input.optString("key").equals("reviews-config:"+session.status().optString("account")))LiveSync.applyReviewSettings(context,input.getJSONObject("value"));return result; }
             case "workspace.chunk": return database.workspaceChunk(input);
             case "workspace.upload": return database.workspaceUpload(input);
             case "source.begin": return database.begin(input);
@@ -118,6 +127,21 @@ final class DeviceBridge {
             case "background.pending": return database.pendingBackground(input.getString("account"));
             case "background.read": return database.backgroundRead(input.getString("account"),input.getString("id"),input.getString("url"));
             case "image.get": return images.download(input.getString("url"));
+            case "notification.navigate": {
+                if (activity instanceof MainActivity) {
+                    JSONObject nav = ((MainActivity) activity).getPendingNav();
+                    return nav != null ? nav : new JSONObject();
+                }
+                return new JSONObject();
+            }
+            case "notification.ack": {
+                if (activity instanceof MainActivity) {
+                    String eventId = input.optString("eventId");
+                    boolean acknowledged = ((MainActivity) activity).acknowledgePendingNav(eventId);
+                    return new JSONObject().put("acknowledged", acknowledged);
+                }
+                return new JSONObject().put("acknowledged", false);
+            }
             default: throw new IllegalArgumentException("Unsupported bridge operation.");
         }
     }

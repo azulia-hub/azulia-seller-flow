@@ -25,8 +25,16 @@ final class InventoryAlerts {
             if(id.length()>64||sent.contains(id)||!status.matches("OUT_OF_STOCK|CRITICAL_REORDER|REORDER_SOON"))continue;
             String title=alert.optString("title",alert.optString("sku","Product"));if(title.length()>180)title=title.substring(0,180);
             String text=status.replace('_',' ').toLowerCase()+" · Suggested reorder: "+(alert.isNull("quantity")?"unavailable":alert.optInt("quantity"));
-            android.content.Intent intent=new android.content.Intent(context,MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            android.app.PendingIntent tap=android.app.PendingIntent.getActivity(context,account.hashCode(),intent,android.app.PendingIntent.FLAG_UPDATE_CURRENT|android.app.PendingIntent.FLAG_IMMUTABLE);
+            android.app.PendingIntent tap;
+            try {
+                String sku = alert.getString("sku");
+                String marketplace = alert.optString("marketplace", "AMAZON");
+                String channel = alert.optString("fulfillmentChannel", "LISTING");
+                tap = NotificationNav.inventoryRestock(context, account, sku, marketplace, channel);
+            } catch (Exception e) {
+                android.content.Intent intent=new android.content.Intent(context,MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                tap=android.app.PendingIntent.getActivity(context,(account+alert.optString("itemId")).hashCode(),intent,android.app.PendingIntent.FLAG_UPDATE_CURRENT|android.app.PendingIntent.FLAG_IMMUTABLE);
+            }
             Notification notification=new Notification.Builder(context,"inventory-stock").setSmallIcon(R.drawable.ic_notification).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(tap).setAutoCancel(true).build();
             manager.notify((account+alert.optString("itemId")).hashCode(),notification);sent.add(id);
         }

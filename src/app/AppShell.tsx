@@ -47,6 +47,10 @@ export function AppShell({ preferences, onPreferencesChange, active, search, syn
       <div className="workspace-install"><InstallButton /></div><div className="workspace-privacy"><span aria-hidden="true">◉</span><div><strong>Local &amp; private</strong><small>Your reports stay in this browser.</small></div></div>
     </aside>
     <main className="app-main">
+      <div className="app-arabic-banner" lang="ar" dir="rtl" aria-label="بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ · يَا حُسَيْن">
+        <div className="arabic-line-bismillah">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+        <div className="arabic-line-husayn">يَا حُسَيْن</div>
+      </div>
       <header className="topbar workspace-topbar">
         <div className="workspace-topbar-title"><button className="workspace-menu secondary" aria-label="Open navigation" aria-expanded={mobileNavOpen} onClick={onToggleMobileNav}>☰</button><img className="mobile-brand-logo" src={`${import.meta.env.BASE_URL}brand/azulia-logo.webp`} alt="Azulia" width="32" height="32" /><span>{page?.label ?? 'Dashboard'}</span></div>
         <div className="workspace-search-slot">{search}</div>

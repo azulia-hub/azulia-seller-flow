@@ -170,3 +170,23 @@ it('does not publish a data revision for reordered JSON fields but does publish 
   expect(store.changesSince(revision)).toHaveLength(1)
   expect(store.records()[0].unknown).toEqual({ second: 'changed', first: 'keep' })
 })
+
+it('advances recent-order freshness only after the final committed page without inventing purchase coverage',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'azulia-order-updates-'))
+ cleanup.push(()=>rm(directory,{recursive:true,force:true}))
+ const store=await openSyncStore(directory,'account');cleanup.push(async()=>store.close())
+ const range={from:new Date(Date.now()-3600000).toISOString(),to:new Date(Date.now()-120000).toISOString()}
+ store.enqueue('recent-orders',range)
+ store.commitOrderPage(store.jobs()[0],[],'next')
+ expect(store.get('recentOrdersThrough')).toBeNull()
+ expect(store.get('lastOrdersScanAt')).toBeNull()
+ expect(JSON.parse(store.get('purchaseCoverage')??'[]')).toEqual([])
+ store.commitOrderPage(store.jobs()[0],[],null)
+ expect(store.get('recentOrdersThrough')).toBe(range.to)
+ expect(store.get('lastOrdersScanAt')).not.toBeNull()
+ expect(JSON.parse(store.get('purchaseCoverage')??'[]')).toEqual([])
+ store.enqueue('updated-orders',range)
+ store.commitOrderPage(store.jobs()[0],[],null)
+ expect(store.get('recentOrdersThrough')).toBe(range.to)
+ expect(JSON.parse(store.get('purchaseCoverage')??'[]')).toEqual([])
+})

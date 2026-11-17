@@ -1,8 +1,21 @@
 import { lstat, readFile } from 'node:fs/promises'
 import { type PilotCredentials } from '../amazon/pilot.ts'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+/** A private Linux-home copy supports repositories on drives without Unix permissions. */
+export async function credentialsPath(fallback: string): Promise<string> {
+  if (process.env.AZULIA_CREDENTIALS_FILE) return process.env.AZULIA_CREDENTIALS_FILE
+  const privatePath = join(homedir(), '.config', 'azulia', 'amazon-credentials.json')
+  try { await lstat(privatePath); return privatePath } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause
+    return fallback
+  }
+}
 
 export async function loadCredentials(path: string): Promise<PilotCredentials> {
   try {
+    path = await credentialsPath(path)
     const stat = await lstat(path)
     if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077) !== 0 || stat.size > 32768) throw new Error()
     const value: unknown = JSON.parse(await readFile(path, 'utf8'))

@@ -536,3 +536,68 @@ Startup now acquires port 8788 before opening the source cache/background sync, 
 - [x] Preserve replacement/delivery metadata through order adapters, browser/native/local snapshots. Bridge 9 adds fixed Solicitations read/send capability and tiny persisted dispatch guards.
 - [x] Antigravity return-recovery modules, strict validation, storage decoupling, and ReturnAnalysis integration completed.
 - [x] Owner-authorised compile, focused tests, and APK packaging passed. No live customer requests sent.
+
+### Review request rejection diagnostics — 2026-11-15
+- [x] Preserve bounded Amazon review error codes/messages and request IDs, identify eligibility versus submission failures, and retain the explanation in saved uncertain outcomes.
+- [x] Keep internal native dispatch markers off direct desktop/hosted Amazon requests; retain native duplicate-send guards. Android forwards only selected structured review error fields and does not swallow POST 401 responses.
+- [ ] Focused mocked regressions authored; execution, build, APK packaging and installation deferred. No additional live requests sent during this fix. The earlier HTTP 400 cause remains unproven until its actual response is captured.
+
+### Review prerequisite filtering — 2026-11-15
+- [x] Exclude Pending/Unshipped orders from the review queue. Seller-fulfilled orders require explicit Delivered status; marketplace-fulfilled orders require released shipment payment evidence. Preserve sent/uncertain submission history and replacement exclusions.
+- [x] Apply the same prerequisites to background candidates and manual sending; show purchase date and fulfilment in the review list. No financial metric formulas changed.
+- [ ] Actual FBM delivery confirmation source remains unavailable in the current Orders integration (Shipped and estimated delivery dates are insufficient). Such orders are held, never guessed delivered.
+- [ ] Mock regressions authored, not executed. Build/APK/install deferred. FBA “payment complete” uses released seller payment pending owner clarification; deferred customer payment is not assumed released.
+
+### Easy Ship delivered-to-buyer evidence — 2026-11-15
+- [x] Preserve Orders v0 EasyShipShipmentStatus through parsing, durable source storage, snapshots and canonical metadata. Delivered is explicit confirmation; Shipped, estimates, OutForDelivery and return-to-seller states are not.
+- [x] Read-only bounded tracking discovery refreshes up to two outstanding seller-fulfilled orders per cycle (12-hour recheck) so old cached orders can acquire the missing field without clearing or redownloading financial history. Manual “Check next” can also discover delivery. Amazon solicitation eligibility is checked only after actual delivery evidence.
+- [ ] General self-ship carriers without EasyShipShipmentStatus remain unconfirmed; no carrier status is guessed. Authored regressions remain unexecuted; no build/APK/push or additional live requests.
+
+### Desktop recent order-state parity — 2026-11-15
+- [x] Prioritise a separate resumable LastUpdated order stream ahead of purchase-date backfill, with a two-minute API cutoff, configured 2–5-minute cadence, 15-minute overlap and retained older-update catch-up.
+- [x] Commit order changes, pagination and completed freshness watermark atomically; updated-date jobs never manufacture purchase-date coverage or enter the Finance queue. Manual refresh requests a fresh recent scan without resetting rate limits.
+- [x] Retain existing source data, historical jobs and financial calculations. Expired update cursors restart within their saved ranges rather than dropping catch-up history.
+- [ ] Focused coordinator/checkpoint regressions authored, not executed. Activate via local server restart; no APK rebuild is needed for this server-only follow-up.
+
+### Local startup recovery — 2026-11-15
+- [x] Support an owner-only home-directory credentials file (or explicit `AZULIA_CREDENTIALS_FILE`) for project drives that cannot enforce Unix permissions. Preserve the legacy path fallback and strict credential-file checks; setup and verification use the selected location.
+
+### Android review submission repair — 2026-11-15
+- [x] Reproduce eligibility succeeding followed by native POST HTTP 400 InvalidInput on the connected phone. Desktop submissions work.
+- [x] Set JSON Content-Type, HAL Accept and explicit zero-length POST body, avoiding Android URLConnection's form default; preserve single-dispatch guards and all prior uncertain records.
+- [x] Compile/sign/install 0.2.6 (versionCode 16) in place and verify a fresh eligible order receives Amazon acceptance and displays Request sent. One baseline failure and one successful verification submission were performed under the owner's live-test instruction; no failed attempt was reset/replayed.
+- [x] Local credentials loading/typecheck and HTTP 200 verified; backend runs with retained records and no latest sync error. Phone screen timeout restored to its original value.
+
+### Daily review schedule and accepted-request notifications — ADR-086
+- [x] Configurable daily HH:mm in Settings, default 14:53 IST, legacy migration and native/desktop schedule gates.
+- [x] Persisted all-candidate daily queue, fresh eligibility checks, paced bounded continuation, temporary-error cooldowns and retained duplicate/uncertain protections.
+- [x] Native cumulative accepted-count notifications, dedicated channel, permission-aware retry and manual-send notifications; bridge 10.
+- [x] Focused review/schedule regressions: 26 passed. Typecheck and production web/device-engine build passed. Separate existing Android integration check has one failing source-order fixture assertion (9 passed); no financial/cache behavior was changed for this feature.
+- [x] Signed Android 0.2.7 (versionCode 17 / bridge 10) installed in place; local backend restarted with retained data. Read-only production-browser checks passed at 1280px and 375px: daily time defaults to 14:53 and fits within the viewport. Existing automation consent was preserved; validation did not submit additional live review requests.
+
+### Background review notification repair — 2026-11-16
+- [x] Find missing `reviews.notify` in the headless bridge allowlist, which rejected automatic-review notifications. Extract/test the existing scoped background-capability policy and admit only the missing notification action.
+- [x] Notification exceptions no longer abort the review-cycle return value or lose the runnable-queue continuation signal. Accepted counts stay unacknowledged until notification succeeds; protected order submissions are never replayed.
+- [x] 27 focused review regressions, standalone Java background-capability checks, production frontend/device-engine build and typecheck passed.
+- [x] Read the phone's saved November 16 outcome before repair: 219 accepted today, 0 remaining (313 historical sent). Installed signed 0.2.8 in place and verified the real Android notification text: Amazon accepted 219 review requests. Notification permission is granted; automatic sync service resumed. Prior request history was retained.
+- [x] Wireless phone reconnected at owner-supplied address. Before installing any fix, its saved Review Settings summary confirmed the November 16 daily run: 219 Amazon-accepted automatic requests, 0 remaining. Total historical sent count shown was 313; these are distinct from today's count. Installed version before the repair was 0.2.7. No order history reset or manual resubmission was used for diagnosis.
+
+### Android notification-tap deep navigation — 2026-11-17
+- [x] Unified typed notification navigation payload with strict validation: order detail, refund evidence/details, inventory/restock with marketplace/SKU/fulfillment channel, daily review run date, and live sync diagnostics. No credentials or buyer PII.
+- [x] NotificationNav helper in native Android with distinct request codes and intent action keys so different notifications cannot overwrite each other's PendingIntents.
+- [x] Supports cold launch (intent extra in onCreate) and warm launch (onNewIntent dispatching to WebView).
+- [x] Retains pending destinations until WebView, account and required data are loaded. Consumes destinations exactly once; normal app resumes and task switching do not re-navigate.
+- [x] Clear explanations and safe fallbacks for missing order data, account mismatch, or unavailable historical review runs. Never displays a different order or date as the requested one.
+- [x] Preserves sensible Back navigation and list/filter context (modal order search detail dismisses cleanly without altering page filters).
+- [x] Android 0.2.9 / versionCode 19 signed APK compiled and verified with same release key. 17 notification navigation unit tests passed; Java NotificationNavCheck, BackgroundCapabilitiesCheck and OrderNoticePolicyCheck passed; production web build and typecheck passed.
+- [x] Android 0.2.10 / versionCode 20 signed APK compiled and verified with same release key:
+  - Native notification payload validation and safe reconstruction: only permitted fields serialized via JSON.quote; no code interpolation; restricted to trusted page origins.
+  - Reactive pending destination mechanism with bridge acknowledgment (`notification.ack`), eventId deduplication, and retention across cold launch, onNewIntent, delayed data loading, and WebView recovery.
+  - Multi-SKU order notification improvements: compact summary ("New order · 3 products · 5 units"), expanded listing of all products and quantities, truthful "+ N more", repeated SKU merging, explicit unknown quantity, quiet metadata enrichment (`setOnlyAlertOnce(true)`).
+  - Inline order detail products breakdown: displays all ordered items and quantities, handling multi-SKU orders with explicit "Quantity unknown" and "Product details pending" states.
+  - Exact inventory restock identity retained across account/marketplace/SKU/fulfillmentChannel; sync status navigation accessible without requiring loaded dataset.
+  - Centered Arabic invocation banner above main header in AppShell: Line 1 `بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ` (theme text color), Line 2 `يَا حُسَيْن` (high-contrast red > 4.5:1 on light/dark themes), `lang="ar" dir="rtl"`.
+  - 18 Vitest notification navigation tests passed; Java NotificationNavCheck, BackgroundCapabilitiesCheck, and OrderNoticePolicyCheck passed; npm run typecheck and production build passed; verified same-key signed APK stored at .local/releases/azulia-seller-0.2.10.apk.
+- [x] Android 0.2.11 / versionCode 21 signed APK compiled and verified with same release key:
+  - Top Arabic invocation banner positioned across the top above header in AppShell; slender calligraphic typography (`font-weight: 300` / `400` with antialiasing).
+  - Production web build, asset staging, and Gradle release build passed; verified same-key signed APK installed on connected Pixel 8a via wireless ADB (`adb install -r`), preserving all app data and credentials. Retained APK: .local/releases/azulia-seller-0.2.11.apk.

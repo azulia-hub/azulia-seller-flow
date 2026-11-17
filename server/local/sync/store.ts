@@ -7,6 +7,7 @@ import { object, text } from '../../../src/adapters/amazon-report-sync/money.ts'
 import type { SourceOrderSummary } from '../../../src/adapters/amazon-report-sync/protocol.ts'
 import type { OrderDateIssue } from './orders.ts'
 export interface Job extends SyncRange { id: number; kind: string; orderId: string | null; nextToken: string | null; createdAt: number }
+export const orderReadJob=(job:Pick<Job,'kind'>)=>['purchases','recent-orders','updated-orders'].includes(job.kind)
 export async function openSyncStore(directory: string, key: string) {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   await chmod(directory, 0o700)
@@ -67,7 +68,7 @@ export async function openSyncStore(directory: string, key: string) {
       const raw = JSON.stringify({
         id,
         purchased: normalized,
-        isReplacementOrder:summary.isReplacementOrder??prevParsed?.isReplacementOrder??null,replacedOrderId:summary.replacedOrderId??prevParsed?.replacedOrderId??null,earliestDeliveryDate:summary.earliestDeliveryDate??prevParsed?.earliestDeliveryDate??null,latestDeliveryDate:summary.latestDeliveryDate??prevParsed?.latestDeliveryDate??null,
+        shipmentStatus:summary.shipmentStatus??prevParsed?.shipmentStatus??null,isReplacementOrder:summary.isReplacementOrder??prevParsed?.isReplacementOrder??null,replacedOrderId:summary.replacedOrderId??prevParsed?.replacedOrderId??null,earliestDeliveryDate:summary.earliestDeliveryDate??prevParsed?.earliestDeliveryDate??null,latestDeliveryDate:summary.latestDeliveryDate??prevParsed?.latestDeliveryDate??null,
         status: summary.status,
         fulfillmentType: summary.fulfillmentType,
         orderValue: summary.orderValue,
@@ -120,6 +121,7 @@ export async function openSyncStore(directory: string, key: string) {
     },
     enqueue(kind: string, range: SyncRange, orderId: string | null = null) { if (!db.prepare('SELECT id FROM jobs WHERE kind=? AND start=? AND stop=? AND order_id IS ?').get(kind, range.from, range.to, orderId)) db.prepare('INSERT INTO jobs(kind,start,stop,order_id,created) VALUES(?,?,?,?,?)').run(kind, range.from, range.to, orderId, Date.now()) },
     discardJob(id: number) { db.prepare('DELETE FROM jobs WHERE id=?').run(id) },
+    restartOrderJob(id:number){db.prepare("UPDATE jobs SET next_token=NULL,created=? WHERE id=? AND kind IN ('recent-orders','updated-orders')").run(Date.now(),id)},
     orders() {
       const catalog = new Map((db.prepare('SELECT asin,title,image_url FROM catalog_items').all() as { asin: string; title: string | null; image_url: string | null }[]).map(item => [item.asin, item]))
       const orderAsins = new Map((db.prepare('SELECT r.order_id, ra.asin FROM records r JOIN record_asins ra ON ra.record_id=r.id WHERE r.order_id IS NOT NULL GROUP BY r.order_id').all() as { order_id: string; asin: string }[]).map(r => [r.order_id, r.asin]))
@@ -202,8 +204,15 @@ export async function openSyncStore(directory: string, key: string) {
         for (const issue of issues) retainOrderDateIssue(issue)
         if (nextToken) db.prepare('UPDATE jobs SET next_token=? WHERE id=?').run(nextToken, job.id)
         else {
-          const before = JSON.parse(get('purchaseCoverage') ?? '[]') as SyncRange[]
-          set('purchaseCoverage', JSON.stringify(mergeCoverage([...before, { from: job.from, to: job.to }])))
+          if(job.kind==='purchases'){
+            const before = JSON.parse(get('purchaseCoverage') ?? '[]') as SyncRange[]
+            set('purchaseCoverage', JSON.stringify(mergeCoverage([...before, { from: job.from, to: job.to }])))
+          } else if(job.kind==='recent-orders') {
+            const previous=Date.parse(get('recentOrdersThrough')??'')
+            if(!Number.isFinite(previous)||Date.parse(job.to)>previous)set('recentOrdersThrough',job.to)
+            set('lastRecentOrdersRefresh',String(Date.now()))
+            if(Date.parse(job.to)>=Date.now()-15*60000)set('lastOrdersScanAt',new Date().toISOString())
+          }
           db.prepare('DELETE FROM jobs WHERE id=?').run(job.id)
         }
       })

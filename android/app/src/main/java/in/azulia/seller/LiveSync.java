@@ -17,6 +17,18 @@ public final class LiveSync extends Service {
     private volatile boolean starting;
     private PowerManager.WakeLock wake;
     static android.content.SharedPreferences prefs(Context c){return c.getSharedPreferences("live-sync",MODE_PRIVATE);}
+    static void applyReviewSettings(Context c,JSONObject config){
+        String time=config.optString("dailyTime","14:53");
+        if(!time.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]"))time="14:53";
+        prefs(c).edit().putBoolean("reviewAuto",config.optBoolean("autoEnabled",false)).putString("reviewTime",time).apply();
+    }
+    private static String dueReviewDay(Context c){
+        if(!prefs(c).getBoolean("reviewAuto",false))return "";
+        java.time.ZonedDateTime now=java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata"));
+        String time=prefs(c).getString("reviewTime","14:53"),day=now.toLocalDate().toString();
+        String local=now.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.ROOT));
+        return local.compareTo(time)>=0&&!day.equals(prefs(c).getString("reviewWakeDay",""))?day:"";
+    }
     static void applySettings(Context c,JSONObject settings){
         JSONObject p=settings.optJSONObject("preferences");if(p==null)return;
         int minutes=p.optInt("syncMinutes",3);if(minutes<2||minutes>5)minutes=3;
@@ -185,22 +197,25 @@ public final class LiveSync extends Service {
     private void check(){
         if(!running||starting||HeadlessSync.busy())return;
         if(!networkAllowed(this)){phase(this,"waiting",prefs(this).getBoolean("wifiOnly",false)?"Waiting for Wi-Fi; sync resumes automatically.":"Waiting for internet; sync resumes automatically.");return;}
-        long now=System.currentTimeMillis();if(requested==null&&now-prefs(this).getLong("lastAttempt",0)<prefs(this).getInt("syncMinutes",3)*60000L)return;
+        String reviewDay=dueReviewDay(this);
+        long now=System.currentTimeMillis();if(requested==null&&reviewDay.isEmpty()&&now-prefs(this).getLong("lastAttempt",0)<prefs(this).getInt("syncMinutes",3)*60000L)return;
         JSONObject intent;
         synchronized(QUEUE_LOCK){
             intent=requested;requested=null;
             if(intent==null)try{intent=new JSONObject(prefs(this).getString("lastIntent","{}"));}catch(Exception ignored){intent=new JSONObject();}
-            prefs(this).edit().remove("requested").putString("runningIntent",intent.toString()).putLong("lastAttempt",now).apply();starting=true;
+            prefs(this).edit().remove("requested").putString("runningIntent",intent.toString()).putLong("lastAttempt",now).apply();
+            if(!reviewDay.isEmpty())prefs(this).edit().putString("reviewWakeDay",reviewDay).apply();starting=true;
         }
         requestState(this,intent,"running","");HeadlessSync.start(this,intent,()->{starting=false;kick();});
     }
     @Override public void onCreate(){super.onCreate();
         NotificationManager manager=getSystemService(NotificationManager.class);manager.createNotificationChannel(new NotificationChannel("live-sync","Automatic sync",NotificationManager.IMPORTANCE_LOW));
         PendingIntent stop=PendingIntent.getService(this,0,new Intent(this,LiveSync.class).setAction("STOP"),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
-        PendingIntent open=PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent open;
+        try { open = NotificationNav.syncStatus(this); } catch (Exception e) { open = PendingIntent.getActivity(this,0,new Intent(this,MainActivity.class),PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT); }
         try{startForeground(7602,new Notification.Builder(this,"live-sync").setSmallIcon(R.drawable.ic_notification).setContentTitle("Azulia automatic sync").setContentText("Amazon data and calculations update automatically").setContentIntent(open).setOngoing(true).addAction(new Notification.Action.Builder(null,"Stop",stop).build()).build());}
         catch(RuntimeException unavailable){BackgroundSync.schedule(this);stopSelf();return;}
-        running=true;instance=this;try(DeviceDatabase db=new DeviceDatabase(this)){Object settings=db.retained("settings");if(settings instanceof JSONObject)applySettings(this,(JSONObject)settings);}catch(Exception ignored){}
+        running=true;instance=this;try(DeviceDatabase db=new DeviceDatabase(this)){Object settings=db.retained("settings");if(settings instanceof JSONObject)applySettings(this,(JSONObject)settings);String account=new AmazonSession(this).status().optString("account");Object reviews=db.retained("reviews-config:"+account);applyReviewSettings(this,reviews instanceof JSONObject?(JSONObject)reviews:new JSONObject());}catch(Exception ignored){}
         synchronized(QUEUE_LOCK){
             try{String raw=prefs(this).getString("requested",prefs(this).getString("runningIntent",null));requested=raw==null?new JSONObject():new JSONObject(raw);prefs(this).edit().remove("requested").apply();}catch(Exception ignored){requested=new JSONObject();}
         }

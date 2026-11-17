@@ -33,9 +33,10 @@ export function ReportSearch({ documents, onSelect, productScopeLabel = 'all rep
   </section>
 }
 
-export function ReportSearchDetail({ document, events, orders, formatMoney, onOpenProduct, onClose }: {
+export function ReportSearchDetail({ document, events, orders, formatMoney, onOpenProduct, onClose, focusTransactionId }: {
   document: ReportSearchDocument; events: readonly CanonicalFinancialEvent[]; orders: readonly OrderProfitSummary[];
-  formatMoney: (value: number) => string; onOpenProduct: (sku: string) => void; onClose: () => void
+  formatMoney: (value: number) => string; onOpenProduct: (sku: string) => void; onClose: () => void;
+  focusTransactionId?: string | null;
 }) {
   const ref = useRef<HTMLDialogElement>(null)
   const titleId = useId()
@@ -44,16 +45,23 @@ export function ReportSearchDetail({ document, events, orders, formatMoney, onOp
   const selected = orders.find(order => order.orderId === selectedOrder)
   const ids = useMemo(() => new Set(document.eventIds), [document])
   const evidence = events.filter(event => ids.has(event.id))
+  const isFocusedEvent = (event: CanonicalFinancialEvent) => Boolean(focusTransactionId && (event.sourceTransactionId === focusTransactionId || event.id === focusTransactionId))
+  const hasFocusedMatch = Boolean(focusTransactionId && evidence.some(isFocusedEvent))
+  const sortedEvidence = useMemo(() => {
+    if (!focusTransactionId) return evidence
+    return [...evidence].sort((a, b) => (isFocusedEvent(b) ? 1 : 0) - (isFocusedEvent(a) ? 1 : 0))
+  }, [evidence, focusTransactionId])
   const affectedOrders = orders.filter(order => order.events.some(event => ids.has(event.id)))
   const products = [...new Set(evidence.flatMap(event => event.sku ? [event.sku] : []))]
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close() }, [])
   return <dialog ref={ref} className="report-search-detail" aria-labelledby={titleId} onCancel={onClose} onClick={event => { if (event.target === event.currentTarget) onClose() }}>
     <header className="drilldown-head"><div><small>{kinds[document.kind]} · All dates in the active report</small><h2 id={titleId}>{document.label}</h2><p>Transactions by posting date. Dashboard filters are unchanged.</p></div><button className="secondary" autoFocus onClick={onClose}>Close search detail</button></header>
     <div className="search-detail-body">
+      {focusTransactionId ? <div className="panel" role="status" style={{ borderLeft: '4px solid var(--accent, #d56346)', background: 'var(--surface-sunken, #f5f2e9)', padding: '10px 14px', marginBottom: '16px' }}><strong>Refund evidence focus</strong><p style={{ margin: '4px 0 0' }}>{hasFocusedMatch ? `Focusing refund transaction ${focusTransactionId} in the source transactions below.` : `Refund transaction ${focusTransactionId} recorded for this order (unreconciled or grouped into posted lines). Showing all preserved transactions.`}</p></div> : null}
       {products.length ? <section><h3>Products in this result</h3><div className="search-product-links">{products.map(sku => <button className="secondary" key={sku} onClick={() => onOpenProduct(sku)}>{sku} →</button>)}</div><small>Products open in a full-report profile. Dashboard filters stay unchanged.</small></section> : null}
       {selected ? <section><h3>Order {selected.orderId}</h3>{selected.skus.length === 1 ? selected.skus.map(sku => <ProductCostEditor key={sku} sku={sku} missingCost={selected.missingSkus.includes(sku)} />) : <p>Open a product above to edit its individual unit cost.</p>}<InlineOrderDetail order={selected} formatMoney={formatMoney} onCollapse={() => setSelectedOrder(null)} /></section> : null}
       {affectedOrders.length ? <section><h3>Orders</h3><div className="search-order-links">{affectedOrders.slice(0, limit).map(order => <button className="secondary" key={order.orderId} onClick={() => setSelectedOrder(order.orderId)}>{order.orderId}</button>)}</div></section> : null}
-      <section><h3>Source transactions</h3><p>{evidence.length} preserved financial events{evidence.length > limit ? ` · showing the first ${limit}` : ''}</p><div className="table-scroll"><table><thead><tr><th>Date</th><th>Order</th><th>SKU</th><th>Source label</th><th>Amount</th><th>Status</th></tr></thead><tbody>{evidence.slice(0, limit).map(event => <tr key={event.id}><td>{event.date ?? 'Undated'}</td><td>{event.orderId ?? '—'}</td><td>{event.sku ?? '—'}</td><td>{event.rawDescription || event.rawType || event.amountType}</td><td>{formatMoney(event.amount)}</td><td>{event.classified ? 'Classified' : 'Needs review'}</td></tr>)}</tbody></table></div></section>
+      <section><h3>Source transactions</h3><p>{evidence.length} preserved financial events{evidence.length > limit ? ` · showing the first ${limit}` : ''}</p><div className="table-scroll"><table><thead><tr><th>Date</th><th>Order</th><th>SKU</th><th>Source label</th><th>Amount</th><th>Status</th></tr></thead><tbody>{sortedEvidence.slice(0, limit).map(event => { const focused = isFocusedEvent(event); return <tr key={event.id} style={focused ? { background: 'var(--surface-sunken, #fceded)', fontWeight: 'bold' } : undefined}><td>{event.date ?? 'Undated'}</td><td>{event.orderId ?? '—'}</td><td>{event.sku ?? '—'}</td><td>{event.rawDescription || event.rawType || event.amountType}{focused ? <span style={{ marginLeft: '8px', fontSize: '0.8em', color: '#d56346' }}>● Focused refund</span> : null}</td><td>{formatMoney(event.amount)}</td><td>{event.classified ? 'Classified' : 'Needs review'}</td></tr> })}</tbody></table></div></section>
       {Math.max(evidence.length, affectedOrders.length) > limit ? <button className="secondary" onClick={() => setLimit(value => value + 50)}>Show more evidence</button> : null}
     </div>
   </dialog>

@@ -1,3 +1,5 @@
+import {automaticReviewDue} from '../../src/core/review-requests/schedule.ts'
+import type {ReviewSettings} from '../../src/core/review-requests/types.ts'
 import {createReviewTransport} from '../../src/adapters/amazon-reviews/transport.ts'
 import type {BackgroundCalculation } from './backgroundRunner.ts'
 import type { ReportSync } from './sync/coordinator.ts'
@@ -69,7 +71,7 @@ export function createLocalServer(options: { port: number; dist: string; credent
           if(!claim||claim.attemptId!==input.attemptId||claim.state!=='prepared')throw new Error('Submission is already dispatched or not claimed.')
           if(claim.source==='automatic'){
             const configEntry=options.device.get(`reviews-config:${connectionKey}`)
-            if(!(configEntry.value as {autoEnabled?:boolean}|null)?.autoEnabled)throw new Error('Automatic sending was disabled before dispatch.')
+            if(!automaticReviewDue(configEntry.value as ReviewSettings|null,new Date().toISOString()))throw new Error('Automatic sending is off or waiting for its daily time (IST).')
           }
           const reviewWorkspace=(options.device.get(`reviews:${connectionKey}`).value as {blocked?:Record<string,boolean>}|null)
           if(reviewWorkspace?.blocked?.[input.orderId])throw new Error('Replacement chain was excluded before dispatch.')

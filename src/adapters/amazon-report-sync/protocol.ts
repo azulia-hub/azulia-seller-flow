@@ -24,6 +24,7 @@ export interface SourceOrderSummary {
   earliestDeliveryDate?:string|null
   latestDeliveryDate?:string|null
   reviewMetadataCheckedAt?:string|null
+  shipmentStatus?:string|null
 
   id: string
   purchased: string

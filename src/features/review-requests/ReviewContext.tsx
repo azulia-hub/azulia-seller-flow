@@ -7,12 +7,13 @@ import {reviewOrders,sourceReviewOrders} from '../../adapters/amazon-reviews/ord
 import {reviewClient} from '../../adapters/amazon-reviews/client'
 import type {SourceOrderSummary} from '../../adapters/amazon-report-sync/protocol'
 import {initialReviewSettings,initialReviews,type ReviewWorkspace,type ReviewSettings} from '../../core/review-requests/types'
+import {reviewTime,validReviewTime} from '../../core/review-requests/schedule'
 import {replacementExclusions} from '../../core/review-requests/planner'
-interface Value {orders:readonly SourceOrderSummary[];account:string|null;state:ReviewWorkspace|null;settings:ReviewSettings;busy:string|null;message:string;act:(id:string,send:boolean)=>Promise<void>;configure:(enabled:boolean)=>Promise<void>;markExternal:(id:string)=>Promise<void>}
+interface Value {orders:readonly SourceOrderSummary[];account:string|null;state:ReviewWorkspace|null;settings:ReviewSettings;busy:string|null;message:string;act:(id:string,send:boolean)=>Promise<void>;configure:(enabled?:boolean,dailyTime?:string)=>Promise<void>;markExternal:(id:string)=>Promise<void>}
 const Context=createContext<Value|null>(null)
 export const useReviews=()=>useContext(Context)
-export function ReviewProvider({account,orders:canonicalOrders,freshOrdersAt,children}:{account:string|null;orders:readonly import('../../core/data/types').CanonicalOrder[];freshOrdersAt:string|null;children:ReactNode}){
-  const orders=useMemo(()=>sourceReviewOrders(canonicalOrders),[canonicalOrders])
+export function ReviewProvider({account,orders:canonicalOrders,events,freshOrdersAt,children}:{account:string|null;orders:readonly import('../../core/data/types').CanonicalOrder[];events:readonly import('../../core/data/types').CanonicalFinancialEvent[];freshOrdersAt:string|null;children:ReactNode}){
+  const orders=useMemo(()=>sourceReviewOrders(canonicalOrders,events),[canonicalOrders,events])
   const [state,setState]=useState<ReviewWorkspace|null>(null),[settings,setSettings]=useState<ReviewSettings>(initialReviewSettings),[busy,setBusy]=useState<string|null>(null),[message,setMessage]=useState('')
   const current=useRef({account,orders,freshOrdersAt});current.current={account,orders,freshOrdersAt}
   const running=useRef(false)
@@ -44,6 +45,7 @@ export function ReviewProvider({account,orders:canonicalOrders,freshOrdersAt,chi
       const value=await context(owner)
       const result=send?await sendReview(inventoryStorage,value,id,reviewClient(value.account),'manual',AbortSignal.timeout(45000)):await checkReview(inventoryStorage,value,id,reviewClient(value.account),AbortSignal.timeout(45000))
       if(current.current.account===owner){setState(result);setMessage(send?'Amazon accepted the request.':'Eligibility updated.')}
+      if(send&&androidDevice)await nativeRequest('reviews.notify',{account:owner,id:`manual:${id}:${result.records[id]?.sentAt}`,count:1}).catch(()=>{})
     }catch(cause){
       if(current.current.account===owner)setMessage(cause instanceof Error?cause.message:'Request outcome was not confirmed.')
       throw cause
@@ -51,13 +53,21 @@ export function ReviewProvider({account,orders:canonicalOrders,freshOrdersAt,chi
       running.current=false;if(current.current.account===owner)setBusy(null)
     }
   }
-  async function configure(enabled:boolean){
+  async function configure(enabled?:boolean,dailyTime?:string){
     const owner=account??current.current.account
     if(!owner)throw new Error('Connect Amazon first.')
-    const entry=await inventoryStorage.get<ReviewSettings>(`reviews-config:${owner}`)
-    const next={schema:1 as const,autoEnabled:enabled,enabledAt:enabled?new Date().toISOString():entry.value?.enabledAt??null}
-    await inventoryStorage.put(`reviews-config:${owner}`,next,entry.version)
-    if(current.current.account===owner)setSettings(next)
+    if(dailyTime!==undefined&&!validReviewTime(dailyTime))throw new Error('Choose a valid daily time.')
+    for(let attempt=0;attempt<3;attempt++){
+      if(current.current.account!==owner)throw new Error('Account switched during settings change.')
+      const entry=await inventoryStorage.get<ReviewSettings>(`reviews-config:${owner}`)
+      const next={...initialReviewSettings(),...entry.value,dailyTime:dailyTime??reviewTime(entry.value),autoEnabled:enabled??entry.value?.autoEnabled??false}
+      if(enabled===true&&!entry.value?.autoEnabled)next.enabledAt=new Date().toISOString()
+      try {
+        await inventoryStorage.put(`reviews-config:${owner}`,next,entry.version)
+        if(current.current.account===owner){setSettings(next);setMessage('Daily review schedule saved.')}
+        return
+      }catch(cause){if((cause as {status?:number})?.status!==409||attempt===2)throw cause}
+    }
   }
   async function markExternal(id:string){
     const owner=account??current.current.account

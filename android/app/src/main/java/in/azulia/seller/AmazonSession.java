@@ -95,11 +95,32 @@ final class AmazonSession {
             HttpsURLConnection connection=open(value);connection.setRequestMethod(method);
             try {
                 connection.setRequestProperty("x-amz-access-token",token()); connection.setRequestProperty("User-Agent","AzuliaAndroid/0.1");
+                if (reviewGet || reviewPost) connection.setRequestProperty("Accept","application/hal+json");
+                if (reviewPost) {
+                    // Android otherwise defaults POST to form encoding. Solicitations consumes JSON
+                    // but defines no request body; explicitly send zero bytes, never a form or {}.
+                    connection.setRequestProperty("Content-Type","application/json");
+                    connection.setDoOutput(true);
+                    connection.setFixedLengthStreamingMode(0);
+                    try (java.io.OutputStream output=connection.getOutputStream()) { output.flush(); }
+                }
                 int status=connection.getResponseCode();
-                if (status==401 && attempt==0) { synchronized(this) { access=""; until=0; } continue; }
-                // Readers interpret status; upstream error bodies are deliberately not forwarded.
+                if (status==401 && attempt==0 && method.equals("GET")) { synchronized(this) { access=""; until=0; } continue; }
+                // Only review error code/message fields cross the bridge; other API error bodies stay private.
                 String body=status>=200 && status<300?read(connection.getInputStream(),20*1024*1024):"{}";
-                return new JSONObject().put("status",status).put("body",body).put("retryAfter",String.valueOf(retry(connection)));
+                if(status>=400 && (reviewGet || reviewPost) && connection.getErrorStream()!=null) {
+                    try {
+                        JSONObject error=new JSONObject(read(connection.getErrorStream(),16384));
+                        org.json.JSONArray source=error.optJSONArray("errors"),safe=new org.json.JSONArray();
+                        if(source!=null)for(int index=0;index<Math.min(source.length(),3);index++) {
+                            JSONObject item=source.optJSONObject(index);if(item==null)continue;
+                            String code=item.optString("code",""),message=item.optString("message","");
+                            safe.put(new JSONObject().put("code",code.substring(0,Math.min(code.length(),100))).put("message",message.substring(0,Math.min(message.length(),500))));
+                        }
+                        body=new JSONObject().put("errors",safe).toString();
+                    } catch(Exception ignored) { body="{}"; }
+                }
+                return new JSONObject().put("status",status).put("body",body).put("retryAfter",String.valueOf(retry(connection))).put("requestId",connection.getHeaderField("x-amzn-RequestId"));
             } finally { connection.disconnect(); }
         }
         throw new ApiError(401,"Reconnect Amazon to continue.",60);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { sendReview, type ReviewContext } from './service'
+import { sendReview, checkReview, type ReviewContext } from './service'
 import type { ReviewTransport } from './transport'
 import type { InventoryStorage } from '../amazon-inventory/workspaceTypes'
 import { initialReviews, initialReviewSettings, type ReviewWorkspace, type ReviewSettings } from '../../core/review-requests/types'
@@ -34,6 +34,8 @@ describe('Amazon Reviews Service Dispatch Boundary', () => {
         id: 'ORDER-1',
         purchased: '2026-11-01T00:00:00Z',
         status: 'Delivered',
+        fulfillment: 'marketplace',
+        paymentReleased: true,
         replacement: false,
         replaces: null,
         earliestDelivery: '2026-11-05T00:00:00Z',
@@ -174,4 +176,17 @@ describe('Amazon Reviews Service Dispatch Boundary', () => {
 
     expect(transport.submit).not.toHaveBeenCalled()
   })
+})
+
+it('rechecks legacy estimated-date expiry with Amazon instead of treating estimates as delivery',async()=>{
+ const storage=createMockStorage(),account='legacy-expiry',id='order'
+ const workspace=initialReviews(account)
+ workspace.records[id]={orderId:id,state:'expired',reason:'The delivery-based request window has ended.',nextCheck:null,checkedAt:null}
+ await storage.put(`reviews:${account}`,workspace,0)
+ const order={id,purchased:'2026-11-01',status:'Shipped',fulfillment:'marketplace' as const,paymentReleased:true,replacement:false,replaces:null,earliestDelivery:null,latestDelivery:'2000-01-01',verifiedAt:null}
+ const transport:ReviewTransport={order:vi.fn().mockResolvedValue(order),eligible:vi.fn().mockResolvedValue(true),submit:vi.fn()}
+ const result=await checkReview(storage,{account,orders:[order],freshOrdersAt:new Date().toISOString()},id,transport,new AbortController().signal)
+ expect(result.records[id].state).toBe('eligible')
+ expect(transport.eligible).toHaveBeenCalledOnce()
+ expect(transport.submit).not.toHaveBeenCalled()
 })

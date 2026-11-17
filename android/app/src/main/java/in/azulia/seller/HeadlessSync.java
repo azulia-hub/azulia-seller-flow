@@ -72,6 +72,7 @@ final class HeadlessSync {
         LiveSync.requestState(context,intent,!error.isEmpty()?"error":ordersFresh?"complete":"queued",error);
         LiveSync.prefs(context).edit().remove("runningIntent").apply();
         if(error.isEmpty()&&!ordersFresh)LiveSync.continueRequest(context,intent);
+        if(error.isEmpty()&&ordersFresh&&value.optBoolean("reviewsPending"))LiveSync.continueRequest(context,new JSONObject());
         if(error.isEmpty()&&ordersFresh)LiveSync.prefs(context).edit().putLong("lastSuccess",System.currentTimeMillis()).apply();
         if(bridge!=null)bridge.close();if(web!=null){web.stopLoading();web.destroy();web=null;}
         if(active==this)active=null;

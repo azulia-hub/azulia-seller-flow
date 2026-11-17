@@ -34,6 +34,7 @@ public final class MainActivity extends Activity {
     private ToolDownloads toolDownloads;
     private ValueCallback<Uri[]> files;
     private boolean bundled;
+    private volatile org.json.JSONObject pendingNav;
     private static boolean trusted(Uri uri) {
         if (!"https".equals(uri.getScheme()) || uri.getPort()!=-1 || uri.getUserInfo()!=null) return false;
         return ("azulia-hub.github.io".equals(uri.getHost()) && uri.getPath()!=null && uri.getPath().startsWith("/azulia-seller-flow/")) || ("appassets.androidplatform.net".equals(uri.getHost()) && uri.getPath()!=null && uri.getPath().startsWith("/assets/web/"));
@@ -77,7 +78,7 @@ public final class MainActivity extends Activity {
                 return true;
             }
             @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap icon) { bridge.documentChanged(); if(toolDownloads!=null)toolDownloads.documentChanged(); }
-            @Override public void onPageCommitVisible(WebView view,String url) { if(logo!=null){logo.setVisibility(android.view.View.GONE);} }
+            @Override public void onPageCommitVisible(WebView view,String url) { if(logo!=null){logo.setVisibility(android.view.View.GONE);} if(pendingNav!=null){dispatchNavIfReady(pendingNav);} }
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request) {
                 Uri uri=request.getUrl();
                 if (!request.isForMainFrame()) return !trusted(uri);
@@ -103,7 +104,47 @@ public final class MainActivity extends Activity {
                 try { startActivityForResult(intent,40); return true; } catch (Exception ignored) { files=null; callback.onReceiveValue(null); return true; }
             }
         });
+        Intent intent = getIntent();
+        if (intent != null && intent.hasExtra("nav")) {
+            pendingNav = NotificationNav.validateAndSanitize(intent.getStringExtra("nav"));
+        }
         chooseWebsite();
+    }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.hasExtra("nav")) {
+            org.json.JSONObject validated = NotificationNav.validateAndSanitize(intent.getStringExtra("nav"));
+            if (validated != null) {
+                pendingNav = validated;
+                dispatchNavIfReady(validated);
+            }
+        }
+    }
+    void dispatchNavIfReady(org.json.JSONObject nav) {
+        if (web == null || nav == null) return;
+        runOnUiThread(() -> {
+            try {
+                if (web == null) return;
+                String current = web.getUrl();
+                if (current == null || !trusted(Uri.parse(current))) return;
+                String quoted = org.json.JSONObject.quote(nav.toString());
+                String script = "(function(){ try { if (window.__azuliaOnNav) { window.__azuliaOnNav(JSON.parse(" + quoted + ")); } } catch(e){} })();";
+                web.evaluateJavascript(script, null);
+            } catch (Exception ignored) {}
+        });
+    }
+    synchronized org.json.JSONObject getPendingNav() {
+        return pendingNav;
+    }
+    synchronized boolean acknowledgePendingNav(String eventId) {
+        if (pendingNav != null && eventId != null && eventId.equals(pendingNav.optString("eventId"))) {
+            pendingNav = null;
+            Intent intent = getIntent();
+            if (intent != null) intent.removeExtra("nav");
+            return true;
+        }
+        return false;
     }
     void applySystemTheme(boolean dark) {
         runOnUiThread(() -> {
