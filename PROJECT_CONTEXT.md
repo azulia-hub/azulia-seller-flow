@@ -1,5 +1,30 @@
 # Seller Analytics — Project Context
 
+## Advertising workspace integration (2026-11-20)
+
+ADR-089's responsive workspace now replaces the legacy Advertising page. It uses
+the selected report's single authoritative Sponsored Products dataset, explicit
+SKU or saved manual-group scopes, weighted ratios and compatible posting-period
+financial product principal for TACOS. Setup remains in Settings. Available
+supplemental sources add shared ad-group search-term/target evidence and purchased-
+product cross-sales without increasing headline spend or attributed sales.
+Missing values remain unavailable. ADR-090 adds observed campaign/target states,
+configured/inherited bids, advisory efficiency suggestions, catalog images and a
+repair to purchased-product halo metrics. Automatic catalog-parent families remain
+pending; user-defined groups work independently. Bridge 13 / Android 0.2.14 code 24
+is installed with preserved app data (2026-11-21).
+
+## Amazon Ads connection (2026-11-18)
+
+The local desktop app can connect a separately approved India seller Ads profile.
+Ads credentials and tokens stay server-side, separate from SP-API. Sponsored
+Products daily advertised-product reports use seven-day click attribution and
+feed the existing advertising selectors. This adds no campaign/bid editing or
+new financial formulas. See ADR-087. Android credentials and source transport
+remain independent. ADR-088 adds a separately encrypted Android Ads connection;
+desktop credentials are imported through an explicit native document picker.
+There is no automatic cross-device credential/data synchronization.
+
 ## Current direction — ADR-076
 
 The cloud-database architecture was reverted at the owner's request. Extend the

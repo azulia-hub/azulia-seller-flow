@@ -23,7 +23,7 @@ final class DeviceDatabase extends SQLiteOpenHelper {
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { throw new IllegalStateException("Database migration required; existing data retained."); }
     static void account(String account) { if (!account.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid account."); }
     static void kind(String kind) { if (!kind.equals("records") && !kind.equals("orders") && !kind.equals("catalog")) throw new IllegalArgumentException("Invalid source collection."); }
-    static void workspace(String key) { if (!key.matches("(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})")) throw new IllegalArgumentException("Invalid workspace key."); }
+    static void workspace(String key) { if (!key.matches("(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections|ads-groups|ads-entities):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})")) throw new IllegalArgumentException("Invalid workspace key."); }
     private long version(SQLiteDatabase db, String key) {
         try (Cursor cursor = db.rawQuery("SELECT version FROM retained WHERE name=?", new String[]{key})) { return cursor.moveToFirst() ? cursor.getLong(0) : 0; }
     }

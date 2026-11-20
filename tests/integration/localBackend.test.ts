@@ -5,21 +5,22 @@ import { join } from 'node:path'
 import { request as httpRequest } from 'node:http'
 import { createLocalServer } from '../../server/local/server'
 import { loadCredentials } from '../../server/local/credentials'
+import type { AdsService } from '../../server/local/ads/service'
 
 const credentials = { AMAZON_SP_CLIENT_ID: 'private-client', AMAZON_SP_CLIENT_SECRET: 'private-secret', AMAZON_SP_REFRESH_TOKEN: 'private-refresh' }
 const cleanups: (() => Promise<unknown>)[] = []
-afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup() })
+afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); vi.unstubAllEnvs() })
 async function directory() {
   const directory = await mkdtemp(join(tmpdir(), 'azulia-local-'))
   cleanups.push(() => rm(directory, { recursive: true, force: true }))
   return directory
 }
-async function fixture(configured = true) {
+async function fixture(configured = true, ads?: AdsService) {
   const dir = await directory(), dist = join(dir, 'dist')
   await mkdir(dist)
   await writeFile(join(dist, 'index.html'), '<html>app</html>')
   const upstream = vi.fn<typeof fetch>(async () => Response.json({ access_token: 'private-access', token_type: 'bearer', expires_in: 3600 }))
-  const server = createLocalServer({ port: 0, dist, credentials: configured ? credentials : {}, fetch: upstream })
+  const server = createLocalServer({ port: 0, dist, credentials: configured ? credentials : {}, fetch: upstream, ads })
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve) })
   cleanups.push(() => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()) }))
   const address = server.address()
@@ -30,16 +31,18 @@ async function fixture(configured = true) {
 describe('local backend boundary', () => {
   it('loads only private regular credential files and sanitizes errors', async () => {
     const dir = await directory(), path = join(dir, 'credentials.json')
-    expect(await loadCredentials(path)).toEqual({})
+    // Explicitly isolate every fixture from the preferred real home-directory credentials.
+    const loadFixture = (file: string) => { vi.stubEnv('AZULIA_CREDENTIALS_FILE', file); return loadCredentials(file) }
+    expect(await loadFixture(path)).toEqual({})
     await writeFile(path, JSON.stringify(credentials), { mode: 0o600 })
-    expect(await loadCredentials(path)).toEqual(credentials)
+    expect(await loadFixture(path)).toEqual(credentials)
     await chmod(path, 0o644)
-    await expect(loadCredentials(path)).rejects.toThrow('mode 600')
+    await expect(loadFixture(path)).rejects.toThrow('mode 600')
     await chmod(path, 0o600)
     await symlink(path, join(dir, 'link.json'))
-    await expect(loadCredentials(join(dir, 'link.json'))).rejects.toThrow('Cannot load')
+    await expect(loadFixture(join(dir, 'link.json'))).rejects.toThrow('Cannot load')
     await writeFile(path, 'private-refresh broken json')
-    await expect(loadCredentials(path)).rejects.not.toThrow('private-refresh')
+    await expect(loadFixture(path)).rejects.not.toThrow('private-refresh')
   })
   it('serves the local application and responsive connection page', async () => {
     const { origin } = await fixture()
@@ -84,6 +87,25 @@ describe('local backend boundary', () => {
       req.on('error', reject); req.end()
     })
     expect(status).toBe(403)
+  })
+})
+
+describe('local Ads reporting boundary', () => {
+  it('requires same-origin intent and the selected profile before requesting an Ads report', async () => {
+    const request = vi.fn(), status = { configured: true, profileId: '123', revision: 1 }
+    const ads = { status: () => status, report: () => ({ id: 'ads-api:123', rows: [] }), request } as unknown as AdsService
+    const { origin } = await fixture(true, ads)
+    for (const headers of [{}, { Origin: 'https://evil.example', 'Content-Type': 'application/json', 'X-Azulia-Intent': 'sync-ads' }]) {
+      expect((await fetch(origin + '/api/ads/sync', { method: 'POST', headers, body: '{}' })).status).toBe(403)
+    }
+    const headers = { Origin: origin, 'Content-Type': 'application/json', 'X-Azulia-Intent': 'sync-ads' }
+    expect((await fetch(origin + '/api/ads/sync', { method: 'POST', headers, body: JSON.stringify({ profileId: 'other', from: '2026-11-01', to: '2026-11-18' }) })).status).toBe(400)
+    expect(request).not.toHaveBeenCalled()
+    expect((await fetch(origin + '/api/ads/sync', { method: 'POST', headers, body: JSON.stringify({ profileId: '123', from: '2026-11-01', to: '2026-11-18' }) })).status).toBe(202)
+    expect(request).toHaveBeenCalledWith({ from: '2026-11-01', to: '2026-11-18' }, false)
+    expect((await fetch(origin + '/api/ads/report?profile=other')).status).toBe(409)
+    expect((await fetch(origin + '/api/ads/report?profile=123&after=1')).status).toBe(204)
+    expect(await (await fetch(origin + '/api/ads/report?profile=123&after=0')).json()).toEqual({ profileId: '123', revision: 1, report: { id: 'ads-api:123', rows: [] } })
   })
 })
 

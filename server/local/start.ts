@@ -8,6 +8,10 @@ import { createLocalServer } from './server.ts'
 import { loadCredentials } from './credentials.ts'
 import { openDeviceStore, type DeviceStore } from './deviceStore.ts'
 import { createImageStore } from './images.ts'
+import { openAdsService, type AdsService } from './ads/service.ts'
+import { defaultAdsCredentialsPath } from './ads/credentials.ts'
+import { adsReportKinds, type AdsReportKind } from '../../src/adapters/amazon-ads/supplemental.ts'
+import { sharedAdsClientFactory } from './ads/client.ts'
 
 const port = 8788
 let startupStage = 'frontend files'
@@ -15,6 +19,9 @@ let server: ReturnType<typeof createLocalServer> | undefined
 let sync: Awaited<ReturnType<typeof createReportSync>> | undefined
 let calculation:BackgroundCalculation|undefined
 let device: DeviceStore | undefined
+let ads: AdsService | undefined
+const adsSources: Partial<Record<AdsReportKind, AdsService>> = {}
+async function closeAds() { await Promise.all(Object.values(adsSources).map(source => source.close())) }
 function closeDevice() { device?.close(); device = undefined }
 try {
   const dist = fileURLToPath(new URL('../../dist/', import.meta.url))
@@ -34,12 +41,19 @@ try {
   device = await openDeviceStore(fileURLToPath(new URL('../../.local/device-data/', import.meta.url)))
   options.device = device
   options.images = await createImageStore(fileURLToPath(new URL('../../.local/product-images/', import.meta.url)))
+  startupStage = 'Amazon Ads reporting'
+  const clientFactory = sharedAdsClientFactory()
+  ads = await openAdsService({ clientFactory, directory: fileURLToPath(new URL('../../.local/ads-cache/', import.meta.url)), credentialsFile: defaultAdsCredentialsPath(), fallbackCredentialsFile: fileURLToPath(new URL('../../.local/amazon-ads-credentials.json', import.meta.url)) })
+  options.ads = ads
+  adsSources.advertisedProduct = ads
+  options.adsSources = adsSources
+  for (const kind of adsReportKinds) if (kind !== 'advertisedProduct') adsSources[kind] = await openAdsService({ kind, clientFactory, directory: fileURLToPath(new URL('../../.local/ads-cache/', import.meta.url)), credentialsFile: defaultAdsCredentialsPath(), fallbackCredentialsFile: fileURLToPath(new URL('../../.local/amazon-ads-credentials.json', import.meta.url)) })
   startupStage = 'source cache and background sync'
   sync = pilotCredentialsConfigured(credentials) ? await createReportSync({ directory: fileURLToPath(new URL('../../.local/activity-cache/', import.meta.url)), connectionKey: createHash('sha256').update(JSON.stringify(credentials)).digest('hex'), credentials }) : undefined
   options.sync = sync
   if(sync){calculation=createBackgroundCalculation(sync,device,fileURLToPath(new URL('../../.local/device-data/',import.meta.url)),credentials);options.calculation=calculation}
   listener.on('error', (cause: NodeJS.ErrnoException) => {
-    listener.closeAllConnections(); listener.close(); void calculation?.close(); void sync?.close(); closeDevice()
+    listener.closeAllConnections(); listener.close(); void calculation?.close(); void sync?.close(); void closeAds(); closeDevice()
     const code = cause.code && /^[A-Z0-9_]+$/.test(cause.code) ? cause.code : 'LISTEN_ERROR'
     console.error(`Local server stopped (${code}). Saved data is retained.`)
     process.exitCode = 1
@@ -48,9 +62,9 @@ try {
   console.log(`App: http://127.0.0.1:${port}/`)
   console.log('Activity sync continues with the browser closed while this process is running.')
   console.log('Local access only. Keep this terminal open; Ctrl+C stops it.')
-  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { listener.closeAllConnections(); listener.close(); void calculation?.close(); void sync?.close(); closeDevice(); })
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { listener.closeAllConnections(); listener.close(); void calculation?.close(); void sync?.close(); void closeAds(); closeDevice(); })
 } catch (cause) {
-  server?.closeAllConnections(); server?.close(); await calculation?.close();await sync?.close()
+  server?.closeAllConnections(); server?.close(); await calculation?.close();await sync?.close(); await closeAds()
   closeDevice()
   const error = cause as NodeJS.ErrnoException & { errstr?: string }
   const code = error.code && /^[A-Z0-9_]+$/.test(error.code) ? error.code : 'STARTUP_ERROR'

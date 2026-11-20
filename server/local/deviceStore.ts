@@ -3,7 +3,7 @@ import { mkdir,chmod } from 'node:fs/promises'
 import { join } from 'node:path'
 import { sameContent } from '../../src/core/sync/sameContent.ts'
 import { gzipSync,gunzipSync } from 'node:zlib'
-export const validWorkspaceKey=(key:string)=>/^(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})$/.test(key)
+export const validWorkspaceKey=(key:string)=>/^(?:settings|(?:reading|inventory|inventory-config|inventory-alerts|reviews|reviews-config|recovery-inspections|ads-groups|ads-entities):[a-f0-9]{64}|review-attempt:[a-f0-9]{64}:[A-Z0-9]{3}-[0-9]{7}-[0-9]{7})$/.test(key)
 export async function openDeviceStore(directory:string) {
   await mkdir(directory,{recursive:true,mode:0o700})
   const path=join(directory,'workspace.sqlite'),db=new DatabaseSync(path)

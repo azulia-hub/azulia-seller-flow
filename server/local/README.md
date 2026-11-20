@@ -1,5 +1,36 @@
 # Local connection and automatic report delivery
 
+## Amazon Ads (separate from the seller API)
+
+After approving an LWA Ads application, authorize it and save the returned
+`client_id` and `refresh_token` in an owner-only `tokens.json`. This file is
+Git-ignored. Run the following with your verified India profile and seller IDs:
+
+```sh
+npm run ads:setup -- --tokens tokens.json --profile YOUR_ADS_PROFILE_ID --seller YOUR_SELLER_ID
+```
+
+Enter the matching Ads client secret at the hidden prompt. Setup writes only
+`~/.config/azulia/amazon-ads-credentials.json` (directory 700, file 600), or
+`AZULIA_ADS_CREDENTIALS_FILE` if explicitly configured. The Ads service reloads
+credentials without requiring another restart. Existing SP-API credentials are
+not changed. A private `.local/amazon-ads-credentials.json` is a fallback for
+initial setup; access-only credentials cannot renew expired access tokens.
+
+After installing the source update, build and restart the local backend. Open
+Advertising or Settings for profile/coverage/status and refresh controls. The
+service starts with 30 days of Sponsored Products advertised-product reports,
+requests selected dates within Amazon's last 95 days in 31-day windows, and
+refreshes recent eight days hourly while the backend is running. Report jobs,
+provider cooldowns and prior observations resume from `.local/ads-cache/`.
+Failures retain the latest successful report. Ads reports use seven-day click
+attribution and spend before GST; financial booked expenses are unchanged.
+
+Uploading a workbook disables API report presentation; re-enable “Use connected
+advertising reports” to switch back. API delivery does not overwrite the saved
+workbook. No campaigns, bids or budgets are changed. Desktop connection does not
+transfer credentials or reports to the independently stored Android app.
+
 Use Node 22.18+ (Node 24 recommended):
 
 ```sh

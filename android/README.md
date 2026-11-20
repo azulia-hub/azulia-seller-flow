@@ -1,5 +1,31 @@
 # Azulia Android — native device backend
 
+## Amazon Ads — version 0.2.12 / bridge 11
+
+Separate native Ads credentials are AES-GCM encrypted with Android Keystore and
+bound to the current seller session. Advertising/Settings offers Import Ads setup
+file; select the private JSON produced by desktop `npm run ads:setup`. Native code
+verifies the India seller profile before saving. Stored secrets/access tokens do
+not cross the bridge, and no credentials are packaged in the APK.
+
+Foreground and existing headless processing advance resumable Sponsored Products
+report jobs. Raw downloads are streamed to private files, read in bounded chunks
+and validated by the shared TypeScript parser before dates become covered. Older
+observations and rejected source evidence remain retained. The phone independently
+refreshes tokens and reports; the desktop need not be running. Existing Android
+background/network constraints still apply. This release does not implement the
+proposed new advertising layout, search terms or parent/custom-SKU groups.
+
+0.2.12 was compiled and installed in place on the owner's wireless Pixel. The
+installed signing certificate matches 0.2.11, and the APK was checked for the actual
+Ads secret/refresh token (neither embedded). Native import verified RoyalFurnitures53
+India and began a report job. Temporary local/phone credential transfer files were
+removed after successful encrypted import. The existing report/products remain
+visible. Seven focused Ads source/transport tests and two native policy/capability
+checks passed; the broader Android transport file still has its previously recorded
+optional-order-field fixture failure (9 passed, 1 failed). No campaign/review actions
+were submitted as part of this verification.
+
 Source for a personal Android app, targeting Pixel 8a. Android 9+ minimum, target/compile SDK 36. Android 16/17 device behavior has not been verified.
 
 The app loads `https://azulia-hub.github.io/azulia-seller-flow/` only after its `device-bridge.json` declares bridge 3 compatible. Otherwise it opens the bundled web build. Startup checks website compatibility with a short timeout and uses the bundled interface when offline or incompatible. There is no native title/action toolbar. Existing Azulia branding is used for the launcher and startup. An old GitHub website without this manifest cannot accidentally replace the native-capable bundle. Desktop and phone have independent data.

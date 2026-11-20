@@ -7,6 +7,7 @@ final class BackgroundCapabilities {
         return action.startsWith("source.") || action.startsWith("workspace.") || action.startsWith("engine.")
             || action.startsWith("background.") || action.equals("reading.status") || action.equals("session.status")
             || action.equals("amazon.request") || action.equals("reviews.submit") || action.equals("reviews.notify")
-            || action.equals("inventory.notify");
+            || action.equals("inventory.notify") || action.equals("ads.status") || action.equals("ads.cycle")
+            || action.equals("ads.chunk") || action.equals("ads.accept") || action.equals("ads.reject");
     }
 }

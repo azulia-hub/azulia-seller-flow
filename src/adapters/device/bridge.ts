@@ -1,4 +1,4 @@
-export const DEVICE_BRIDGE_VERSION = 10
+export const DEVICE_BRIDGE_VERSION = 13
 import { receiveBridgeNavigation } from './notificationNavigation'
 interface DeviceMessagePort { postMessage(message:string):void; onmessage:((event:{data:string})=>void)|null }
 declare global { interface Window { AzuliaDevice?:DeviceMessagePort; __azuliaOnNav?: (raw: unknown) => void } }

@@ -1,0 +1,139 @@
+{
+  "schema": 1,
+  "reports": {
+    "advertisedProduct": {
+      "version": 1,
+      "label": "Sponsored Products advertised products",
+      "configuration": {
+        "adProduct": "SPONSORED_PRODUCTS",
+        "reportTypeId": "spAdvertisedProduct",
+        "groupBy": [
+          "advertiser"
+        ],
+        "columns": [
+          "date",
+          "campaignId",
+          "campaignName",
+          "adGroupId",
+          "adGroupName",
+          "adId",
+          "portfolioId",
+          "advertisedSku",
+          "advertisedAsin",
+          "impressions",
+          "clicks",
+          "cost",
+          "sales7d",
+          "attributedSalesSameSku7d",
+          "salesOtherSku7d",
+          "purchases7d",
+          "unitsSoldClicks7d"
+        ],
+        "timeUnit": "DAILY",
+        "format": "GZIP_JSON"
+      }
+    },
+    "searchTerm": {
+      "version": 1,
+      "label": "Sponsored Products customer search terms",
+      "configuration": {
+        "adProduct": "SPONSORED_PRODUCTS",
+        "reportTypeId": "spSearchTerm",
+        "groupBy": [
+          "searchTerm"
+        ],
+        "columns": [
+          "date",
+          "campaignId",
+          "campaignName",
+          "adGroupId",
+          "adGroupName",
+          "portfolioId",
+          "keywordId",
+          "keyword",
+          "keywordType",
+          "matchType",
+          "targeting",
+          "searchTerm",
+          "impressions",
+          "clicks",
+          "cost",
+          "sales7d",
+          "attributedSalesSameSku7d",
+          "salesOtherSku7d",
+          "purchases7d",
+          "unitsSoldClicks7d"
+        ],
+        "timeUnit": "DAILY",
+        "format": "GZIP_JSON"
+      }
+    },
+    "purchasedProduct": {
+      "version": 2,
+      "label": "Sponsored Products purchased products",
+      "configuration": {
+        "adProduct": "SPONSORED_PRODUCTS",
+        "reportTypeId": "spPurchasedProduct",
+        "groupBy": [
+          "asin"
+        ],
+        "columns": [
+          "date",
+          "campaignId",
+          "campaignName",
+          "adGroupId",
+          "adGroupName",
+          "portfolioId",
+          "keywordId",
+          "keyword",
+          "keywordType",
+          "matchType",
+          "advertisedSku",
+          "advertisedAsin",
+          "purchasedAsin",
+          "sales7d",
+          "purchases7d",
+          "unitsSoldClicks7d",
+          "salesOtherSku7d",
+          "purchasesOtherSku7d",
+          "unitsSoldOtherSku7d"
+        ],
+        "timeUnit": "DAILY",
+        "format": "GZIP_JSON"
+      }
+    },
+    "targeting": {
+      "version": 1,
+      "label": "Sponsored Products targeting performance",
+      "configuration": {
+        "adProduct": "SPONSORED_PRODUCTS",
+        "reportTypeId": "spTargeting",
+        "groupBy": [
+          "targeting"
+        ],
+        "columns": [
+          "date",
+          "campaignId",
+          "campaignName",
+          "adGroupId",
+          "adGroupName",
+          "portfolioId",
+          "keywordId",
+          "keyword",
+          "keywordType",
+          "matchType",
+          "targeting",
+          "impressions",
+          "clicks",
+          "cost",
+          "sales7d",
+          "attributedSalesSameSku7d",
+          "purchases7d",
+          "unitsSoldClicks7d"
+        ],
+        "timeUnit": "DAILY",
+        "format": "GZIP_JSON"
+      }
+    }
+  }
+}

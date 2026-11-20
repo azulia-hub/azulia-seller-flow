@@ -10,6 +10,10 @@ import { checkPilotCredentials, pilotCredentialsConfigured, type PilotCredential
 import { createHash } from 'node:crypto'
 import { validWorkspaceKey, type DeviceStore } from './deviceStore.ts'
 import type { ImageStore } from './images.ts'
+import type { AdsService } from './ads/service.ts'
+import { adsReportKind, type AdsReportKind } from '../../src/adapters/amazon-ads/supplemental.ts'
+import { entityKind } from '../../src/adapters/amazon-ads/entities.ts'
+import { createCatalogReader } from '../../src/adapters/amazon-api/catalog.ts'
 import { gzip, gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
 const zip=promisify(gzip),unzip=promisify(gunzip)
@@ -25,8 +29,10 @@ const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta n
 const script = `const button=document.getElementById('check'),result=document.getElementById('result');button.addEventListener('click',async()=>{button.disabled=true;result.textContent='Checking…';try{const response=await fetch('/api/amazon/check',{method:'POST',headers:{'X-Azulia-Intent':'check-connection'}});const data=await response.json();result.textContent=response.ok&&data.tokenExchangeVerified?'Amazon accepted the credentials. Orders and financial permissions still need verification.':data.error==='amazon_not_configured'?'Run npm run local:setup, then restart the launcher.':response.status===429?'A check is already running. Please wait.':'Amazon could not verify the credentials. Check the local configuration and Amazon authorization.';}catch{result.textContent='Cannot reach the local backend. Check that the launcher is running.';}finally{button.disabled=false;}});`
 const types: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.ttf': 'font/ttf', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.webp': 'image/webp', '.txt': 'text/plain' }
 
-export function createLocalServer(options: { port: number; dist: string; credentials: PilotCredentials; fetch?: typeof fetch; sync?: ReportSync; device?: DeviceStore; calculation?:BackgroundCalculation; images?: ImageStore }) {
+export function createLocalServer(options: { port: number; dist: string; credentials: PilotCredentials; fetch?: typeof fetch; sync?: ReportSync; device?: DeviceStore; calculation?:BackgroundCalculation; images?: ImageStore; ads?: AdsService; adsSources?: Partial<Record<AdsReportKind, AdsService>> }) {
   const reviewTransport=createReviewTransport(options.credentials,options.fetch??fetch)
+  const adsCatalogReader = createCatalogReader(options.credentials, options.fetch ?? fetch)
+  const adsCatalogCache = new Map<string, { at: number; value: unknown }>()
   let inFlight = false
   const connectionKey = createHash('sha256').update(JSON.stringify(options.credentials)).digest('hex')
   function send(response: ServerResponse, status: number, body: string | Buffer, type = 'application/json; charset=utf-8',extra:Record<string,string>={}) {
@@ -45,6 +51,61 @@ export function createLocalServer(options: { port: number; dist: string; credent
       }
       if (request.headers.origin && request.headers.origin !== origin) { json(response, 403, { error: 'forbidden' }); return }
       const path = decodeURIComponent(new URL(request.url ?? '/', origin).pathname)
+      if ((path === '/api/ads/entities' || path === '/api/ads/catalog') && request.method === 'GET') {
+        try {
+          const query = new URL(request.url!, origin).searchParams
+          if (!options.ads || query.get('profile') !== options.ads.status().profileId) { json(response, 409, { error: 'The advertising profile changed.' }); return }
+          if (path === '/api/ads/entities') json(response, 200, await options.ads.entities(entityKind(query.get('kind')), query.get('nextToken')))
+          else {
+            const asin = query.get('asin') ?? ''
+            if (!/^[A-Z0-9]{10}$/.test(asin)) throw new Error('Invalid ASIN.')
+            let item = adsCatalogCache.get(asin)
+            if (!item || Date.now() - item.at > 86400000) { item = { at: Date.now(), value: await adsCatalogReader(asin, AbortSignal.timeout(30000)) }; if (adsCatalogCache.size > 500) adsCatalogCache.clear(); adsCatalogCache.set(asin, item) }
+            json(response, 200, item.value)
+          }
+        } catch (cause) { const status = Number((cause as { status?: number }).status); json(response, status >= 400 && status <= 599 ? status : 400, { error: cause instanceof Error ? cause.message : 'Advertising configuration unavailable.' }) }
+        return
+      }
+      if (path === '/api/ads/status' && request.method === 'GET') {
+        try {
+          const kind = adsReportKind(new URL(request.url!, origin).searchParams.get('kind') ?? 'advertisedProduct')
+          const source = kind === 'advertisedProduct' ? options.ads : options.adsSources?.[kind]
+          json(response, 200, source?.status() ?? { kind, configured: false, renewalConfigured: false, verified: false, revision: 0, state: 'idle', error: null })
+        } catch { json(response, 400, { error: 'Unsupported advertising report kind.' }) }
+        return
+      }
+      if (path === '/api/ads/dataset' && request.method === 'GET') {
+        let kind: AdsReportKind
+        try { kind = adsReportKind(new URL(request.url!, origin).searchParams.get('kind') ?? 'advertisedProduct') } catch { json(response, 400, { error: 'Unsupported advertising report kind.' }); return }
+        const source = kind === 'advertisedProduct' ? options.ads : options.adsSources?.[kind]
+        if (!source) { json(response, 503, { error: 'Advertising source is starting.' }); return }
+        const status = source.status(), query = new URL(request.url!, origin).searchParams
+        if (query.get('profile') !== status.profileId) { json(response, 409, { error: 'The advertising profile changed. Reopen the connection.' }); return }
+        if (query.get('after') === String(status.revision)) { response.writeHead(204, { 'Cache-Control': 'no-store' }); response.end(); return }
+        json(response, 200, { kind, profileId: status.profileId, revision: status.revision, report: kind === 'advertisedProduct' ? source.report() : source.supplemental() }); return
+      }
+      if (path === '/api/ads/report' && request.method === 'GET') {
+        if (!options.ads) { json(response, 503, { error: 'Amazon Ads reporting is starting.' }); return }
+        const status = options.ads.status(), query = new URL(request.url!, origin).searchParams
+        if (query.get('profile') !== status.profileId) { json(response, 409, { error: 'The advertising profile changed. Reopen the connection.' }); return }
+        if (query.get('after') === String(status.revision)) { response.writeHead(204, { 'Cache-Control': 'no-store' }); response.end(); return }
+        json(response, 200, { profileId: status.profileId, revision: status.revision, report: options.ads.report() }); return
+      }
+      if (path === '/api/ads/sync') {
+        if (request.method !== 'POST') { json(response, 405, { error: 'method_not_allowed' }); return }
+        if (request.headers.origin !== origin || request.headers['x-azulia-intent'] !== 'sync-ads' || request.headers['content-type'] !== 'application/json') { json(response, 403, { error: 'forbidden' }); return }
+        let body = ''
+        for await (const chunk of request) { body += chunk.toString(); if (Buffer.byteLength(body) > 4096) { json(response, 413, { error: 'Request too large.' }); return } }
+        try {
+          const input = JSON.parse(body)
+          const kind = adsReportKind(input?.kind ?? 'advertisedProduct'), source = kind === 'advertisedProduct' ? options.ads : options.adsSources?.[kind]
+          if (!source) { json(response, 503, { error: 'Amazon Ads reporting is starting.' }); return }
+          if (!input || input.profileId !== source.status().profileId || typeof input.from !== 'string' || typeof input.to !== 'string') throw new Error('Choose advertising dates and the current profile.')
+          source.request({ from: input.from, to: input.to }, input.force === true)
+          json(response, 202, source.status())
+        } catch (cause) { json(response, 400, { error: cause instanceof Error ? cause.message : 'Advertising dates could not be requested.' }) }
+        return
+      }
       if(path==='/api/device/reading-status' && request.method==='GET'){
         const account=new URL(request.url!,origin).searchParams.get('account')??''
         if(!options.device||!/^[a-f0-9]{64}$/.test(account)){json(response,400,{error:'Invalid account.'});return}

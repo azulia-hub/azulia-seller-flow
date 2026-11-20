@@ -34,6 +34,7 @@ public final class MainActivity extends Activity {
     private ToolDownloads toolDownloads;
     private ValueCallback<Uri[]> files;
     private boolean bundled;
+    private boolean adsImportOpen;
     private volatile org.json.JSONObject pendingNav;
     private static boolean trusted(Uri uri) {
         if (!"https".equals(uri.getScheme()) || uri.getPort()!=-1 || uri.getUserInfo()!=null) return false;
@@ -179,8 +180,23 @@ public final class MainActivity extends Activity {
     }
     private void openBundled() { bundled=true; if (web!=null) web.loadUrl(BUNDLED); }
     private void unavailable(String message) { TextView text=new TextView(this); text.setText(message); text.setPadding(32,64,32,32); setContentView(text); }
+    void importAds() {
+        if(adsImportOpen||isFinishing())return;
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+        try{adsImportOpen=true;startActivityForResult(intent,95);}catch(Exception ignored){adsImportOpen=false;android.widget.Toast.makeText(this,"Could not open the Ads credential picker.",android.widget.Toast.LENGTH_LONG).show();}
+    }
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data) {
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==95){adsImportOpen=false;if(resultCode==RESULT_OK&&data!=null&&data.getData()!=null){Uri uri=data.getData();startup.execute(()->{
+            String message;
+            try(DeviceDatabase database=new DeviceDatabase(this);java.io.InputStream input=getContentResolver().openInputStream(uri)){
+                if(input==null)throw new java.io.IOException();
+                org.json.JSONObject credentials=new org.json.JSONObject(AmazonSession.read(input,65536));
+                new AdsSession(this,new AmazonSession(this),database).connect(credentials);
+                message="Amazon Ads connected securely on this phone.";
+            }catch(Exception cause){message=cause instanceof AmazonSession.ApiError?cause.getMessage():"Ads import failed. Choose the private Ads setup file; seller credentials were retained.";}
+            final String result=message;runOnUiThread(()->{if(!isFinishing())android.widget.Toast.makeText(this,result,android.widget.Toast.LENGTH_LONG).show();});
+        });}return;}
         if(toolDownloads!=null&&toolDownloads.result(requestCode,resultCode,data))return;
         if (requestCode==40 && files!=null) { ValueCallback<Uri[]> callback=files; files=null; callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data)); }
     }

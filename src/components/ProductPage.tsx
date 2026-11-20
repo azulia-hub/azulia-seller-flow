@@ -10,9 +10,10 @@ import type { DateRange } from '../core/analytics/timePeriods'
 import { ProductComparison } from './ProductComparison'
 import { productImage } from '../core/search/productTitles'
 
-export function ProductPage({ product, advertisingProduct, sponsored, title, basis, backLabel, formatMoney, onBack, onViewInventory, previousProduct, comparisonCoverage = 'UNVERIFIED', comparisonRange,comparisonAsOf }: {
+export function ProductPage({ product, advertisingProduct, sponsored, title, basis, backLabel, formatMoney, onBack, onViewInventory, onViewAdvertising, previousProduct, comparisonCoverage = 'UNVERIFIED', comparisonRange,comparisonAsOf }: {
   comparisonAsOf?:string;
   onViewInventory?: () => void;
+  onViewAdvertising?: () => void;
   previousProduct?: SkuProfitSummary; comparisonCoverage?: HistoryCoverage; comparisonRange?: DateRange;
   product: SkuProfitSummary; advertisingProduct?: SkuProfitSummary; sponsored: SponsoredProductsAttribution;
   title?: string; basis: string; backLabel: string; formatMoney: (value: number) => string; onBack: () => void
@@ -49,6 +50,7 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
       <article><span>Return rate</span><strong>{product.returnRate.toFixed(1)}%</strong><small>{product.returnQuantity.toLocaleString('en-IN')} units returned</small>{comparisonRange ? <ProductComparison change={comparison.returnRate} formatValue={value=>`${value}%`}/> : null}</article>
       <article><span>Net product cost</span><strong>{product.missingCost ? '—' : formatMoney(product.netCogs)}</strong><small>Current calculation reverses cost on refund; sellable recovery is not verified</small></article>
     </section>
+    {onViewAdvertising ? <button className="text-btn" onClick={onViewAdvertising}>Investigate ads · campaigns, search terms & cross-sales →</button> : null}
     <section className="product-page-trend"><SkuTrendChart data={product.trend} formatMoney={formatMoney} /></section>
     <SkuWorkspace previousProduct={comparisonRange ? previousProduct : undefined} product={product} advertisingProduct={advertisingProduct} sponsored={sponsored} financialBasis={basis} showSnapshot={false} formatMoney={formatMoney} />
   </section>

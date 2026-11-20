@@ -1,0 +1,48 @@
+import { aggregateAdvertisingFacts, type AdvertisingQuery, type AdvertisingDataset } from '../../core/advertising/workspace'
+import { recommendAdvertising } from '../../core/advertising/recommendations'
+import type { AdsEntitySnapshot } from '../../adapters/amazon-ads/entities'
+import type { AdsWorkspaceSource } from '../../adapters/amazon-ads/workspaceSource'
+import type { AdvertisingEntityRow, AdvertisingWorkspaceModel, AdvertisingDetailModel } from '../../features/advertising-workspace/contract'
+import { campaignConfiguration, configuredTargets } from './entityModel'
+import type { WorkspaceSupplementalSources } from './supplementalModel'
+
+export function enrichWorkspaceModel(model: AdvertisingWorkspaceModel, source: AdsWorkspaceSource | null, supplemental: WorkspaceSupplementalSources, entities: AdsEntitySnapshot | undefined, asOf: string, detailContext?: AdvertisingQuery | null): AdvertisingWorkspaceModel {
+  const cutoff = new Date(Date.parse(asOf) + 330 * 60000 - (source?.dataset.attributionDays ?? 7) * 86400000).toISOString().slice(0, 10)
+  const baseQuery: AdvertisingQuery = { ...model.query }, targetAcos = model.query.targetAcos ?? 30
+  const review = (dataset: AdvertisingDataset | undefined, context: AdvertisingQuery, currentBid?: number | null, status?: string | null, coverageSource = source) => {
+    const to = context.to < cutoff ? context.to : cutoff, hasMature = context.from <= to
+    const q = hasMature ? { ...context, to } : context
+    const metrics = aggregateAdvertisingFacts(dataset ?? { id: 'empty', facts: [], grain: 'PRODUCT', moneyDecimals: 2, currency: model.currency, timezone: model.timezone, taxBasis: 'UNKNOWN', attributionDays: 7 }, q).metrics
+    return recommendAdvertising(metrics, { completeCoverage: Boolean(dataset && hasMature && coverageSource && coverageSource.coveredFrom <= context.from && coverageSource.coveredTo >= to), targetAcos, currentBid, status })
+  }
+  const row = (item: AdvertisingEntityRow, context: AdvertisingQuery): AdvertisingEntityRow => {
+    const config = item.entity.kind === 'CAMPAIGN' ? campaignConfiguration(entities, item.entity.id) : null
+    let recommendation
+    if (item.entity.kind === 'SEARCH_TERM') {
+      const facts = supplemental.searchTerm?.dataset.facts.filter(fact => JSON.stringify([fact.campaignId, fact.adGroupId, fact.targetId ?? null, fact.searchTerm ?? null]) === item.entity.id)
+      recommendation = review(supplemental.searchTerm ? { ...supplemental.searchTerm.dataset, facts: facts ?? [] } : undefined, { ...context, scope: { kind: 'ACCOUNT' } }, null, null, supplemental.searchTerm)
+    } else recommendation = review(source?.dataset, item.entity.kind === 'CAMPAIGN' ? { ...context, campaignId: item.entity.id } : { ...context, scope: { kind: 'PRODUCT', productId: item.entity.id } }, null, config?.status)
+    return { ...item, status: config?.status ?? item.status, recommendation,
+      note: `${recommendation.text}. ${recommendation.reason}${config ? ` Status observed ${config.observedAt}.` : ''}`,
+      imageAsin: item.imageAsin ?? (item.entity.kind === 'PRODUCT' ? source?.products.get(item.entity.id)?.asins[0] : null) }
+  }
+  let detail: AdvertisingDetailModel | null = model.detail
+  if (detail) {
+    const group = detail.entity.kind === 'GROUP' ? model.groups.find(item => item.id === detail!.entity.id) : null
+    const context: AdvertisingQuery = { ...baseQuery, ...detailContext, from: baseQuery.from, to: baseQuery.to,
+      ...(detail.entity.kind === 'PRODUCT' ? { scope: { kind: 'PRODUCT' as const, productId: detail.entity.id } } : group ? { scope: { kind: 'GROUP' as const, groupId: group.id, version: group.version, productIds: group.productIds } } : detail.entity.kind === 'CAMPAIGN' ? { campaignId: detail.entity.id } : {}) }
+    const configured = detail.entity.kind === 'SEARCH_TERM' ? [] : configuredTargets(source, supplemental.targeting, entities, context)
+    const ids = new Set(configured.map(item => item.id))
+    const targets = [...configured, ...detail.targets.filter(item => !ids.has(item.id))].map(item => {
+      const facts = supplemental.targeting?.dataset.facts.filter(fact => JSON.stringify([fact.campaignId, fact.adGroupId, fact.targetId ?? null]) === item.id)
+      const freshBid = item.observedAt && Date.parse(asOf) - Date.parse(item.observedAt) <= 30 * 60000 ? item.configuredBid : null
+      return { ...item, imageAsin: item.name.match(/\bB[A-Z0-9]{9}\b/i)?.[0].toUpperCase() ?? null, recommendation: review(supplemental.targeting ? { ...supplemental.targeting.dataset, facts: facts ?? [] } : undefined, { ...context, scope: { kind: 'ACCOUNT' } }, freshBid, item.effectiveStatus ?? item.status, supplemental.targeting) }
+    })
+    detail = { ...detail, imageAsin: detail.entity.kind === 'PRODUCT' ? source?.products.get(detail.entity.id)?.asins[0] : detail.entity.kind === 'SEARCH_TERM' && /^B[A-Z0-9]{9}$/i.test(detail.title) ? detail.title.toUpperCase() : null,
+      campaigns: detail.campaigns.map(item => row(item, context)), products: detail.products.map(item => row(item, context)), searchTerms: detail.searchTerms.map(item => row(item, context)), targets,
+      availableSections: targets.length && !detail.availableSections.includes('targets') ? [...detail.availableSections, 'targets'] : detail.availableSections,
+      notices: [...detail.notices.filter(value => !value.includes('Current configured bids')), 'Configured bids and status are current observed settings, not historical settings. Target and search-term performance can cover shared ad groups.'] }
+  }
+  return { ...model, campaigns: model.campaigns.map(item => row(item, baseQuery)), products: model.products.map(item => row(item, baseQuery)), searchTerms: model.searchTerms.map(item => row(item, baseQuery)), detail,
+    notices: [...model.notices, `Review target ACOS: ${targetAcos}% (editable; not a verified break-even target). Suggestions use dates through ${cutoff}, exclude the latest seven-day attribution window, and never change Amazon bids automatically.`] }
+}

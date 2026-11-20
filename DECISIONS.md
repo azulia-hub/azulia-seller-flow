@@ -1,5 +1,108 @@
 # Seller Analytics — Architectural Decisions
 
+## ADR-090 — Live Ads configuration, evidence-based suggestions and cross-sale repair (2026-11-21)
+
+Owner requests real campaign states/configured bids, readable mobile investigations,
+SKU/ASIN images, populated review notes, advisory bid/target recommendations and a
+repair for zero cross-sale amounts. Read only the fixed Sponsored Products v3 list
+endpoints for campaigns, ad groups, keywords, targeting clauses and product ads.
+Bound pagination, preserve unknown raw configuration, cache complete observations
+per profile on device, and label observation time. A missing target bid may inherit
+an explicitly supplied ad-group default. Parent paused states prevent raise advice.
+Current configured bids are not historical bids or actual CPC. No Ads write endpoint
+is exposed; suggestions require manual review in Amazon.
+
+Generic deterministic recommendation policy uses an editable target ACOS (initial
+30%, visibly an efficiency review target, not break-even profit), at least 20 mature
+clicks, at least three purchases for efficiency comparisons and five for raise
+suggestions, complete source windows and exclusion of the latest attribution window.
+Suggested numeric tests are bounded to a 10% step from a recently observed bid.
+Insufficient/unknown data stays HOLD/CHECK; no profit, margin or incrementality is
+invented. Shared-ad-group term/target evidence stays explicitly shared.
+
+Purchased-product configuration version 2 adds salesOtherSku7d, purchasesOtherSku7d
+and unitsSoldOtherSku7d. Cross-sale rows use those purchased/other-SKU fields rather
+than the unrelated zero promoted-product fields. Old observations without those
+columns show unavailable values and remain retained; the new namespace refetches
+coverage. Headline attributed sales/spend remain the authoritative product dataset.
+
+ASIN/product-page context gets images from supplied catalog/order evidence or a
+bounded authenticated India catalog lookup, never guessed image URLs. Image misses
+remain placeholders. Mobile tables render labelled cards, long identities clamp
+with a full-name disclosure, and recommendations/notes stay visible. Bridge 13 and
+Android 0.2.14/code 24 gate the new native read-only entity action/storage prefix.
+
+## ADR-089 — Implement advertising workspace with explicit parallel ownership (2026-11-19)
+
+Owner approves the proposed read-only advertising redesign and asks Codex to own
+the major work while giving Antigravity a separate prompt/task. Codex owns generic
+metrics/query/source identity, source reports, coverage, financial joins, group
+definitions/storage, credential/native work and app integration. Antigravity owns
+new presentation files only under the boundaries in docs/ADVERTISING_PARALLEL_HANDOFF.md.
+The shared presentation contract is owned by Codex and supplied before UI work.
+
+Preserve one authoritative dataset per aggregation; recompute group ratios from
+summed bases, distinguish advertised and purchased identities, retain missing-data
+status and reject unsupported per-product search-term attribution. Render only
+implemented report capabilities. No campaign/bid mutation, speculative profitability,
+automatic customer actions or accounting-policy change is implied. Integrate and
+validate the UI after its explicit handoff; do not overwrite shared dirty files.
+
+## ADR-088 — Install the existing Ads feature on Android (2026-11-19)
+
+Owner explicitly requests a phone update over wireless debugging after desktop
+validation. Add missing Android Ads transport; a desktop-only APK does not connect
+the phone. Version 0.2.12 / code 22 uses bridge 11 and the existing signing key,
+preserving source/workspace data and seller credentials. Older hosted bridge-10
+UI is incompatible, so the phone uses its packaged compatible frontend.
+
+Keep a separate Keystore-encrypted Ads vault, bound to the active seller session.
+Import a selected credential document with native code. Do not embed secrets in
+APK/build assets or expose stored credentials/tokens through the WebView bridge.
+For owner-authorized installation, transfer a temporary file over ADB, select it
+for encrypted import, then remove that temporary copy after confirming acceptance.
+Retain original private desktop credentials. Ongoing phone access uses native
+HTTPS independently of the computer.
+
+Use the existing seven-day-click Sponsored Products contract. Native code owns
+durable jobs/rate cooldowns and streams raw downloads to private files. The shared
+TypeScript parser validates the full observation before acknowledging its dates.
+Keep one latest observation per day, unknown raw fields and rejected evidence.
+Optional Ads steps run in foreground or the headless schedule without changing
+financial formulas or review-request consent. Native policy/capability checks and
+focused transport checks accompany compilation/signing/device validation. No new
+dependency, campaign writes, search-term feature or parent-group redesign is added.
+
+## ADR-087 — Separate local Amazon Ads reporting connection (2026-11-18)
+
+Owner authorizes connecting the approved India seller advertising profile to the
+existing application. Keep Ads and SP-API credentials separate, private and
+Git-ignored. Prefer a private home-directory Ads credentials file, with a private
+project-local fallback for the initial access token. A hidden terminal prompt
+adds the matching Ads client secret for refresh-token renewal; secrets/tokens
+never appear in the browser's report/status responses or packaged assets.
+
+Use fixed EU Ads profiles and Reporting v3 operations; verify seller identity,
+India and INR before requesting reports. Fetch Sponsored Products advertised
+products at DAILY grain with explicit seven-day click-attribution metrics. Start
+with 30 days, request selected-date history within the API's 95-day retention,
+and split requests into at most 31 inclusive days. Persist jobs/cooldowns and raw
+observations in separate local SQLite. Refresh recent eight days hourly while
+the desktop backend runs; Amazon availability/attribution delays still apply.
+Replace completed date windows including zero rows, rather than accumulating
+overlapping spend. Never claim a gap between windows as complete coverage.
+
+Feed reports into the existing selectors and product joins. Preserve booked
+financial advertising, before-GST reported spend, missing-cost safeguards and
+unmatched SKU evidence. No campaign writes, new money formulas, cloud storage,
+phone credential transfer or native Android Ads support is implied. Manual
+workbook import remains a selectable fallback and is not overwritten by API
+report delivery. A valid initial token is temporary; automatic renewal requires
+the user's secret to be entered locally. Live report verification depends on it.
+
+Official contracts: https://advertising.amazon.com/API/docs/en-us/guides/reporting/v3/get-started
+and https://advertising.amazon.com/API/docs/en-us/guides/account-management/authorization/authorization-grants .
+
 ## ADR-076 — Device-owned persistent storage, staged Android delivery (2026-11-12)
 
 Owner chooses persistent desktop/phone data and downloaded product images, with a future Android native backend loading the GitHub Pages interface. No cloud database or reintroduced Netlify/Supabase integration. Preserve the existing source adapters, calculations and private data.

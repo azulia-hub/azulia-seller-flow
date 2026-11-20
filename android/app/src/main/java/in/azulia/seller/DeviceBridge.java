@@ -8,13 +8,14 @@ import java.util.concurrent.Executors;
 
 /** One-way capabilities: no arbitrary URLs, filesystem paths, SQL, or secret-reading method. */
 final class DeviceBridge {
-    static final int VERSION=10;
+    static final int VERSION=13;
     private final Activity activity;
     private final android.content.Context context;
     private final HeadlessSync.Listener engine;
     private final android.os.Handler main=new android.os.Handler(android.os.Looper.getMainLooper());
     private final DeviceDatabase database;
     private final AmazonSession session;
+    private final AdsSession ads;
     private final ProductImages images;
     private final ExecutorService storage=Executors.newSingleThreadExecutor(), network=Executors.newFixedThreadPool(2), media=Executors.newFixedThreadPool(2);
     private volatile boolean closed;
@@ -22,7 +23,7 @@ final class DeviceBridge {
     DeviceBridge(Activity activity,ProductImages images) {this(activity,images,null);}
     DeviceBridge(android.content.Context context,ProductImages images,HeadlessSync.Listener engine) {
         this.context=context;this.activity=context instanceof Activity?(Activity)context:null;this.engine=engine;this.images=images;
-        database=new DeviceDatabase(context);session=new AmazonSession(context);
+        database=new DeviceDatabase(context);session=new AmazonSession(context);ads=new AdsSession(context,session,database);
     }
     void receive(String message,JavaScriptReplyProxy reply) {
         if (closed || message==null || message.length()>64*1024*1024) return;
@@ -32,7 +33,7 @@ final class DeviceBridge {
             if (request.getInt("version")!=VERSION) { respond(reply,new JSONObject().put("id",id).put("status",409).put("error","Update the Android app before using this website.")); return; }
             JSONObject payload=request.optJSONObject("payload"); if (payload==null) payload=new JSONObject(); final JSONObject input=payload;
             if (action.equals("session.cancel")) session.cancel();
-            ExecutorService executor=action.equals("image.get")?media:action.equals("amazon.request") || action.equals("reviews.submit") || action.equals("session.connect")?network:storage;
+            ExecutorService executor=action.equals("image.get")?media:action.equals("amazon.request") || action.equals("reviews.submit") || action.equals("session.connect") || action.equals("ads.cycle") || action.equals("ads.entities")?network:storage;
             executor.execute(() -> {
                 JSONObject result=new JSONObject();
                 try { result.put("id",id).put("result",execute(action,input)); }
@@ -51,6 +52,16 @@ final class DeviceBridge {
     private Object execute(String action,JSONObject input) throws Exception {
         if(engine!=null && !BackgroundCapabilities.allows(action))throw new IllegalArgumentException("Unsupported background capability.");
         switch (action) {
+            case "ads.entities": return ads.entities(input);
+            case "ads.status": return ads.status(input);
+            case "ads.import": if(activity instanceof MainActivity){main.post(()->((MainActivity)activity).importAds());return new JSONObject().put("opened",true);}throw new IllegalArgumentException("Open the app to import Ads credentials.");
+            case "ads.forget": return ads.forget();
+            case "ads.sync": return ads.request(input);
+            case "ads.cycle": if(engine!=null&&!LiveSync.networkAllowed(context))return ads.status(input);return ads.cycle(input);
+            case "ads.index": return ads.index(input);
+            case "ads.chunk": return ads.chunk(input);
+            case "ads.accept": return ads.accept(input,true);
+            case "ads.reject": return ads.accept(input,false);
             case "session.status": {
                 JSONObject status=session.status(); if (status.optBoolean("configured")) BackgroundSync.schedule(context);
                 if (!status.isNull("account")) status.put("backgroundStatus",database.retained("background-status:"+status.getString("account")));

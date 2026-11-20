@@ -430,7 +430,7 @@ html[data-refresh-dragging=true] .pull-refresh-orb{transition:none}
   text-align: center;
   padding: 6px 16px 5px;
   background: var(--glass);
-  border-bottom: 1px solid var(--line);
+  /*border-bottom: 1px solid var(--line);*/
   user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -443,6 +443,7 @@ html[data-refresh-dragging=true] .pull-refresh-orb{transition:none}
   font-weight: 300;
   letter-spacing: 0;
   opacity: 0.92;
+  padding-bottom: 5px;
 }
 .arabic-line-husayn {
   font-family: 'Amiri', 'Scheherazade New', 'Noto Naskh Arabic', 'Segoe UI', system-ui, sans-serif;

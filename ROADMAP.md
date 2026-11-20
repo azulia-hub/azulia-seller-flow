@@ -1,5 +1,54 @@
 # Seller Analytics — Roadmap
 
+## Advertising repair — ADR-090
+
+- [x] Fetch authoritative campaign/ad-group/keyword/target/product-ad configuration with bounded pagination and device/profile-scoped complete snapshots; expose actual states and explicit/inherited bids.
+- [x] Correct cross-sale mapping to purchased-product halo sales/purchases/units; version report specification/cache namespace to refetch while retaining previous raw observations.
+- [x] Add generic advisory efficiency reviews, visible notes and editable target ACOS; exclude recent attribution days and weak samples, gate paused delivery and bound proposed tests to 10%.
+- [x] Add actual product/ASIN thumbnails, catalog lookup/cache and mobile card layouts with clamped titles/full-name disclosure.
+- [x] Live API verification: 83 campaigns, paginated ad groups/keywords/targets/product ads; all keyword and target rows on the inspected pages supplied numeric bids.
+- [x] Typecheck, web/headless build, 37 focused regressions and 14 browser checks passed. Signed 0.2.14/code 24/bridge 13 built with the existing certificate, scanned for known credential bytes and installed in place at 192.168.29.216:45451. Confirmed installed version and opened the new workspace on the phone.
+- [x] Live backend acceptance: 83 campaign states; corrected purchased report v2 with 82 rows, ₹38,363.90 other-product sales and 64 other-product units in its downloaded window; catalog image lookup returned HTTP 200 with an image.
+- [ ] Detailed native target/cross-sale acceptance after the phone completes its initial corrected-report refresh; no campaign changes were submitted.
+
+## Advertising workspace implementation — ADR-089
+
+- [x] Agree Codex domain/data/integration ownership and Antigravity isolated UI ownership.
+- [x] Publish the typed presentation contract and explicit UI handoff boundaries.
+- [x] Implement the initial pure aggregation/group-validation foundation and regression cases.
+- [x] Implement and test Sponsored Products workspace-model orchestration, compatible principal-based financial joins, scoped product/campaign detail and versioned manual-group persistence.
+- [x] Add shared versioned report specifications/parsers, separately partitioned desktop report services and kind-aware Android raw transport for search terms, targeting and purchased products. Existing product-cache identities remain compatible.
+- [x] Verify live desktop Amazon report acceptance: all four source services verified, idle with accepted completed reports and no error after backend restart (2026-11-20).
+- [ ] Accept the updated supplemental native transport on the phone after installing the bridge-12 APK.
+- [x] Connect existing Sponsored Products data and compatible posting-period financial denominators to the workspace. Move verbose connection setup to Settings and link financial product pages to Ads investigations.
+- [x] Add search-term and purchased-product source contracts, persistence and desktop/native delivery; connect available sources to shared-ad-group term/target evidence and explicit group cross-sales. Desktop Amazon acceptance verified; phone acceptance remains pending.
+- [x] Integrate Antigravity UI after READY handoff, correct one-based pagination and null money displays, retain product context in nested campaign details, add modal keyboard containment/focus return and touch sizing.
+- [x] Focused calculations/source regressions and isolated/app browser checks passed, including 375px/1280px, persistence after reload and weighted group ratios.
+- [x] Add authoritative campaign/target/bid metadata (ADR-090); manual group scopes are implemented.
+- [ ] Add automatic catalog-parent families.
+- [x] Review and integrate Antigravity's responsive UI, validate source evidence and package signed Android 0.2.13 / versionCode 23 / bridge 12. Certificate matches 0.2.12; staged reports/bridge manifest verified and known Ads secrets absent from the archive.
+- [x] Owner-requested wireless install of 0.2.13 completed on 2026-11-20 at 192.168.29.216:44427 using adb install -r; confirmed versionCode 23/versionName 0.2.13 and brought the app to the foreground.
+- [ ] Complete live phone acceptance of supplemental reports and the redesigned workspace.
+
+## Desktop Amazon Ads connection — ADR-087 (2026-11-18)
+
+- [x] Separate owner-only Ads credential setup and automatic token renewal.
+- [x] Verify selected India seller profile; fixed EU requests and bounded downloads.
+- [x] Persist async report jobs, cooldowns, raw observations and completed windows.
+- [x] Feed seven-day-click Sponsored Products data into existing advertising views;
+  preserve workbook fallback, financial booked expense and missing-cost behavior.
+- [x] Add responsive connection status, selected-date history and explicit refresh.
+- [x] Typecheck/build, 36 focused regressions and two responsive browser checks passed.
+  Full validation handed to Antigravity at the owner's request; see docs/AMAZON_ADS_HANDOFF.md.
+- [ ] Complete live report ingestion after the matching Ads secret is entered locally.
+- [x] Native Android Ads credentials/transport implemented (ADR-088), shared parser,
+  validated source acknowledgment and existing headless/foreground integration.
+- [x] Sign/verify/install Android 0.2.12 / code 22 in place over wireless ADB;
+  confirmed matching installed certificate and no embedded Ads secret/refresh token.
+- [x] Import Ads credentials into native Keystore vault and verify RoyalFurnitures53
+  India profile; first report job is preparing. Remove temporary transfer files.
+- [ ] Confirm first completed live report appears on the phone.
+
 ## Device-owned storage and Android app — ADR-076
 
 - [x] Extend existing desktop SQLite with durable costs/settings/completed readings; migrate browser values only into empty storage.

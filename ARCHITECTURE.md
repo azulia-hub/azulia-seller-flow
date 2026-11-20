@@ -1,5 +1,102 @@
 # Seller Analytics — Architecture
 
+## Ads configuration and purchased-product corrections (ADR-090)
+
+Fixed read-only Sponsored Products list endpoints supply campaign states, ad-group
+defaults, explicit keyword/product-target bids and configured product membership.
+The desktop Ads client and native `ads.entities` capability use entity-specific v3
+media types, bounded pages and exact profile checks; no campaign writes are exposed.
+Complete per-kind snapshots use `ads-entities:<profile/category hash>` workspace
+storage, preserving previous complete values on pagination/API failures. The UI
+labels observation times and distinguishes target state from paused parent delivery.
+
+Pure recommendation selectors use complete, attribution-mature observations and an
+explicit review ACOS target. Numeric suggestions are capped at a ten-percent test
+from a recent configured bid; they never execute changes. Unknown costs do not
+become verified margin or break-even targets. Product/ASIN imagery uses source
+images or authenticated catalog metadata, existing private image transport and a
+separate per-profile metadata category; unavailable images are not guessed.
+
+Purchased-product specification v2 requests the other-SKU sales/purchase/unit
+columns and maps cross-sale rows to those values. Old zero promoted-product values
+are not substituted. Namespace versioning preserves old raw reports while fetching
+corrected coverage. Bridge 13 / Android 0.2.14 (code 24) packages the native changes.
+
+## Advertising workspace sources (ADR-089, implementation in progress)
+
+The presentation contract lives in `src/features/advertising-workspace/contract.ts`.
+Generic aggregation and weighted ratios live in `core/advertising/workspace.ts`;
+application orchestration supplies compatible precomputed financial product
+principal and cost coverage. Campaign slices never manufacture financial sales or
+profit. Dates outside source coverage remain unavailable rather than implying zero.
+
+`adapters/amazon-ads/specifications.json` defines separate versioned advertised-
+product, search-term, targeting and purchased-product reports. Desktop services
+partition durable jobs/observations by credential identity, report kind and
+configuration version, sharing token renewal and paced report creation. Product
+v1 retains its existing cache key. Bridge 12 adds the same fixed kinds to native
+status/jobs/raw chunks/acceptance, with separate day ownership and raw-file
+directories. The bundled native specification asset is copied at Android staging.
+Signed Android 0.2.13 / code 23 packages bridge 12; installation and phone
+acceptance remain pending. The installed bridge-11 app remains unchanged.
+
+These reports are alternative grains of activity. Supplemental metrics must never
+be added to the authoritative product-report headline totals. Search-term and
+targeting sources do not establish per-product attribution. Purchased-product
+reports supply cross-purchase evidence without spend. Live supplemental report
+acceptance on desktop and workspace UI integration completed on 2026-11-20;
+all four desktop services returned accepted completed readings without errors.
+ADR-090 subsequently adds authoritative configured-bid/status sources. Automatic
+catalog-parent sources and detailed native acceptance remain pending. A manually saved group is explicit membership, not verified catalog
+parentage; cross-sale labels therefore say “In selected group.”
+
+## Native Android Ads source (ADR-088)
+
+Android bridge 11 adds a separate AES-GCM/Keystore Ads vault bound to the active
+seller session. Import is an interactive native document-picker action; stored
+secrets and refreshed access tokens never cross into JavaScript. The seller vault
+and native SQLite schema/data are retained.
+
+`AdsSession` owns fixed profiles/Reporting v3 HTTP, provider cooldowns, resumable
+jobs and immutable raw observation files in private app storage. Metadata and
+date-to-observation ownership use existing SQLite. Gzip downloads stream to bounded
+private files; Java never builds a large report JSON graph. The shared TypeScript
+Ads parser reads bounded byte chunks, validates the complete observation and only
+then acknowledges its dates as covered. Rejected observations retain raw evidence
+and previous successful results. Each day has one latest accepted source owner.
+
+Foreground and existing headless processing advance optional Ads jobs. Interactive
+credential capabilities stay excluded from headless execution. Ads errors/cooldowns
+are separate from completed financial results. Native scheduling/network limits
+remain authoritative. Existing selectors calculate the completed report. Product-
+family/search-term redesign remains in docs/ADVERTISING_WORKSPACE_PROPOSAL.md.
+
+## Separate desktop Amazon Ads source (ADR-087)
+
+`server/local/ads/` owns private credential loading, token renewal, fixed EU Ads
+requests, asynchronous report jobs, bounded signed-S3 downloads and a separate
+SQLite report cache. The selected profile is verified as an INR/India seller and
+matched to its configured seller ID before requesting reports. Cache identity
+includes client/profile/seller; changing a secret does not discard saved jobs.
+Completed windows and their unknown raw columns are retained as observations;
+the latest continuous report replaces overlapping dates atomically, including
+zero-activity days. Invalid source observations keep the last successful report.
+Provider cooldowns survive restarts and manual refresh requests.
+
+Loopback APIs expose status, completed report data and bounded-date sync requests.
+Mutation requires exact same-origin/Host and `sync-ads` intent. The browser cannot
+choose download hosts or read credentials. Signed downloads receive no Amazon
+authorization headers and cannot follow redirects.
+
+`adapters/amazon-ads/report.ts` maps explicit seven-day click metrics into the
+existing `SponsoredProductsReport`, preserving unknown raw fields and rejecting
+missing/invalid values rather than inventing zero. `app/useAdsConnection.ts`
+requests selected-date history, polls revisions and supplies reports to existing
+selectors; React renders connection state without financial calculations.
+Manual workbook import disables API presentation until explicitly re-enabled;
+automatic reports do not overwrite the saved workbook. The panel responds to
+mobile widths. Native Android Ads transport is described above (ADR-088).
+
 ## Device-owned persistence (ADR-076, stages 1–2)
 
 The local backend retains account-specific SQLite sources. A separate private workspace SQLite stores completed automatic readings, costs, classification rules and missing-cost policy. The browser adapter selects this transport for the loopback app at port 8788; ordinary hosted operation retains its previous storage path. Large Android readings use protocol-3 raw chunk reads and renderer-compressed, atomic chunk uploads; Java never constructs a full reading JSON graph (ADR-080). The Android transport now has a native source implementation (signed release APK compiled; device verification pending), using private chunked SQLite, Android Keystore, fixed native HTTPS, private images and an origin/path/main-frame checked WebView bridge. Android/hosted item/catalog metadata now runs alongside financial history with bounded fair scheduling; explicit order-card requests prioritize displayed IDs, and open popups resolve live scoreboard data (ADR-079). The same TypeScript page reducer and API parsers are shared; server modules re-export the relocated parsers for compatibility. See [device storage](docs/DEVICE_STORAGE.md).

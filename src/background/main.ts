@@ -8,6 +8,7 @@ import {reviewOrders} from '../adapters/amazon-reviews/orders'
 import {nativeReviewTransport} from '../adapters/amazon-reviews/native'
 import { syncInventory } from '../adapters/amazon-inventory/syncInventory'
 import { androidAmazon } from '../adapters/device/amazon'
+import { syncAndroidAds } from '../adapters/amazon-ads/native'
 import { currentPreferences, applyPreferences } from '../adapters/preferences/runtime'
 import type { DeviceSettings } from '../core/settings/deviceSettings'
 import { resolveTimePeriod } from '../core/analytics/timePeriods'
@@ -41,6 +42,7 @@ async function run(intent:Intent={}) {
       await writeDeviceEntry(`reading:${account}`,reading)
     }
     try { await nativeRequest('engine.phase',{phase:'inventory',message:'Updating stock; financial results are saved…'});const alerts=await syncInventory(account,source,{get:readDeviceEntry,put:writeDeviceEntry},(job,signal)=>androidAmazon({action:'inventory',...job},signal),Boolean(intent.force));if(alerts.length)await nativeRequest('inventory.notify',{account,alerts}) } catch { /* Financial completion is independent from optional stock access. */ }
+    try { await syncAndroidAds() } catch { /* Ads has separate persisted errors/jobs; financial and review work remain independent. */ }
     let reviewsPending=false
     try { reviewsPending=(await runReviewCycle({get:readDeviceEntry,put:writeDeviceEntry},{account,orders:reviewOrders(source.orders??[],source.records),freshOrdersAt:hostedView().state?.recentOrdersCheckedAt??null},nativeReviewTransport,async value=>(await nativeRequest<{delivered:boolean}>('reviews.notify',{...value})).delivered)).pending } catch { /* Reviews are optional and sending is opt-in. */ }
     const error=hostedView().error
