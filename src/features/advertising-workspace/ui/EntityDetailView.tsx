@@ -1,3 +1,5 @@
+import { useVisibleAdsAsins } from './VisibleAsins'
+import { DetailPagination, useDetailPage } from './DetailPagination'
 import { AdsIdentity } from './AdsIdentity'
 import { RecommendationNote } from './RecommendationNote'
 import { useState } from 'react'
@@ -231,6 +233,8 @@ function DetailEntityTable({
   readonly formatMoney: (n: number) => string
   readonly onOpenEntity: (entity: AdvertisingEntity) => void
 }) {
+  const pagination = useDetailPage(rows)
+  useVisibleAdsAsins(pagination.rows.map(item => item.imageAsin))
   if (!rows || rows.length === 0) {
     return <p className="adsw-cell-sub">No {title.toLowerCase()} recorded for this entity.</p>
   }
@@ -250,7 +254,7 @@ function DetailEntityTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => (
+            {pagination.rows.map(row => (
               <tr key={row.entity.id}>
                 <td data-label="Entity">
                   <button
@@ -275,6 +279,7 @@ function DetailEntityTable({
           </tbody>
         </table>
       </div>
+      <DetailPagination {...pagination} />
     </div>
   )
 }
@@ -286,6 +291,8 @@ function DetailTargetsTable({
   readonly targets: readonly AdvertisingTargetRow[]
   readonly formatMoney: (n: number) => string
 }) {
+  const pagination = useDetailPage(targets)
+  useVisibleAdsAsins(pagination.rows.map(item => item.imageAsin))
   if (!targets || targets.length === 0) {
     return <p className="adsw-cell-sub">No targets or bids supplied for this entity.</p>
   }
@@ -311,7 +318,7 @@ function DetailTargetsTable({
               </tr>
             </thead>
             <tbody>
-              {targets.map(t => (
+              {pagination.rows.map(t => (
                 <tr key={t.id}>
                   <td data-label="Target">
                     <AdsIdentity name={t.name} imageUrl={t.imageUrl} asin={t.imageAsin} />
@@ -360,6 +367,7 @@ function DetailTargetsTable({
           </table>
         </div>
       </div>
+      <DetailPagination {...pagination} />
     </div>
   )
 }
@@ -371,6 +379,8 @@ function DetailCrossSalesSection({
   readonly crossSales: readonly AdvertisingCrossSale[]
   readonly formatMoney: (n: number) => string
 }) {
+  const pagination = useDetailPage(crossSales)
+  useVisibleAdsAsins(pagination.rows.flatMap(item => [item.advertisedAsin, item.purchasedAsin]))
   if (!crossSales || crossSales.length === 0) {
     return <p className="adsw-cell-sub">No cross-sales evidence recorded for this entity.</p>
   }
@@ -381,7 +391,7 @@ function DetailCrossSalesSection({
         Aggregate Amazon attribution from 7-day click window, not individual clickstream.
       </p>
       <div className="adsw-cross-sales-list">
-        {crossSales.map(cs => {
+        {pagination.rows.map(cs => {
           const relLabel =
             cs.relationship === 'SAME_PRODUCT'
               ? 'Same product'
@@ -421,6 +431,7 @@ function DetailCrossSalesSection({
           )
         })}
       </div>
+      <DetailPagination {...pagination} />
     </div>
   )
 }

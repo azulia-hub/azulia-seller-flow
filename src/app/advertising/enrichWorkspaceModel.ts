@@ -1,4 +1,4 @@
-import { aggregateAdvertisingFacts, type AdvertisingQuery, type AdvertisingDataset } from '../../core/advertising/workspace'
+import { aggregateAdvertisingFacts, advertisingDimensions, indexAdvertisingFacts, type AdvertisingQuery, type AdvertisingDataset, type AdvertisingMetrics } from '../../core/advertising/workspace'
 import { recommendAdvertising } from '../../core/advertising/recommendations'
 import type { AdsEntitySnapshot } from '../../adapters/amazon-ads/entities'
 import type { AdsWorkspaceSource } from '../../adapters/amazon-ads/workspaceSource'
@@ -9,6 +9,21 @@ import type { WorkspaceSupplementalSources } from './supplementalModel'
 export function enrichWorkspaceModel(model: AdvertisingWorkspaceModel, source: AdsWorkspaceSource | null, supplemental: WorkspaceSupplementalSources, entities: AdsEntitySnapshot | undefined, asOf: string, detailContext?: AdvertisingQuery | null): AdvertisingWorkspaceModel {
   const cutoff = new Date(Date.parse(asOf) + 330 * 60000 - (source?.dataset.attributionDays ?? 7) * 86400000).toISOString().slice(0, 10)
   const baseQuery: AdvertisingQuery = { ...model.query }, targetAcos = model.query.targetAcos ?? 30
+  const searchIndex = supplemental.searchTerm && (model.searchTerms.length || model.detail?.searchTerms.length) ? indexAdvertisingFacts(supplemental.searchTerm.dataset, ['campaignId', 'adGroupId', 'targetId', 'searchTerm']) : new Map()
+  const targetIndex = supplemental.targeting && model.detail ? indexAdvertisingFacts(supplemental.targeting.dataset, ['campaignId', 'adGroupId', 'targetId']) : new Map()
+  const campaignIndex = new Map(entities?.campaigns?.rows.map(row => [String(row.campaignId), campaignConfiguration(entities, String(row.campaignId))]) ?? [])
+  const groupedReviews = new Map<string, { campaigns: Map<string | null, AdvertisingMetrics>; products: Map<string | null, AdvertisingMetrics> }>()
+  const reviewGroups = (context: AdvertisingQuery) => {
+    const key = JSON.stringify(context)
+    let groups = groupedReviews.get(key)
+    if (!groups) {
+      const to = context.to < cutoff ? context.to : cutoff
+      const q = context.from <= to ? { ...context, to } : context
+      groups = { campaigns: new Map(source ? advertisingDimensions(source.dataset, q, 'campaignId').map(item => [item.id, item.metrics]) : []), products: new Map(source ? advertisingDimensions(source.dataset, q, 'productId').map(item => [item.id, item.metrics]) : []) }
+      groupedReviews.set(key, groups)
+    }
+    return groups
+  }
   const review = (dataset: AdvertisingDataset | undefined, context: AdvertisingQuery, currentBid?: number | null, status?: string | null, coverageSource = source) => {
     const to = context.to < cutoff ? context.to : cutoff, hasMature = context.from <= to
     const q = hasMature ? { ...context, to } : context
@@ -16,12 +31,16 @@ export function enrichWorkspaceModel(model: AdvertisingWorkspaceModel, source: A
     return recommendAdvertising(metrics, { completeCoverage: Boolean(dataset && hasMature && coverageSource && coverageSource.coveredFrom <= context.from && coverageSource.coveredTo >= to), targetAcos, currentBid, status })
   }
   const row = (item: AdvertisingEntityRow, context: AdvertisingQuery): AdvertisingEntityRow => {
-    const config = item.entity.kind === 'CAMPAIGN' ? campaignConfiguration(entities, item.entity.id) : null
+    const config = item.entity.kind === 'CAMPAIGN' ? campaignIndex.get(item.entity.id) : null
     let recommendation
     if (item.entity.kind === 'SEARCH_TERM') {
-      const facts = supplemental.searchTerm?.dataset.facts.filter(fact => JSON.stringify([fact.campaignId, fact.adGroupId, fact.targetId ?? null, fact.searchTerm ?? null]) === item.entity.id)
+      const facts = searchIndex.get(item.entity.id)
       recommendation = review(supplemental.searchTerm ? { ...supplemental.searchTerm.dataset, facts: facts ?? [] } : undefined, { ...context, scope: { kind: 'ACCOUNT' } }, null, null, supplemental.searchTerm)
-    } else recommendation = review(source?.dataset, item.entity.kind === 'CAMPAIGN' ? { ...context, campaignId: item.entity.id } : { ...context, scope: { kind: 'PRODUCT', productId: item.entity.id } }, null, config?.status)
+    } else {
+      const metrics = item.entity.kind === 'CAMPAIGN' ? reviewGroups(context).campaigns.get(item.entity.id) : reviewGroups(context).products.get(item.entity.id)
+      const to = context.to < cutoff ? context.to : cutoff
+      recommendation = metrics ? recommendAdvertising(metrics, { completeCoverage: Boolean(source && context.from <= to && source.coveredFrom <= context.from && source.coveredTo >= to), targetAcos, status: config?.status }) : review(source ? { ...source.dataset, facts: [] } : undefined, context, null, config?.status)
+    }
     return { ...item, status: config?.status ?? item.status, recommendation,
       note: `${recommendation.text}. ${recommendation.reason}${config ? ` Status observed ${config.observedAt}.` : ''}`,
       imageAsin: item.imageAsin ?? (item.entity.kind === 'PRODUCT' ? source?.products.get(item.entity.id)?.asins[0] : null) }
@@ -34,7 +53,7 @@ export function enrichWorkspaceModel(model: AdvertisingWorkspaceModel, source: A
     const configured = detail.entity.kind === 'SEARCH_TERM' ? [] : configuredTargets(source, supplemental.targeting, entities, context)
     const ids = new Set(configured.map(item => item.id))
     const targets = [...configured, ...detail.targets.filter(item => !ids.has(item.id))].map(item => {
-      const facts = supplemental.targeting?.dataset.facts.filter(fact => JSON.stringify([fact.campaignId, fact.adGroupId, fact.targetId ?? null]) === item.id)
+      const facts = targetIndex.get(item.id)
       const freshBid = item.observedAt && Date.parse(asOf) - Date.parse(item.observedAt) <= 30 * 60000 ? item.configuredBid : null
       return { ...item, imageAsin: item.name.match(/\bB[A-Z0-9]{9}\b/i)?.[0].toUpperCase() ?? null, recommendation: review(supplemental.targeting ? { ...supplemental.targeting.dataset, facts: facts ?? [] } : undefined, { ...context, scope: { kind: 'ACCOUNT' } }, freshBid, item.effectiveStatus ?? item.status, supplemental.targeting) }
     })

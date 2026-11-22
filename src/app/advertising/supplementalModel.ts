@@ -10,7 +10,7 @@ export interface WorkspaceSupplementalSources {
 const label = (value: unknown) => typeof value === 'string' ? value : null
 
 /** Shared ad-group evidence is explicitly separate from SKU-attributed performance. */
-export function supplementalModel(primary: AdsWorkspaceSource | null, sources: WorkspaceSupplementalSources, query: AdvertisingQuery) {
+export function supplementalModel(primary: AdsWorkspaceSource | null, sources: WorkspaceSupplementalSources, query: AdvertisingQuery, sections = { searchTerms: true, targets: true, crossSales: true }) {
   const accountQuery: AdvertisingQuery = { ...query, scope: { kind: 'ACCOUNT' } }
   const productSelection = query.scope.kind !== 'ACCOUNT'
   const included = new Set(primary ? aggregateAdvertisingFacts(primary.dataset, query).includedFactIds : [])
@@ -19,13 +19,13 @@ export function supplementalModel(primary: AdsWorkspaceSource | null, sources: W
   const notices: string[] = []
   if (productSelection && (sources.searchTerm || sources.targeting)) notices.push('Search terms and targets show whole shared ad groups observed for this selection. Their amounts are not allocated to individual SKUs and are not added to product totals.')
   for (const [kind, source] of Object.entries(sources)) if (source && (source.coveredFrom > query.from || source.coveredTo < query.to)) notices.push(`${kind} evidence has partial date coverage (${source.coveredFrom} – ${source.coveredTo}).`)
-  const searchTerms: AdvertisingEntityRow[] = sources.searchTerm ? advertisingBreakdown(shared(sources.searchTerm), accountQuery, ['campaignId', 'adGroupId', 'targetId', 'searchTerm']).map(slice => {
+  const searchTerms: AdvertisingEntityRow[] = sections.searchTerms && sources.searchTerm ? advertisingBreakdown(shared(sources.searchTerm), accountQuery, ['campaignId', 'adGroupId', 'targetId', 'searchTerm']).map(slice => {
     const fact = slice.facts[0], raw = fact.raw ?? {}
     return { entity: { kind: 'SEARCH_TERM', id: slice.id }, name: fact.searchTerm ?? 'Unknown search term', subtitle: `${sources.searchTerm!.campaigns.get(fact.campaignId ?? '')?.name ?? fact.campaignId} · ${sources.searchTerm!.adGroups.get(fact.adGroupId ?? '')?.name ?? 'Ad group unknown'}`,
       imageAsin: /^B[A-Z0-9]{9}$/i.test(fact.searchTerm ?? '') ? fact.searchTerm!.toUpperCase() : null, metrics: slice.metrics, change: null, status: null, attributionScope: 'SHARED_AD_GROUP', target: label(raw.keyword) ?? label(raw.targeting), matchType: label(raw.matchType),
       note: 'Reported at campaign/ad-group/target level. No individual SKU attribution is supplied.' }
   }) : []
-  const targets: AdvertisingTargetRow[] = sources.targeting ? advertisingBreakdown(shared(sources.targeting), accountQuery, ['campaignId', 'adGroupId', 'targetId']).map(slice => {
+  const targets: AdvertisingTargetRow[] = sections.targets && sources.targeting ? advertisingBreakdown(shared(sources.targeting), accountQuery, ['campaignId', 'adGroupId', 'targetId']).map(slice => {
     const raw = slice.facts[0].raw ?? {}
     return { id: slice.id, name: label(raw.keyword) ?? label(raw.targeting) ?? slice.facts[0].targetId ?? 'Unidentified target', matchType: label(raw.matchType), status: null, configuredBid: null, bidSource: 'UNKNOWN', observedAt: null, metrics: slice.metrics }
   }) : []
@@ -35,7 +35,7 @@ export function supplementalModel(primary: AdsWorkspaceSource | null, sources: W
     const key = asin.toUpperCase(), ids = asinProducts.get(key) ?? new Set<string>(); ids.add(product.id); asinProducts.set(key, ids)
   }
   const members = new Set(query.scope.kind === 'GROUP' ? query.scope.productIds : [])
-  const crossSales: AdvertisingCrossSale[] = sources.purchasedProduct ? advertisingBreakdown(sources.purchasedProduct.dataset, query, ['productId', 'purchasedProductId']).map(slice => {
+  const crossSales: AdvertisingCrossSale[] = sections.crossSales && sources.purchasedProduct ? advertisingBreakdown(sources.purchasedProduct.dataset, query, ['productId', 'purchasedProductId']).map(slice => {
     const fact = slice.facts[0], purchasedAsin = fact.purchasedProductId ?? '', ids = asinProducts.get(purchasedAsin), purchasedProduct = ids?.size === 1 ? [...ids][0] : null
     const advertisedProduct = fact.productId ?? 'Unidentified advertised SKU'
     return { id: slice.id, advertisedAsin: label(fact.raw?.advertisedAsin), purchasedAsin, advertisedProduct, purchasedProduct: purchasedProduct ?? (purchasedAsin || null),

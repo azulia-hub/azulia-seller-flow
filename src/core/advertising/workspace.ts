@@ -187,3 +187,14 @@ export function advertisingBreakdown(dataset: AdvertisingDataset, query: Adverti
   }
   return [...groups].map(([id, facts]) => ({ id, facts, metrics: aggregateAdvertisingFacts({ ...dataset, facts }, { ...query, scope: { kind: 'ACCOUNT' } }).metrics }))
 }
+
+/** Reusable identity buckets: build once, then retrieve each entity without rescanning. */
+export function indexAdvertisingFacts(dataset: AdvertisingDataset, dimensions: readonly ('campaignId' | 'adGroupId' | 'targetId' | 'searchTerm' | 'productId' | 'purchasedProductId')[]): ReadonlyMap<string, readonly AdvertisingFact[]> {
+  const groups = new Map<string, AdvertisingFact[]>()
+  for (const fact of dataset.facts) {
+    const key = JSON.stringify(dimensions.map(dimension => fact[dimension] ?? null))
+    const group = groups.get(key)
+    if (group) group.push(fact); else groups.set(key, [fact])
+  }
+  return groups
+}

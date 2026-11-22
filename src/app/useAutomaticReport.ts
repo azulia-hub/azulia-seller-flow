@@ -23,8 +23,10 @@ export function useAutomaticReport(options: { enabled: boolean; visibleConnectio
         if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Start npm run local to enable automatic delivery. Manual uploads remain available.')
         const info = await response.json() as SyncStatus
         if (!active) return
-        setStatus(previous => previous && sameContent(previous.purchaseCoverage, info.purchaseCoverage)
-          ? { ...info, purchaseCoverage: previous.purchaseCoverage } : info); setError('')
+        setStatus(previous => previous ? { ...info,
+          coverage: sameContent(previous.coverage, info.coverage) ? previous.coverage : info.coverage,
+          purchaseCoverage: sameContent(previous.purchaseCoverage, info.purchaseCoverage) ? previous.purchaseCoverage : info.purchaseCoverage,
+        } : info); setError('')
         if (!info.configured || !latest.current.enabled) return
         if (key !== info.connectionKey) {
           if (key !== null || latest.current.visibleConnectionKey && latest.current.visibleConnectionKey !== info.connectionKey) latest.current.onIdentityChange()

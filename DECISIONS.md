@@ -1,5 +1,28 @@
 # Seller Analytics — Architectural Decisions
 
+## ADR-091 — Keep advertising calculation off the UI thread (2026-11-22)
+
+Owner reports unresponsive desktop tabs and phone scrolling. Saved-data profiling
+reproduced a 35.7-second model pass: Overview enriched over 6,000 hidden search-term
+rows, rescanning/stringifying the full report for every row. Generic identity
+indexes and grouped mature metrics replace those repeated scans. Overview does not
+build hidden search rows; detail tables expose all records through 30-row pages.
+No source observations or financial totals are truncated to the displayed page.
+
+Move financial preparation, report selection and recommendations into a dedicated
+module worker, coalesce pending requests and discard obsolete replies. Keep the
+last completed reading visible while new specifications run. Transfer SKU aliases
+as explicit data so worker serialization preserves the existing adapter cost lookup.
+Stable product maps, unchanged coverage/source references and selective image
+requests prevent polling or thumbnail updates from restarting calculation. Detail
+image identities follow the visible page; no new dependencies or API writes.
+
+The optimized saved-data selector pass measured approximately 0.15 seconds on the
+development computer before off-thread execution. Large synthetic browser tests
+exercise 10,000 search observations, 1,000 targets, parent updates, pagination,
+heartbeat responsiveness and mobile layout. Android 0.2.15/code 25 retains bridge
+13 and the existing signing key, credentials, raw reports and financial policies.
+
 ## ADR-090 — Live Ads configuration, evidence-based suggestions and cross-sale repair (2026-11-21)
 
 Owner requests real campaign states/configured bids, readable mobile investigations,

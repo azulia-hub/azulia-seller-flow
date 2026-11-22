@@ -1,5 +1,15 @@
 # Seller Analytics — Roadmap
 
+## Advertising responsiveness — ADR-091
+
+- [x] Reproduce a roughly 35.7-second saved-data calculation; replace per-row report scans with reusable indexes/grouped metrics. Optimized selector pass measured about 0.15 seconds.
+- [x] Move financial preparation and Ads/recommendation models into a coalescing worker, retaining the previous completed model and existing SKU cost aliases.
+- [x] Stabilize polling/coverage/product-map identities, avoid hidden search work and paginate detail tables at 30 rows without changing full-source totals; request images for the visible page.
+- [x] 22 focused selector/financial/recommendation tests and six responsive browser checks passed, including a 10,000-observation/1,000-target workload with heartbeat and pagination checks; production web/device-engine build passed.
+- [x] Package signed Android 0.2.15/code 25 with bridge 13 and the existing certificate; verify worker asset and credential-byte scan.
+- [ ] Install on phone: paired device advertises 192.168.29.186:36259 but refuses the connection; current Wireless debugging address/port requested from owner.
+- [ ] Publish the source update.
+
 ## Advertising repair — ADR-090
 
 - [x] Fetch authoritative campaign/ad-group/keyword/target/product-ad configuration with bounded pagination and device/profile-scoped complete snapshots; expose actual states and explicit/inherited bids.

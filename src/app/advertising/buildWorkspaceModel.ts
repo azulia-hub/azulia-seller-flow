@@ -47,7 +47,7 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
   const { source, query } = input, dataset = source?.dataset ?? emptyDataset
   const analysisQuery: AdvertisingQuery = { from: query.from, to: query.to, scope: query.scope, campaignId: query.campaignId }
   const base = aggregateAdvertisingFacts(dataset, analysisQuery)
-  const supplemental = supplementalModel(source, input.supplemental ?? {}, analysisQuery)
+  const supplemental = supplementalModel(source, input.supplemental ?? {}, analysisQuery, { searchTerms: query.view === 'searchTerms' || input.selectedEntity?.kind === 'SEARCH_TERM', targets: false, crossSales: false })
   const previous = priorRange(query), sourceCovers = (range: { from: string; to: string }) => Boolean(source && source.coveredFrom <= range.from && source.coveredTo >= range.to)
   const fullCoverage = sourceCovers(query), previousCoverage = sourceCovers(previous)
   const hasCoveredDates = Boolean(source && source.coveredFrom <= query.to && source.coveredTo >= query.from)
@@ -149,6 +149,6 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
     error: input.error, refreshing: input.refreshing, lastUpdated: source?.observedAt ?? null, coveredFrom: source?.coveredFrom ?? null, coveredTo: source?.coveredTo ?? null,
     basisLabel: 'SP spend before GST · Product revenue before separately reported GST · 7-day click attribution', comparisonLabel: comparable ? `${previous.from} – ${previous.to}` : null,
     notices, summary: summary(hasCoveredDates ? metrics : { ...metrics, spend: null, attributedSales: null, acos: null, roas: null, tacos: null }, changes, financialReason), findings, trend,
-    campaigns: query.view === 'campaigns' ? campaigns.slice(start, start + pageSize) : campaigns, products: query.view === 'products' ? products.slice(start, start + pageSize) : products,
-    searchTerms: query.view === 'searchTerms' ? searchTerms.slice(start, start + pageSize) : searchTerms, groups: input.groups, productChoices: [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), totalRows, pageSize, detail }
+    campaigns: query.view === 'campaigns' ? campaigns.slice(start, start + pageSize) : query.view === 'overview' ? campaigns.slice(0, 5) : [], products: query.view === 'products' ? products.slice(start, start + pageSize) : [],
+    searchTerms: query.view === 'searchTerms' ? searchTerms.slice(start, start + pageSize) : [], groups: input.groups, productChoices: [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), totalRows, pageSize, detail }
 }

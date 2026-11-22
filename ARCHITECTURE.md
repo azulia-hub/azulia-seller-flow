@@ -1,5 +1,19 @@
 # Seller Analytics — Architecture
 
+## Advertising responsiveness (ADR-091)
+
+`calculateWorkspace.ts` orchestrates financial/Ads/recommendation selectors in
+`workspace.worker.ts`. The React adapter keeps one request in flight, coalesces
+new specifications and rejects stale responses, retaining the last completed model.
+Maps and explicit SKU alias tuples are structured-cloneable; credentials never
+enter the worker. Pure `indexAdvertisingFacts` builds composite entity buckets once,
+while grouped mature-period metrics avoid per-entity full-source scans. Hidden
+search-term results are not materialized on Overview. Display pagination is separate
+from complete source aggregation, and detail tables mount at most 30 data rows.
+Visible-page ASIN reporting feeds the application catalog adapter without requesting
+all hidden products. Polls preserve unchanged source/coverage references, and image
+updates do not invalidate analytical input. No new financial or bidding policy.
+
 ## Ads configuration and purchased-product corrections (ADR-090)
 
 Fixed read-only Sponsored Products list endpoints supply campaign states, ad-group

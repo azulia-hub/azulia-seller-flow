@@ -39,7 +39,7 @@ describe('advertising workspace model orchestration', () => {
     expect(second.campaigns).toHaveLength(5)
   })
   it('uses compatible principal for TACOS and retains seven-day total sales including cross-sales', () => {
-    const model = buildAdvertisingWorkspaceModel(fixture())
+    const model = buildAdvertisingWorkspaceModel({ ...fixture(), query: { ...query, view: 'products' } })
     expect(model.summary.find(item => item.id === 'tacos')?.value).toBeCloseTo(1000 / 12000 * 100)
     expect(model.summary.find(item => item.id === 'acos')?.value).toBeCloseTo(1000 / 6000 * 100)
     expect(model.products.find(item => item.entity.id === 'white')?.metrics.profitAfterAds).toBe(600)
@@ -65,10 +65,10 @@ describe('advertising workspace model orchestration', () => {
   })
   it('never manufactures financial campaign profitability or missing-cost profit', () => {
     const input = fixture()
-    const campaign = buildAdvertisingWorkspaceModel({ ...input, query: { ...query, campaignId: 'c1' } })
+    const campaign = buildAdvertisingWorkspaceModel({ ...input, query: { ...query, view: 'products', campaignId: 'c1' } })
     expect(campaign.summary.find(item => item.id === 'tacos')?.value).toBeNull()
     expect(campaign.products.every(item => item.metrics.profitAfterAds === null)).toBe(true)
-    const missingCost = buildAdvertisingWorkspaceModel({ ...input, financial: { ...input.financial!, products: input.financial!.products.map(item => ({ ...item, completeCosts: false, contributionBeforeReportedAds: null })) } })
+    const missingCost = buildAdvertisingWorkspaceModel({ ...input, query: { ...query, view: 'products' }, financial: { ...input.financial!, products: input.financial!.products.map(item => ({ ...item, completeCosts: false, contributionBeforeReportedAds: null })) } })
     expect(missingCost.products.every(item => item.metrics.profitAfterAds === null)).toBe(true)
   })
   it('keeps duplicate campaign names distinct using source IDs and excludes unimplemented views', () => {

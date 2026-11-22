@@ -13,7 +13,11 @@ export function useSupplementalAds(options: { enabled: boolean; profileId: strin
     let disposed = false, polling = false
     const sources: { -readonly [K in keyof WorkspaceSupplementalSources]?: WorkspaceSupplementalSources[K] } = {}, errors = new Map<string, string>()
     const revisions = new Map<string, number>()
-    const publish = (busy: boolean) => { if (!disposed) setReading({ profileId, sources: { ...sources }, errors: [...errors.values()], busy }) }
+    const publish = (busy: boolean) => { if (!disposed) setReading(previous => {
+      const messages = [...errors.values()]
+      if (previous?.profileId === profileId && previous.busy === busy && kinds.every(kind => previous.sources[kind] === sources[kind]) && JSON.stringify(previous.errors) === JSON.stringify(messages)) return previous
+      return { profileId, sources: { ...sources }, errors: messages, busy }
+    }) }
     async function poll() {
       if (polling) return
       polling = true
