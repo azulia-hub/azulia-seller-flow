@@ -42,7 +42,7 @@ The refresh lifecycle clears the replaced document's writer lease without deleti
 
 ## Current compiled APK
 
-Signed release 0.1.3 (version code 4) compiled successfully on 2026-11-13. APK signature verification passed; the bundled interface/native classes are present and private credentials/signing files are excluded. Installable copy: `.local/releases/azulia-seller-0.1.3.apk`, with an adjacent SHA-256 file. For v0.1.3 the owner authorized a focused on-phone launch check: installation, startup logo, dashboard loading and no fresh crash were confirmed on the Pixel. No broad test suite/emulator or separate Amazon API probe was run; normal connected-app sync may run during launch. Nothing was pushed.
+Signed release 0.2.16 (version code 26, bridge 13) compiled successfully on 2026-11-22. APK signature verification passed with the permanent signing certificate; the bundled interface/native classes are present and private credentials/signing files are excluded. Installable copy: `.local/releases/azulia-seller-0.2.16.apk`, with an adjacent SHA-256 file. Installed in place on the owner's wireless Pixel at 192.168.29.186:36259 (`adb install -r`), preserving all app data, SQLite stores, and credentials. Fresh launch, dark theme, review requests status, and notification navigation intent verified on device with zero crashes. Nothing was pushed.
 
 GitHub Pages is optional: the bundled interface, native connection, device storage and calculations work without hosting the website. Internet is required for fresh Amazon data. The interface runs in Android WebView; it is not a separately rewritten native UI.
 
@@ -127,6 +127,18 @@ execution and missed starts resume when available. Accepted counts update a nati
 Review requests sent notification after each batch; blocked notifications retry
 without resending orders. Manual accepted sends also notify. Manual sending remains
 available outside the automatic schedule. No uninstall/data clear is needed.
+
+### Release 0.2.17 / versionCode 27 (2026-11-22)
+
+Packages the compact Ads tables, shared UI cleanup, improved desktop delivery,
+Orders-only notification details, prioritized review batches and sidebar-only
+mobile navigation. Retains unknown inbound totals when any component is absent.
+Production web/headless and signed Android compilation passed; certificate matches
+prior installed releases. APK and checksum: `.local/releases/azulia-seller-0.2.17.apk`.
+Installed in place on the paired Pixel at 192.168.29.186:36259 with existing data
+retained. Staged sources, production assets and APK passed known-credential scans;
+private notes, tokens and signing material are excluded. Antigravity's earlier
+validation is retained; this packaging step did not repeat the full test suite.
 
 ### Background review notification correction (0.2.8 / versionCode 18)
 The headless bridge now allows `reviews.notify`, which was implemented but omitted

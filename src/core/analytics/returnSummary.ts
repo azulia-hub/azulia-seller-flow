@@ -2,24 +2,7 @@ import type { CanonicalFinancialEvent, ReturnType } from '../data/types'
 import type { ProductCost } from '../costs/types'
 import { createProductCostResolver, type ProductCostResolver } from '../costs/calculateCosts'
 import { canonicalDateKey } from './dashboardSummary'
-import { calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
-
-function findReturnInspection(
-  inspections: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>,
-  orderId: string,
-  sku: string
-): ReturnInspectionRecord | undefined {
-  if (inspections instanceof Map) {
-    for (const record of inspections.values()) {
-      if (record.identity.orderId === orderId && record.identity.sku === sku) return record
-    }
-    return inspections.get(orderId)
-  }
-  for (const record of Object.values(inspections)) {
-    if (record?.identity?.orderId === orderId && record?.identity?.sku === sku) return record
-  }
-  return (inspections as Record<string, ReturnInspectionRecord>)[orderId]
-}
+import { findReturnInspection, calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
 
 export interface ReturnOrderSummary {
   readonly orderId: string

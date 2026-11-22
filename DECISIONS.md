@@ -1,5 +1,30 @@
 # Seller Analytics — Architectural Decisions
 
+## ADR-092 — Prompt order delivery and review progress (2026-11-22)
+
+Order notifications can precede posted financial records. Notification destinations
+remain pending while the correct account/order reading is unavailable; a bounded
+direct order lookup is queued and retained even when a native cycle is already
+busy. Order details show saved Orders metadata independently from financial evidence,
+including status, products, quantities and explicitly labelled source order total.
+No synthetic revenue, fees or profit are created. Late financial events join by
+order identity rather than the notification's original event-ID snapshot.
+
+Desktop recent-order discovery uses at most a one-minute cadence with existing
+list rate limits and the two-minute safety cutoff intact. Financial calculations
+can accept source changes while serialized optional review/inventory work awaits
+network responses; ready readings are acknowledged independently of that work.
+Phone and desktop continue to own independent stores and fetch schedules.
+
+Due runnable review queues prioritize recent-order freshness over historical or
+optional inventory/Ads work. Reviews run before optional enrichment, retaining all
+freshness, eligibility, consent, replacement, cooldown and duplicate-send guards.
+Native accepted-count notifications update after each accepted request and display
+the actual daily start time, so later progress is distinguishable from a late start.
+Android scheduling/network delays remain authoritative; this is not an exact-alarm
+guarantee. Remove duplicate mobile bottom navigation; sidebar/menu remains the
+single navigation entry. Tests, compilation and installation are owner-deferred.
+
 ## ADR-091 — Keep advertising calculation off the UI thread (2026-11-22)
 
 Owner reports unresponsive desktop tabs and phone scrolling. Saved-data profiling

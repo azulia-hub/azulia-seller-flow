@@ -98,6 +98,31 @@ export async function sendReview(storage:InventoryStorage,context:ReviewContext,
   })
 }
 export interface ReviewNotification {account:string;id:string;count:number}
+/** Let scheduled work bypass optional history/enrichment until its runnable queue is drained. */
+export async function hasPriorityReviewWork(storage: InventoryStorage, account: string, now = new Date().toISOString()) {
+  const settings = (await storage.get<ReviewSettings>(`reviews-config:${account}`)).value
+  if (!automaticReviewDue(settings, now)) return false
+  const workspace = (await storage.get<ReviewWorkspace>(`reviews:${account}`)).value
+  const run = workspace?.dailyRun
+  if (!workspace || !run || run.date !== reviewClock(now).date) return true
+  return run.remaining.some(id => {
+    const record = workspace.records[id]
+    return !record?.checkFailed || !record.nextCheck || Date.parse(record.nextCheck) <= Date.parse(now)
+  })
+}
+async function notifyAcceptedReviews(storage: InventoryStorage, account: string, notify?: (value: ReviewNotification) => Promise<boolean>) {
+  if (!notify) return
+  try {
+    const workspace = (await storage.get<ReviewWorkspace>(`reviews:${account}`)).value
+    const run = workspace?.dailyRun
+    if (!workspace || !run) return
+    const count = dailyReviewAccepted(run, workspace)
+    if (count <= (run.notifiedCount ?? 0)) return
+    if (await notify({ account, id: `daily:${run.startedAt}:${count}`, count })) {
+      await mutate(storage, account, value => { if (value.dailyRun?.startedAt === run.startedAt) value.dailyRun.notifiedCount = count })
+    }
+  } catch { /* Retry notification delivery without ever replaying a submitted request. */ }
+}
 export async function runReviewCycle(storage:InventoryStorage,context:ReviewContext,transport:ReviewTransport,notify?:(value:ReviewNotification)=>Promise<boolean>){
   let merged=await mergeReviewOrders(storage,context)
   const deadline=Date.now()+30000
@@ -113,7 +138,7 @@ export async function runReviewCycle(storage:InventoryStorage,context:ReviewCont
     })
   }
   // Discover delivery outside the daily queue, without treating estimates as confirmation.
-  for(const order of deliveryCandidates(context.orders,merged,now,2)){
+  for(const order of scheduled && merged.dailyRun?.remaining.length ? [] : deliveryCandidates(context.orders,merged,now,2)){
     if(abort.aborted||Date.now()+5000>=deadline)break
     try { await verify(storage,context,order.id,transport,abort) } catch { /* Metadata remains reviewable. */ }
     await pause(1100)
@@ -134,6 +159,7 @@ export async function runReviewCycle(storage:InventoryStorage,context:ReviewCont
       if(run&&checked.records[id]?.state==='eligible'){
         if(Date.now()+2000>=deadline)break
         await sendReview(storage,context,id,transport,'automatic',abort,checked)
+        await notifyAcceptedReviews(storage,context.account,notify)
       }
       finished=!checked.records[id]?.checkFailed
     }catch{
@@ -147,17 +173,7 @@ export async function runReviewCycle(storage:InventoryStorage,context:ReviewCont
     await pause(1100)
   }
   merged=await mergeReviewOrders(storage,context)
-  const completed=merged.dailyRun
-  if(completed&&notify){
-    const count=dailyReviewAccepted(completed,merged)
-    let delivered=false
-    if(count>(completed.notifiedCount??0)){
-      try { delivered=await notify({account:context.account,id:`daily:${completed.startedAt}:${count}`,count}) } catch { /* Retry notifications separately; preserve paced queue continuation. */ }
-    }
-    if(delivered){
-      await mutate(storage,context.account,value=>{if(value.dailyRun?.startedAt===completed.startedAt)value.dailyRun.notifiedCount=count})
-    }
-  }
+  await notifyAcceptedReviews(storage,context.account,notify)
   // Continue paced batches only for work that is runnable now; API cooldowns remain authoritative.
   const pending=scheduled&&Boolean(merged.dailyRun?.remaining.some(id=>{const record=merged.records[id];return !record?.checkFailed||!record.nextCheck||Date.parse(record.nextCheck)<=Date.now()}))
   return {pending}

@@ -3,11 +3,11 @@ import { AdvertisingRecovery } from './AdvertisingRecovery'
 import type { SkuProfitSummary } from '../core/analytics/orderProfit'
 import { buildSkuAdvertisingEconomics, type SponsoredProductsAttribution } from '../core/advertising/sponsoredProducts'
 import { downloadCsv } from '../adapters/browser/downloadCsv'
+import { formatInr } from '../adapters/formatting/currency'
 
 export function SkuAdvertisingPanel({ product, sku, sponsored }: { product?: SkuProfitSummary; sku?: string; sponsored: SponsoredProductsAttribution; formatMoney?: (value: number) => string }) {
   const ads = sponsored.skus.find(item => item.sku === (product?.sku ?? sku))
-  const preciseMoney = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const money = (value: number | null) => value === null ? 'Unavailable' : preciseMoney.format(value)
+  const money = (value: number | null) => value === null ? 'Unavailable' : formatInr(value)
   const pct = (value: number | null) => value === null ? 'Unavailable' : `${value.toFixed(2)}%`
   if (!ads) return <section className="panel sku-ad-economics"><h3>Product advertising</h3>{sponsored.status !== 'AVAILABLE' ? <AdvertisingRecovery report={sponsored} /> : <p>Product SKU not matched to advertising rows in these dates. Review unmatched products under Advertising results → Details on the dashboard.</p>}</section>
   const economics = product ? buildSkuAdvertisingEconomics(product, ads) : null

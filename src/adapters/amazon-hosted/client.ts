@@ -296,7 +296,7 @@ function appendJob(state: CacheMeta, job: BrowserJob) {
     if (Date.now() - old.createdAt > 23 * 3600000) { old.nextToken = null; old.createdAt = Date.now() }
   } else state.jobs.push(job)
 }
-export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean; forceHistory?:boolean; budgetMs?:number }) {
+export async function syncHosted(days: { from: string; to: string }, options?: { silent?: boolean; forceRecent?: boolean; forceHistory?:boolean; budgetMs?:number; recentOnly?:boolean }) {
   await initializeHosted()
   if(androidDevice && !backgroundEngine) {await nativeRequest('sync.request',{...days,force:Boolean(options?.forceHistory),orderIds:[...detailPriority]});return}
   if (run || backgroundDrain || !session || !view.account || session.account !== view.account) return
@@ -330,12 +330,14 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     const asins=new Set(targets.asins)
     if(!detailPriority.size)for(const record of cache.records)for(const item of (Array.isArray(record.items)?record.items:[]).map(object))for(const context of (Array.isArray(item.contexts)?item.contexts:[]).map(object))if(/^[A-Z0-9]{10}$/.test(text(context.asin)))asins.add(text(context.asin))
     await checkedUpdate(current=>{
-      const enqueue=(kind:'orderItems'|'catalog',resource:string,extra:Partial<BrowserJob>)=>{
+      const enqueue=(kind:'order'|'orderItems'|'catalog',resource:string,extra:Partial<BrowserJob>)=>{
         const existing=current.jobs.find(job=>job.kind===kind && (kind==='orderItems'?job.orderId===resource:job.asin===resource))
         if(existing){existing.scope=scope;if(Date.now()-existing.createdAt>23*3600000){existing.createdAt=Date.now();existing.nextToken=null};return}
         if(!metadataTracker.canEnqueue(kind,resource))return
         metadataTracker.recordEnqueued(kind,resource);appendJob(current,makeJob(kind,wanted,extra))
       }
+      const knownOrders=new Set(cache.orders.map(order=>order.id))
+      for(const id of [...detailPriority].slice(0,10))if(!knownOrders.has(id)&&Date.now()-(current.dateFailures[id]??0)>60000)enqueue('order',id,{orderId:id})
       for(const order of targets.items.slice(0,10))enqueue('orderItems',order.id,{orderId:order.id})
       if(!current.catalogError){
         const known=new Map(cache.catalog.map(item=>[item.asin,item]))
@@ -398,10 +400,11 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     let totalPlanned = 0, completedCount = 0, metadataCount = -1, metadataVersion = -1
     while (!abort.signal.aborted && Date.now()<deadline) {
       const urgentRecent=(await meta(account)).jobs.some(job=>job.lane==='recent'&&job.scope===scope)
-      if(!urgentRecent&&(metadataVersion!==detailRequestVersion || completedCount-metadataCount>=4)){await queueMetadata();metadataCount=completedCount;metadataVersion=detailRequestVersion}
+      if((!urgentRecent||detailPriority.size>0)&&(metadataVersion!==detailRequestVersion || completedCount-metadataCount>=4)){await queueMetadata();metadataCount=completedCount;metadataVersion=detailRequestVersion}
       const state = await meta(account)
-      const jobs = state.jobs.filter(job => job.scope === scope)
+      const jobs = state.jobs.filter(job => job.scope === scope && (!options?.recentOnly || job.lane === 'recent'))
       if (!jobs.length) {
+        if(options?.recentOnly)break
         const cache = await loadCache(account), known = new Map(cache.orders.map(order => [order.id, order])), references = new Set<string>()
         for (const record of cache.records) {
           for (const related of (Array.isArray(record.relatedIdentifiers) ? record.relatedIdentifiers : []).map(object)) if (related.relatedIdentifierName === 'ORDER_ID') references.add(text(related.relatedIdentifierValue))

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatMoney } from '../adapters/preferences/runtime'
+import { formatMoney as formatInr } from '../adapters/preferences/runtime'
 import type { PulseScoreboard as PulseData, PulsePeriodMetrics } from '../core/analytics/pulseScoreboard'
 import { PulseOrdersModal } from './PulseOrdersModal'
 
@@ -9,7 +9,6 @@ interface Props {
   readonly onSelectPeriod?: (from: string, to: string) => void
 }
 
-function formatInr(value: number): string { return formatMoney(value) }
 
 export function PulseScoreboard({ scoreboard, onSelectPeriod, onRequestDetails }: Props) {
   const [modalLabel, setModalLabel] = useState<string | null>(null)

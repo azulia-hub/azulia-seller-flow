@@ -100,7 +100,9 @@ describe('Amazon FBA Inventory parser', () => {
       sellerSku: 'SKU-STRINGS',
       inventoryDetails: {
         fulfillableQuantity: '42',
+        inboundWorkingQuantity: '0',
         inboundShippedQuantity: '10',
+        inboundReceivingQuantity: '0',
       },
     }
 
@@ -108,6 +110,14 @@ describe('Amazon FBA Inventory parser', () => {
     expect(record).not.toBeNull()
     expect(record!.quantities.available).toBe(42)
     expect(record!.quantities.inbound).toBe(10)
+  })
+
+  it('preserves an unknown inbound total when only some components are supplied', () => {
+    const record = parseFbaInventorySummary({ sellerSku: 'SKU-PARTIAL', inventoryDetails: { inboundShippedQuantity: '10' } })
+    expect(record!.quantities.inbound).toBeNull()
+    expect(record!.quantities.inboundBreakdown?.shipped).toBe(10)
+    expect(record!.quantities.inboundBreakdown?.working).toBeNull()
+    expect(record!.quantities.inboundBreakdown?.receiving).toBeNull()
   })
 
   it('terminates pagination when nextToken is null or absent', () => {

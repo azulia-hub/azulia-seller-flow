@@ -1,3 +1,4 @@
+import { getIndiaToday } from '../../core/sync/planner'
 import { useEffect, useState } from 'react'
 import { adsFetch, adsResponse, type AdsConnectionStatus } from '../useAdsConnection'
 import { parseSupplementalRows, supplementalWorkspaceSource, type AdsSupplementalKind, type AdsSupplementalReport } from '../../adapters/amazon-ads/supplemental'
@@ -45,7 +46,7 @@ export function useSupplementalAds(options: { enabled: boolean; profileId: strin
       } finally { polling = false; publish(false) }
     }
     async function request() {
-      const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+      const today = getIndiaToday()
       if (!validAdsDate(options.from) || !validAdsDate(options.to)) return
       const from = options.from < shiftAdsDate(today, -94) ? shiftAdsDate(today, -94) : options.from, to = options.to > today ? today : options.to
       if (from > to) return

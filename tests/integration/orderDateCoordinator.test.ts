@@ -43,7 +43,7 @@ it('prioritizes recently updated orders over queued historical purchase pages',a
   const pages:URL[]=[]
   const request=vi.fn<typeof fetch>(async input=>{
    const url=new URL(String(input))
-   if(url.hostname==='api.amazon.com')return Response.json({access_token:'fixture-access'})
+   if(url.hostname==='api.amazon.com')return Response.json({access_token:'fixture-access',token_type:'bearer',expires_in:3600})
    if(url.pathname==='/orders/v0/orders'){
     pages.push(url)
     return Response.json({payload:{Orders:[{AmazonOrderId:id,PurchaseDate:purchased,OrderStatus:'Unshipped',FulfillmentChannel:'MFN',MarketplaceId:'A21TJRUUN4KGV'}]}})

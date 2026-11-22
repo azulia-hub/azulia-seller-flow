@@ -1,9 +1,10 @@
+import { formatInr as advertisingMoney } from '../adapters/formatting/currency'
 import { ReviewProvider } from '../features/review-requests/ReviewContext'
 import { persistentDevice } from '../adapters/device/workspace'
 import { requestReportRefresh } from '../adapters/amazon-report-sync/requestRefresh'
 import { PullToRefresh } from '../components/PullToRefresh'
 import { calculationKey } from '../core/settings/calculationKey'
-import { currentPreferences, formatMoney } from '../adapters/preferences/runtime'
+import { currentPreferences, formatMoney as money } from '../adapters/preferences/runtime'
 import { type AppPreferences } from '../core/settings/preferences'
 import { useDeviceSettings } from './useDeviceSettings'
 import '../components/sellerRefinements.css'
@@ -104,14 +105,6 @@ const AdvertisingWorkspace = lazy(() => import('./advertising/AdvertisingWorkspa
 const DataSettingsPage = lazy(() => import('../features/settings/DataSettingsPage').then(module => ({ default:module.DataSettingsPage })))
 
 type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
-
-function advertisingMoney(n: number) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n === 0 ? 0 : n)
-}
-
-function money(n: number) {
-  return formatMoney(n)
-}
 
 export function App() {
   const [automaticEnabled, setAutomaticEnabled] = useState(() => { try { return localStorage.getItem('azulia.report-delivery') !== 'manual' } catch { return true } })
@@ -458,10 +451,11 @@ export function App() {
     })
   }, [active, productSelection, searchDocuments, sellerProducts, advertisingProducts, productProfitability, returnSummary, sponsoredAttribution, sponsoredReport, fromDate, toDate, skuNormalizer])
 
+  const notificationOrderRequest = useRef<string | null>(null)
   const searchEvidenceEvents = useMemo(() => {
     if (!searchDetail) return []
     const ids = new Set(searchDetail.eventIds)
-    const orderIds = new Set(allEvents.flatMap(event => ids.has(event.id) && event.orderId ? [event.orderId] : []))
+    const orderIds = new Set([...allEvents.flatMap(event => ids.has(event.id) && event.orderId ? [event.orderId] : []), ...(searchDetail.orderId ? [searchDetail.orderId] : [])])
     return allEvents.filter(event => ids.has(event.id) || Boolean(event.orderId && orderIds.has(event.orderId)))
   }, [allEvents, searchDetail])
   const searchOrders = useMemo(() => summarizeOrders(searchEvidenceEvents, analyticsCosts, missingCostPolicy, skuNormalizer), [searchEvidenceEvents, analyticsCosts, missingCostPolicy, skuNormalizer])
@@ -498,7 +492,12 @@ export function App() {
     switch (dest.kind) {
       case 'ORDER_DETAIL':
       case 'REFUND_DETAIL': {
-        // Wait until analytics dataset is available
+        // A notification can arrive before the completed reading contains its source order.
+        if (!currentAccount) {
+          if (!automaticEnabled) deliveryMode(true)
+          setNavNotice(`Loading notified order ${dest.orderId}…`)
+          return
+        }
         if (!dataset) return
         const orderId = dest.orderId
         const existingDoc = searchDocuments.find(d => d.kind === 'ORDER' && d.orderId === orderId)
@@ -519,9 +518,17 @@ export function App() {
           } else {
             setRefundFocusTxnId(null)
           }
+          setNavNotice(null)
           setSearchDetail(doc)
         } else {
-          setNavNotice(`Order ${orderId} was not found in the current loaded data for this account.`)
+          // Keep the destination pending so a later completed reading can open it.
+          setNavNotice(`Loading order ${orderId}. Its latest details have been requested; financial activity may arrive later.`)
+          if (notificationOrderRequest.current !== dest.eventId) {
+            notificationOrderRequest.current = dest.eventId
+            const today = getIndiaToday()
+            requestOrderDetails([orderId], { from: today, to: today })
+          }
+          return
         }
         markDestinationHandled(dest.eventId)
         void acknowledgeNotificationDestination(dest.eventId)
@@ -547,7 +554,7 @@ export function App() {
         break
       }
     }
-  }, [pendingNav, currentImportId, dataset, importing, isAutomaticPreparing, searchDocuments, allEvents, sourceOrders])
+  }, [pendingNav, currentImportId, dataset, importing, isAutomaticPreparing, searchDocuments, allEvents, sourceOrders, automaticEnabled])
   function openSearchProduct(sku: string) {
     openProductPage({ sku, scope: 'CURRENT' }, { page: active, metric: homeMetric }); setSearchDetail(null); setHomeMetric(null)
   }
@@ -694,7 +701,7 @@ export function App() {
       <div className="workspace-list-view" hidden={Boolean(productSelection)}>
       {active === 'Data & Settings' && hostedDelivery ? <HostedAmazonConnection onUseAutomatic={() => deliveryMode(true)} range={requestedFromDate && requestedToDate ? { from: requestedFromDate, to: requestedToDate } : null} /> : null}
       {costDraft ? <div className="cost-preview-banner" role="status">Live cost preview · Changes are not saved yet.</div> : null}
-      {active !== 'Tools' && active !== 'Reports'  && active !== 'Data & Settings' && active !== 'Costs' && active !== 'Advertising' && dataset ? <GlobalFilters source={dataset.source} fulfillmentTypes={fulfillmentTypes} fulfillmentType={requestedFulfillmentFilter} fromDate={requestedFromDate} toDate={requestedToDate} minDate={automaticEnabled && currentImportId?.startsWith('api:') ? undefined : dateExtent.min} maxDate={automaticEnabled && currentImportId?.startsWith('api:') ? new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10) : dateExtent.max} period={periodChoice} periods={comparisonPeriods} onFulfillmentTypeChange={value => { setFilterUpdatePending(true); setFulfillmentFilter(value) }} onFromDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setFromDate(value) }} onToDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setToDate(value) }} onPeriodChange={applyPeriod} onClear={() => { setFilterUpdatePending(true); setFulfillmentFilter(''); setPeriodChoice('ALL'); setFromDate(dateExtent.min ?? ''); setToDate(dateExtent.max ?? ''); setAdvertisingDateUndo(null) }} /> : null}
+      {active !== 'Tools' && active !== 'Reports'  && active !== 'Data & Settings' && active !== 'Costs' && active !== 'Advertising' && dataset ? <GlobalFilters source={dataset.source} fulfillmentTypes={fulfillmentTypes} fulfillmentType={requestedFulfillmentFilter} fromDate={requestedFromDate} toDate={requestedToDate} minDate={automaticEnabled && currentImportId?.startsWith('api:') ? undefined : dateExtent.min} maxDate={automaticEnabled && currentImportId?.startsWith('api:') ? getIndiaToday() : dateExtent.max} period={periodChoice} periods={comparisonPeriods} onFulfillmentTypeChange={value => { setFilterUpdatePending(true); setFulfillmentFilter(value) }} onFromDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setFromDate(value) }} onToDateChange={value => { setFilterUpdatePending(true); if (automaticEnabled && currentImportId?.startsWith('api:')) setPeriodChoice('CUSTOM'); setToDate(value) }} onPeriodChange={applyPeriod} onClear={() => { setFilterUpdatePending(true); setFulfillmentFilter(''); setPeriodChoice('ALL'); setFromDate(dateExtent.min ?? ''); setToDate(dateExtent.max ?? ''); setAdvertisingDateUndo(null) }} /> : null}
       {active === 'Data & Settings' ? <AdsConnectionPanel connection={adsConnection} /> : null}
       {active === 'Tools' ? <ToolsPage /> : active === 'Costs' ? <><PageHeader eyebrow="Workspace" title="Product costs" description="Set unit costs once and reuse them across reports." /><CostMaster events={allEvents} costs={costs} onSave={updateCosts} missingCostPolicy={missingCostPolicy} onMissingCostPolicyChange={updateMissingCostPolicy} normalizeSku={skuNormalizer} /></> : active === 'Advertising' ? <AdvertisingWorkspace key={`${currentImportId}:${sponsoredReport?.id}:${advertisingProductRequest ?? 'account'}`} report={sponsoredReport} events={allEvents} costs={analyticsCosts} policy={missingCostPolicy} normalizeSku={skuNormalizer} financialCoverage={isApiData ? automaticDelivery.status?.coverage ?? [] : undefined} financialFrom={dateExtent.min ?? null} financialTo={dateExtent.max ?? null} financialCompatible={dataset?.source === 'amazon'} financialIdentity={currentImportId} from={fromDate} to={toDate} productImages={advertisingProductImages} productNames={advertisingProductNames} connection={adsConnection} initialProduct={advertisingProductRequest} onOpenSettings={() => navigateWorkspace('Data & Settings')} onOpenFinancialProduct={openSearchProduct} formatMoney={advertisingMoney} /> : active === 'Products' ? <ProductsWorkspace inventoryTarget={inventoryRequest} initialInventory={Boolean(inventoryRequest)} account={automaticEnabled && currentImportId?.startsWith('api:') ? currentImportId.slice(4) : null} orders={sourceOrders} coverage={automaticDelivery.status?.purchaseCoverage} today={getIndiaToday()} productTitles={inventoryMetadata.titles} productImages={inventoryMetadata.images} onRefresh={() => requestReportRefresh({from:fromDate||getIndiaToday(),to:toDate||getIndiaToday()})} refreshing={automaticDelivery.status?.state==='syncing'||hostedState.busy}>{dataset ? <><PageHeader eyebrow="Analytics" title="Products" description="Compare performance, find the product, and manage its costs in one place." /><ProductPerformanceList full comparisonAsOf={comparisonAsOf} onRequestHistory={automaticEnabled && currentImportId?.startsWith('api:') && productComparisonRange ? () => requestReportRefresh({ from: productComparisonRange.from, to: toDate },true) : undefined} historyBusy={automaticDelivery.status?.state === 'syncing' || hostedState.busy} previousProducts={previousPerformanceProducts} comparisonRange={productComparisonRange} comparisonCoverage={productComparisonCoverage} rows={sellerProducts} mode={sponsoredAttribution.status === 'AVAILABLE' ? 'ADVERTISING' : 'FINANCIAL'} basis={sponsoredAttribution.status === 'AVAILABLE' ? 'Orders by purchase date · ads by report date' : 'Orders by purchase date'} dateLabel={advertisingDateRange(fromDate, toDate)} formatMoney={advertisingMoney} onSelect={openSellerProduct} /></> : <ReportRequired area="Products" onOpenReports={() => setActive('Reports')}>Upload a sales report to understand the profit, costs, fees, and returns for each product.</ReportRequired>}</ProductsWorkspace> : active === 'Returns' ? dataset ? <ReturnAnalysis summary={returnSummary} formatMoney={money} onSelectSku={openOrders} fileName={fileName} products={sellerProducts} account={automaticEnabled && currentImportId?.startsWith('api:') ? currentImportId.slice(4) : null} costs={analyticsCosts} /> : <ReportRequired area="Returns" onOpenReports={() => setActive('Reports')}>Upload a report to separate RTO from customer returns and find products or locations with return problems.</ReportRequired> : active === 'Reports' ? <ReportsPage dataset={effectiveDataset} rawDataset={rawDataset} importing={importing} importError={importError} fileName={fileName} imports={imports} currentImportId={currentImportId} leftId={comparisonLeftId} rightId={comparisonRightId} comparison={importComparison} qualityCenter={qualityCenter} cohort={orderCohort} reportMinDate={dateExtent.min} reportMaxDate={dateExtent.max} formatMoney={money} classificationRules={classificationRules} sponsoredAttribution={sponsoredAttribution} sponsoredReport={sponsoredReport} sponsoredImporting={sponsoredImporting} sponsoredError={sponsoredError} onViewSponsored={viewSponsoredProducts} onSponsoredFile={onSponsoredFile} onFile={onFile} onLeftChange={setComparisonLeftId} onRightChange={setComparisonRightId} onOpen={openImport} onSaveClassificationRule={saveRule} onDeleteClassificationRule={deleteRule} onQualityAction={handleQualityAction} /> : active === 'Data & Settings' ? <DataSettingsPage preferences={preferences} onPreferencesChange={patch=>{updatePreferences(patch);if(patch.defaultPeriod)applyPeriod(patch.defaultPeriod)}} reviewRunDate={reviewRunFocus} focusSyncStatus={focusSyncStatus} coverage={orderCohort ? <OrderCohortSummary cohort={orderCohort} salePeriodView postedCount={postedRecordCount} syncing={hostedDelivery ? hostedState.busy : automaticDelivery.status?.state === 'syncing'} onReview={() => setCohortSnapshotOpen(true)} /> : null} costs={costs} missingCostPolicy={missingCostPolicy} importCount={imports.length} ruleCount={classificationRules.length} onMissingCostPolicyChange={updateMissingCostPolicy} onExportBackup={() => downloadBackup({ imports, costs, classificationRules })} onRestoreBackup={importBackup} /> : <>
           <PageHeader eyebrow="Business overview" title="Business overview" description="Sales, profit and product performance for your selected period." action={<>{dataset ? <>
@@ -774,7 +781,7 @@ export function App() {
           </>}
       </div>
       </Suspense></AppShell>
-      {searchDetail ? <ReportSearchDetail key={`${searchDetail.kind}:${searchDetail.id}`} document={searchDetail} events={allEvents} orders={searchOrders} formatMoney={money} onOpenProduct={openSearchProduct} onClose={() => { setSearchDetail(null); setRefundFocusTxnId(null); cancelCostPreview() }} focusTransactionId={refundFocusTxnId} /> : null}
+      {searchDetail ? <ReportSearchDetail key={`${searchDetail.kind}:${searchDetail.id}`} document={searchDetail} events={allEvents} orders={searchOrders} sourceOrders={sourceOrders ?? []} formatMoney={money} onOpenProduct={openSearchProduct} onClose={() => { setSearchDetail(null); setRefundFocusTxnId(null); cancelCostPreview() }} focusTransactionId={refundFocusTxnId} /> : null}
 
       {homeMetricResult ? <MetricSkuDrilldown result={homeMetricResult} products={productProfitability} previousProducts={previousProductProfitability} sponsored={sponsoredAttribution} advertisingProducts={advertisingProducts} comparisonPeriod={periodChoice} onSelectProduct={sku => openOrders(sku)} financialBasis="Orders by purchase date" formatMoney={money} onClose={() => setHomeMetric(null)} /> : null}
       {feeAuditOpen ? <FeeAuditPanel result={feeAudit} orders={orders} formatMoney={money} onClose={() => setFeeAuditOpen(false)} /> : null}

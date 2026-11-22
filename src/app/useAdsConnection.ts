@@ -1,3 +1,4 @@
+import { getIndiaToday } from '../core/sync/planner'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { androidDevice, desktopDevice } from '../adapters/device/bridge'
 import { nativeAdsFetch } from '../adapters/amazon-ads/native'
@@ -60,7 +61,7 @@ export function useAdsConnection(options: { from: string; to: string; onReport: 
   }
   const request = useCallback(async (force = false, selected?: { from: string; to: string }) => {
     if ((!desktopDevice && !androidDevice) || !status?.profileId || !status.configured || !enabled) return
-    const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10), oldest = shiftAdsDate(today, -94)
+    const today = getIndiaToday(), oldest = shiftAdsDate(today, -94)
     const selectedFrom = selected?.from ?? options.from, selectedTo = selected?.to ?? options.to
     const from = validAdsDate(selectedFrom) ? selectedFrom < oldest ? oldest : selectedFrom : shiftAdsDate(today, -29)
     const to = validAdsDate(selectedTo) ? selectedTo > today ? today : selectedTo : today

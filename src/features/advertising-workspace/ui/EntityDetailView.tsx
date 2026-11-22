@@ -1,3 +1,4 @@
+import { PerformanceTable } from './PerformanceTable'
 import { useVisibleAdsAsins } from './VisibleAsins'
 import { DetailPagination, useDetailPage } from './DetailPagination'
 import { AdsIdentity } from './AdsIdentity'
@@ -185,6 +186,7 @@ export function EntityDetailView({
           {currentSection === 'campaigns' && (
             <DetailEntityTable
               title="Related Campaigns"
+              kind="campaign"
               rows={detail.campaigns}
               formatMoney={formatMoney}
               onOpenEntity={onOpenEntity}
@@ -194,6 +196,7 @@ export function EntityDetailView({
           {currentSection === 'products' && (
             <DetailEntityTable
               title="Related Products"
+              kind="product"
               rows={detail.products}
               formatMoney={formatMoney}
               onOpenEntity={onOpenEntity}
@@ -203,6 +206,7 @@ export function EntityDetailView({
           {currentSection === 'searchTerms' && (
             <DetailEntityTable
               title="Customer Search Terms"
+              kind="searchTerm"
               rows={detail.searchTerms}
               formatMoney={formatMoney}
               onOpenEntity={onOpenEntity}
@@ -224,11 +228,13 @@ export function EntityDetailView({
 
 function DetailEntityTable({
   title,
+  kind,
   rows,
   formatMoney,
   onOpenEntity,
 }: {
   readonly title: string
+  readonly kind: 'campaign' | 'product' | 'searchTerm'
   readonly rows: readonly AdvertisingEntityRow[]
   readonly formatMoney: (n: number) => string
   readonly onOpenEntity: (entity: AdvertisingEntity) => void
@@ -241,44 +247,7 @@ function DetailEntityTable({
 
   return (
     <div className="adsw-table-card">
-      <div className="adsw-table-wrapper">
-        <table className="adsw-table" aria-label={title}>
-          <thead>
-            <tr>
-              <th>Entity</th><th>Status</th>
-              <th className="is-numeric">Spend</th>
-              <th className="is-numeric">Sales</th>
-              <th className="is-numeric">ACOS</th>
-              <th className="is-numeric">ROAS</th>
-              <th className="is-numeric">Orders</th><th>Review note</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pagination.rows.map(row => (
-              <tr key={row.entity.id}>
-                <td data-label="Entity">
-                  <button
-                    type="button"
-                    className="adsw-entity-link"
-                        aria-label={row.name}
-                    onClick={() => onOpenEntity(row.entity)}
-                  >
-                    <AdsIdentity name={row.name} imageUrl={row.imageUrl} asin={row.imageAsin} />
-                  </button>
-                  {row.subtitle ? (
-                    <span className="adsw-cell-sub">{row.subtitle}</span>
-                  ) : null}
-                </td>
-                <td data-label="Status">{row.status ?? 'Not supplied'}</td><td data-label="Spend" className="is-numeric">{(row.metrics.spend === null ? '—' : formatMoney(row.metrics.spend))}</td>
-                <td data-label="Sales" className="is-numeric">{(row.metrics.attributedSales === null ? '—' : formatMoney(row.metrics.attributedSales))}</td>
-                <td data-label="ACOS" className="is-numeric">{formatPercent(row.metrics.acos)}</td>
-                <td data-label="ROAS" className="is-numeric">{formatMultiplier(row.metrics.roas)}</td>
-                <td data-label="Orders" className="is-numeric">{formatInteger(row.metrics.purchases)}</td><td data-label="Review note"><span className="adsw-cell-sub">{row.note ?? 'No review evidence available.'}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PerformanceTable rows={pagination.rows} kind={kind} label={title} formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
       <DetailPagination {...pagination} />
     </div>
   )

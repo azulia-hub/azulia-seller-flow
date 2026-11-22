@@ -20,6 +20,7 @@ vi.mock('./cache', () => ({
   commitPage: vi.fn(),
   loadCache: vi.fn(async () => ({ records: [], orders: [], catalog: [], meta: {} })),
   meta: vi.fn(async (account: string) => ({ account, revision: 1, jobs: [], coverage: [], issues: [] })),
+  recordCount: vi.fn(async () => 0),
   snapshot: vi.fn(async () => ({ records: [], orders: [], coverage: [], revision: 1, connectionKey: 'acc' })),
   updateMeta: vi.fn(async () => {}),
 }))

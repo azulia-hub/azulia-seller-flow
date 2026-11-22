@@ -1,5 +1,7 @@
 import type { AdvertisingChange } from '../contract'
 
+const integerFormatter = new Intl.NumberFormat('en-IN')
+
 export function formatMetricValue(
   value: number | null,
   format: 'MONEY' | 'PERCENT' | 'MULTIPLIER',
@@ -22,7 +24,7 @@ export function formatChange(change: AdvertisingChange | null): string {
 
 export function formatInteger(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '—'
-  return new Intl.NumberFormat('en-IN').format(Math.round(value))
+  return integerFormatter.format(Math.round(value))
 }
 
 export function formatPercent(value: number | null): string {

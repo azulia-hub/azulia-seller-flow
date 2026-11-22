@@ -51,7 +51,7 @@ export async function createReportSync(options: { directory: string; connectionK
       const now = Date.now(), purchaseCoverage = JSON.parse(store.get('purchaseCoverage') ?? '[]') as SyncRange[]
       // Recent changes have their own resumable stream and cannot sit behind purchase backfill.
       const ordersCutoff=now-2*60000
-      if(!store.jobs().some(job=>job.kind==='recent-orders')&&now-Number(store.get('lastRecentOrdersRefresh')??0)>=refreshInterval){
+      if(!store.jobs().some(job=>job.kind==='recent-orders')&&now-Number(store.get('lastRecentOrdersRefresh')??0)>=Math.min(refreshInterval,60000)){
         const previous=Date.parse(store.get('recentOrdersThrough')??'')
         const recentFrom=Math.max(Number.isFinite(previous)?previous-15*60000:ordersCutoff-3600000,ordersCutoff-3600000)
         const catchupFrom=Number.isFinite(previous)?previous-15*60000:ordersCutoff-3*86400000

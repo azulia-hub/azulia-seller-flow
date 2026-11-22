@@ -1,3 +1,4 @@
+import { getIndiaToday } from '../../core/sync/planner'
 import { aggregateAdvertisingFacts, advertisingDimensions, compareAdvertisingMetrics, joinAdvertisingFinancials, type AdvertisingDataset, type AdvertisingFinancialProduct, type AdvertisingMetrics, type AdvertisingQuery } from '../../core/advertising/workspace'
 import { rankAdvertisingEfficiency, rankAdvertisingLosses } from '../../core/insights/focusAnalysis'
 import type { AdsWorkspaceSource } from '../../adapters/amazon-ads/workspaceSource'
@@ -51,7 +52,7 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
   const previous = priorRange(query), sourceCovers = (range: { from: string; to: string }) => Boolean(source && source.coveredFrom <= range.from && source.coveredTo >= range.to)
   const fullCoverage = sourceCovers(query), previousCoverage = sourceCovers(previous)
   const hasCoveredDates = Boolean(source && source.coveredFrom <= query.to && source.coveredTo >= query.from)
-  const today = new Date(Date.parse(input.asOf) + 330 * 60000).toISOString().slice(0, 10)
+  const today = getIndiaToday(Date.parse(input.asOf))
   const closedPeriod = query.to < today
   const notices: string[] = [...(source?.identityNotices ?? []), ...supplemental.notices]
   if (source && !fullCoverage) notices.push('Selected advertising dates are not fully covered. Displayed values are observed results only; comparisons and financial joins are unavailable.')

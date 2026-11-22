@@ -47,6 +47,7 @@ test('pull refresh fires only at the top and coalesces an active request',async(
   await gesture(true);await expect(page.getByTestId('refresh-count')).toHaveText('1')
   await gesture(true);await expect(page.getByTestId('refresh-count')).toHaveText('1')
   await page.getByRole('button',{name:'Finish request'}).click()
+  await expect(page.locator('.pull-refresh-orb')).toHaveAttribute('data-phase','idle')
   await page.evaluate(()=>scrollTo(0,200));await gesture(true);await expect(page.getByTestId('refresh-count')).toHaveText('1')
   await page.evaluate(()=>scrollTo(0,0));await page.keyboard.press('Alt+r');await expect(page.getByTestId('refresh-count')).toHaveText('2')
 })

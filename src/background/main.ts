@@ -3,7 +3,7 @@ import { snapshot } from '../adapters/amazon-hosted/cache'
 import { nativeRequest } from '../adapters/device/bridge'
 import { readDeviceEntry, writeDeviceEntry } from '../adapters/device/workspace'
 import { calculateReading, calculationKey } from '../adapters/amazon-report-sync/calculateReading'
-import {runReviewCycle} from '../adapters/amazon-reviews/service'
+import {hasPriorityReviewWork,runReviewCycle} from '../adapters/amazon-reviews/service'
 import {reviewOrders} from '../adapters/amazon-reviews/orders'
 import {nativeReviewTransport} from '../adapters/amazon-reviews/native'
 import { syncInventory } from '../adapters/amazon-inventory/syncInventory'
@@ -28,9 +28,11 @@ async function run(intent:Intent={}) {
     const today=new Date(Date.now()+330*60000).toISOString().slice(0,10)
     const range=intent.from&&intent.to?{from:intent.from,to:intent.to}:resolveTimePeriod(currentPreferences().defaultPeriod,today).current
     activeRange=range
+    const storage={get:readDeviceEntry,put:writeDeviceEntry}
+    const reviewPriority=await hasPriorityReviewWork(storage,account).catch(()=>false)
     await nativeRequest('engine.phase',{phase:'fetching',message:'Checking Amazon for new and changed activity…',from:range.from,to:range.to})
     requestOrderDetails(intent.orderIds??[],range)
-    await syncHosted(range,{silent:true,forceRecent:true,forceHistory:Boolean(intent.force),budgetMs:intent.budgetMs??65000})
+    await syncHosted(range,{silent:true,forceRecent:true,forceHistory:Boolean(intent.force),budgetMs:intent.budgetMs??65000,recentOnly:reviewPriority&&!intent.requestedThrough&&!intent.orderIds?.length&&!intent.force})
     const source=await snapshot(account)
     const info=await nativeRequest<{revision:number;calculationKey?:string;calculatedAt?:string}>('reading.status',{account})
     const key=calculationKey(settings)
@@ -41,10 +43,12 @@ async function run(intent:Intent={}) {
       // Reading upload commits atomically and checks source revision before replacing anything.
       await writeDeviceEntry(`reading:${account}`,reading)
     }
-    try { await nativeRequest('engine.phase',{phase:'inventory',message:'Updating stock; financial results are saved…'});const alerts=await syncInventory(account,source,{get:readDeviceEntry,put:writeDeviceEntry},(job,signal)=>androidAmazon({action:'inventory',...job},signal),Boolean(intent.force));if(alerts.length)await nativeRequest('inventory.notify',{account,alerts}) } catch { /* Financial completion is independent from optional stock access. */ }
-    try { await syncAndroidAds() } catch { /* Ads has separate persisted errors/jobs; financial and review work remain independent. */ }
     let reviewsPending=false
     try { reviewsPending=(await runReviewCycle({get:readDeviceEntry,put:writeDeviceEntry},{account,orders:reviewOrders(source.orders??[],source.records),freshOrdersAt:hostedView().state?.recentOrdersCheckedAt??null},nativeReviewTransport,async value=>(await nativeRequest<{delivered:boolean}>('reviews.notify',{...value})).delivered)).pending } catch { /* Reviews are optional and sending is opt-in. */ }
+    if(!reviewsPending) {
+      try { await nativeRequest('engine.phase',{phase:'inventory',message:'Updating stock; financial results are saved…'});const alerts=await syncInventory(account,source,{get:readDeviceEntry,put:writeDeviceEntry},(job,signal)=>androidAmazon({action:'inventory',...job},signal),Boolean(intent.force));if(alerts.length)await nativeRequest('inventory.notify',{account,alerts}) } catch { /* Financial completion is independent from optional stock access. */ }
+      try { await syncAndroidAds() } catch { /* Ads has separate persisted errors/jobs; financial and review work remain independent. */ }
+    }
     const error=hostedView().error
     await nativeRequest('engine.completed',{reviewsPending,ordersThrough:hostedView().state?.recentOrdersThrough??'',ordersCheckedAt:hostedView().state?.recentOrdersCheckedAt??'',ordersFresh:Date.parse(hostedView().state?.recentOrdersThrough??'')>=requiredThrough-1000,revision:source.revision,error:error||'',message:error?'Saved available data; Amazon will be checked again automatically.':hostedView().state?.jobs.some(job=>job.scope===`${range.from}/${range.to}`)?'Results saved. Remaining history continues automatically.':'Latest downloaded data and calculations are saved.'})
   } catch(cause) { await nativeRequest('engine.completed',{error:cause instanceof Error?cause.message:'Background processing will retry. Saved data is retained.'}).catch(()=>{}) }

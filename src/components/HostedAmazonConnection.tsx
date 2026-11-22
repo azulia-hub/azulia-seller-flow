@@ -1,3 +1,4 @@
+import { getIndiaToday } from '../core/sync/planner'
 import { androidDevice } from '../adapters/device/bridge'
 import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
 import { cancelHostedConnection, clearAndResyncHosted, connectHosted, disconnectHosted, hostedView, initializeHosted, subscribeHosted } from '../adapters/amazon-hosted/client'
@@ -6,7 +7,7 @@ import './hostedAmazon.css'
 export function HostedAmazonConnection({ range, onUseAutomatic }: { range: { from: string; to: string } | null; onUseAutomatic: () => void }) {
   const connection = useSyncExternalStore(subscribeHosted, hostedView, hostedView)
   const [open, setOpen] = useState(false)
-  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+  const today = getIndiaToday()
   const [from, setFrom] = useState(() => new Date(Date.parse(today) - 29 * 86400000).toISOString().slice(0, 10))
   const [to, setTo] = useState(today)
   useEffect(() => { void initializeHosted() }, [])

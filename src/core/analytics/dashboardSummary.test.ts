@@ -32,7 +32,7 @@ describe('dashboard summary', () => {
     const dated = [
       { ...events[0], id: 'before', date: '31 Jul 2026 11:00:00 pm UTC' },
       { ...events[0], id: 'from', date: '1 Aug 2026 1:00:00 am UTC' },
-      { ...events[0], id: 'to', date: '2026-08-05T22:00:00Z' },
+      { ...events[0], id: 'to', date: '2026-08-05T12:00:00Z' },
       { ...events[0], id: 'after', date: '6 Aug 2026 1:00:00 am UTC' },
     ]
     expect(canonicalDateKey(dated[1].date)).toBe('2026-08-01')

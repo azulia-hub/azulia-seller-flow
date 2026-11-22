@@ -15,12 +15,12 @@ export function createBackgroundCalculation(sync:ReportSync,device:DeviceStore,d
     const now=new Date().toISOString(),day=reviewClock(now).date
     const reviewDue=reviewWakeDay!==day&&automaticReviewDue(device.get(`reviews-config:${status.connectionKey}`).value as ReviewSettings|null,now)
     if(revision===0&&!status.lastSync)return
-    if(!force&&!reviewDue&&((revision===lastRevision&&Date.now()-last<(reviewsPending?15000:config.syncMinutes*60000))||Date.now()-last<15000))return
+    if(!force&&!reviewDue&&((revision===lastRevision&&Date.now()-last<(reviewsPending?15000:config.syncMinutes*60000))||revision!==lastRevision&&Date.now()-last<1500))return
     if(reviewDue)reviewWakeDay=day
     busy=true;force=false;last=Date.now();lastRevision=revision
     worker.postMessage({snapshot:sync.snapshot(),forceInventory:inventoryForce});inventoryForce=false
   }
-  worker.on('message',message=>{busy=false;reviewsPending=message.reviewsPending===true;if(!message.ok)lastRevision=-1;error=message.ok?null:'Saved data is retained; background calculations will retry.'})
+  worker.on('message',message=>{if(message.optional){reviewsPending=message.reviewsPending===true;return}busy=false;if(typeof message.reviewsPending==='boolean')reviewsPending=message.reviewsPending;if(!message.ok)lastRevision=-1;error=message.ok?null:'Saved data is retained; background calculations will retry.'})
   worker.on('error',()=>{busy=false;error='Background calculation worker stopped. Run npm run build and restart the local server; saved data is retained.';stopped=true})
   const timer=setInterval(tick,3000);tick()
   return {request(){force=true;inventoryForce=true;tick()},status(){return{busy,error}},async close(){stopped=true;clearInterval(timer);await worker.terminate()}}

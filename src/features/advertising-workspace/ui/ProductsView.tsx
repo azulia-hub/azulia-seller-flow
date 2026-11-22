@@ -1,3 +1,5 @@
+import { TableToolbar } from './TableToolbar'
+import { TablePagination } from './TablePagination'
 import { AdsIdentity } from './AdsIdentity'
 import { RecommendationNote } from './RecommendationNote'
 import type {
@@ -27,7 +29,6 @@ export function ProductsView({
   onQueryChange,
 }: ProductsViewProps) {
   const { query, products, totalRows, pageSize } = model
-  const totalPages = Math.max(1, Math.ceil(totalRows / Math.max(1, pageSize)))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -38,57 +39,7 @@ export function ProductsView({
       </div>
 
       <div className="adsw-table-card" aria-label="Products advertising table">
-        <div className="adsw-table-toolbar">
-          <div className="adsw-search-box">
-            <span className="adsw-search-icon" aria-hidden="true">
-              🔍
-            </span>
-            <input
-              type="search"
-              className="adsw-search-input"
-              placeholder="Search products by SKU or title..."
-              value={query.search}
-              onChange={e => onQueryChange({ search: e.target.value, page: 1 })}
-            />
-          </div>
-
-          <div className="adsw-sort-controls">
-            <label className="adsw-label" htmlFor="adsw-sort-products">
-              Sort by:
-            </label>
-            <select
-              id="adsw-sort-products"
-              className="adsw-select"
-              value={query.sort}
-              onChange={e =>
-                onQueryChange({
-                  sort: e.target.value as AdvertisingViewQuery['sort'],
-                  page: 1,
-                })
-              }
-            >
-              <option value="SPEND">Reported Spend</option>
-              <option value="SALES">Attributed Sales</option>
-              <option value="ACOS">ACOS</option>
-              <option value="ROAS">ROAS</option>
-              <option value="PURCHASES">Orders</option>
-            </select>
-            <button
-              type="button"
-              className="adsw-btn"
-              style={{ minHeight: 36, padding: '4px 10px', fontSize: 12 }}
-              onClick={() =>
-                onQueryChange({
-                  direction: query.direction === 'DESC' ? 'ASC' : 'DESC',
-                  page: 1,
-                })
-              }
-              aria-label={`Sort direction: ${query.direction === 'DESC' ? 'Descending' : 'Ascending'}`}
-            >
-              {query.direction === 'DESC' ? '↓ High to low' : '↑ Low to high'}
-            </button>
-          </div>
-        </div>
+        <TableToolbar query={query} onQueryChange={onQueryChange} searchPlaceholder="Search products by SKU or title..." sortId="adsw-sort-products" spendLabel="Reported Spend" purchasesLabel="Orders" />
 
         <div className="adsw-table-wrapper">
           <table className="adsw-table">
@@ -177,32 +128,7 @@ export function ProductsView({
           </table>
         </div>
 
-        <div className="adsw-pagination">
-          <span>
-            Showing {products.length} of {totalRows} products
-          </span>
-          <div className="adsw-pagination-nav">
-            <button
-              type="button"
-              className="adsw-btn"
-              disabled={query.page <= 1}
-              onClick={() => onQueryChange({ page: query.page - 1 })}
-            >
-              ← Previous
-            </button>
-            <span>
-              Page {query.page} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="adsw-btn"
-              disabled={query.page >= totalPages}
-              onClick={() => onQueryChange({ page: query.page + 1 })}
-            >
-              Next →
-            </button>
-          </div>
-        </div>
+        <TablePagination page={query.page} totalRows={totalRows} pageSize={pageSize} visibleRows={products.length} noun="products" onPageChange={page => onQueryChange({ page })} />
       </div>
     </div>
   )

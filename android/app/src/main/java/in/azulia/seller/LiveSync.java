@@ -152,7 +152,7 @@ public final class LiveSync extends Service {
         synchronized(QUEUE_LOCK){
             LiveSync service=instance;
             if(service!=null){
-                if(safe.has("requestIds")||!HeadlessSync.busy()||!HeadlessSync.sameRange(safe)){
+                if(safe.has("requestIds")||(safe.optJSONArray("orderIds")!=null&&safe.optJSONArray("orderIds").length()>0)||!HeadlessSync.busy()||!HeadlessSync.sameRange(safe)){
                     service.requested=merge(service.requested,safe);
                     prefs(activity).edit().putString("requested",service.requested.toString()).apply();
                 }

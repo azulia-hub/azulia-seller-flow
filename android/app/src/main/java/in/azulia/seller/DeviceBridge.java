@@ -72,7 +72,7 @@ final class DeviceBridge {
             case "session.cancel": return new JSONObject().put("cancelled",true);
             case "ui.theme": ((MainActivity)activity).applySystemTheme(input.optBoolean("dark")); return true;
             case "live.status": case "sync.status": return LiveSync.status(context);
-            case "sync.details": {JSONObject safe=LiveSync.validateIntent(input);main.post(()->{HeadlessSync.prioritize(safe);if(!HeadlessSync.busy()&&safe.optJSONArray("orderIds")!=null&&safe.optJSONArray("orderIds").length()>0)LiveSync.request((MainActivity)activity,safe);});return true;}
+            case "sync.details": {JSONObject safe=LiveSync.validateIntent(input);main.post(()->{HeadlessSync.prioritize(safe);if(safe.optJSONArray("orderIds")!=null&&safe.optJSONArray("orderIds").length()>0)LiveSync.request((MainActivity)activity,safe);});return true;}
             case "sync.request-status": return LiveSync.requestStatus(context,input.getString("requestId"));
             case "sync.request": LiveSync.registerRequest(context,input);main.post(()->LiveSync.request((MainActivity)activity,input));return LiveSync.status(context);
             case "reading.status": return database.readingStatus(input.getString("account"));

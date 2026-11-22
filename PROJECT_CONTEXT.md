@@ -1,5 +1,15 @@
 # Seller Analytics — Project Context
 
+## Delivery and notification follow-up (2026-11-22)
+
+ADR-092 source changes prioritize recent order delivery and scheduled review work,
+show saved Orders metadata when notification orders lack financial transactions,
+retain pending notification destinations, and remove duplicate bottom navigation.
+Phone/desktop storage remains independent; source/Android delays still apply.
+Signed release 0.2.17 (versionCode 27, bridge 13) has been compiled, verified,
+and installed in place on the owner's phone at 192.168.29.186:36259, preserving
+all app data, credentials, and settings.
+
 ## Advertising workspace integration (2026-11-20)
 
 ADR-089's responsive workspace now replaces the legacy Advertising page. It uses

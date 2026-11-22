@@ -41,7 +41,7 @@ it('accepts the alphanumeric S-prefix order IDs returned in real Orders pages', 
 it('retains only order identity, status and value, excluding buyer and address information', async () => {
   const request = vi.fn<typeof fetch>().mockResolvedValueOnce(token()).mockResolvedValueOnce(Response.json({ payload: { AmazonOrderId: id, PurchaseDate: '2026-11-01T00:00:00Z', OrderStatus: 'Unshipped', FulfillmentChannel: 'MFN', OrderTotal: { Amount: '1180.00', CurrencyCode: 'INR' }, BuyerInfo: { BuyerEmail: 'private@example.invalid' }, ShippingAddress: { Name: 'private' } } }))
   const order = await createOrderDateReader(credentials, request).one(id, new AbortController().signal)
-  expect(order.summary).toEqual({ id, purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' })
+  expect(order.summary).toEqual({ id, purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR', shipmentStatus: null, isReplacementOrder: null, replacedOrderId: null, earliestDeliveryDate: null, latestDeliveryDate: null })
   expect(JSON.stringify(order)).not.toContain('private')
 })
 

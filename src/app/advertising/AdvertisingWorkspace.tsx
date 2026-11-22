@@ -1,3 +1,4 @@
+import { getIndiaToday } from '../../core/sync/planner'
 import { useAdsEntities } from './useAdsEntities'
 import { useAdvertisingCalculation } from './useAdvertisingCalculation'
 import type { AdvertisingCalculationInput } from './calculateWorkspace'
@@ -44,7 +45,7 @@ const emptyGroups: readonly AdvertisingGroup[] = []
 
 /** React owns interaction/lifecycle only; selectors own financial and Ads calculations. */
 export function AdvertisingWorkspace(props: AdvertisingWorkspaceProps) {
-  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10)
+  const today = getIndiaToday()
   const [query, setQuery] = useState<AdvertisingViewQuery>(() => ({ view: 'overview', from: validAdsDate(props.from) ? props.from : props.report?.minDate ?? shiftAdsDate(today, -29), to: validAdsDate(props.to) ? props.to : props.report?.maxDate ?? today,
     scope: props.initialProduct ? { kind: 'PRODUCT', productId: props.initialProduct } : { kind: 'ACCOUNT' }, search: '', sort: 'SPEND', direction: 'DESC', page: 1 }))
   const [entity, setEntity] = useState<AdvertisingEntity | null>(props.initialProduct ? { kind: 'PRODUCT', id: props.initialProduct } : null)

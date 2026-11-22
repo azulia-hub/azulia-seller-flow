@@ -1,5 +1,28 @@
 # Seller Analytics — Roadmap
 
+## Order delivery, notification details and review priority — ADR-092
+
+- [x] Reduce desktop recent-order polling interval to one minute without bypassing source cutoffs/rate limits; release completed-reading delivery from optional network work and reduce changed-source coalescing delay.
+- [x] Display Orders-only metadata in order details, retain pending notification destinations and queue unknown order IDs even while Android is busy; include later financial activity by order identity.
+- [x] Prioritize due runnable reviews, check recent orders before history, skip optional inventory/Ads between sending batches and update accepted-count notifications immediately with actual daily start time.
+- [x] Remove mobile bottom navigation and its configuration/layout reservation; retain sidebar navigation and safe-area footer spacing.
+- [x] Antigravity reports combined validation and signed 0.2.16 (versionCode 26, bridge 13) packaging/install over wireless ADB at 192.168.29.186:36259, with existing data preserved. Source publication remains pending; local HEAD is b8217f1.
+- [x] Post-handoff correction: restore complete-component requirements for inbound inventory totals and add a partial-input regression. Production web/headless and signed Android builds passed; same-certificate 0.2.17/code 27 installed in place with retained data. Additional test execution was not repeated. Source publication prepared with credentials/private notes excluded.
+
+## Compact Ads evidence and obsolete code cleanup
+
+- [x] Share compact performance tables across Overview, Campaigns, Search terms and entity drilldowns. Keep spend/sales/ACOS/purchases visible, with secondary metrics, target context and full review explanations in per-row disclosures.
+- [x] Remove the unused legacy restock modal, its superseded heuristic predictor/test and unused inventory barrel; retain the active observed-demand Inventory workspace.
+- [x] Final compact-layout and disclosure acceptance, and a combined regression/build run. 8 focused Playwright e2e checks passed across 375px/1280px; all 4 Java checks passed.
+
+## Reuse and redundancy cleanup (2026-11-22)
+
+- [x] Consolidate repeated campaign/product/search-term search and sorting controls, and list/detail page navigation.
+- [x] Share cached currency presentation across preferences and product/Ads pages; remove pass-through money wrappers and reuse the existing India-date helper in six callers.
+- [x] Share the identical return-inspection lookup between cost accounting and return summaries; retain exact identity precedence and legacy fallback.
+- [x] Typecheck, 52 focused regression tests, six mobile/desktop browser checks and production web/device-engine build passed. Additional responsive search/sort/pagination assertions verified before completion.
+- [x] Package/install this cleanup in a subsequent Android release: packaged and installed in 0.2.16 (versionCode 26).
+
 ## Advertising responsiveness — ADR-091
 
 - [x] Reproduce a roughly 35.7-second saved-data calculation; replace per-row report scans with reusable indexes/grouped metrics. Optimized selector pass measured about 0.15 seconds.
@@ -7,8 +30,8 @@
 - [x] Stabilize polling/coverage/product-map identities, avoid hidden search work and paginate detail tables at 30 rows without changing full-source totals; request images for the visible page.
 - [x] 22 focused selector/financial/recommendation tests and six responsive browser checks passed, including a 10,000-observation/1,000-target workload with heartbeat and pagination checks; production web/device-engine build passed.
 - [x] Package signed Android 0.2.15/code 25 with bridge 13 and the existing certificate; verify worker asset and credential-byte scan.
-- [ ] Install on phone: paired device advertises 192.168.29.186:36259 but refuses the connection; current Wireless debugging address/port requested from owner.
-- [ ] Publish the source update.
+- [x] Pair/connect the phone at 192.168.29.186:36259, install 0.2.15 in place, verify versionCode 25 and open the app with existing data retained.
+- [x] Publish the responsiveness source update (b8217f1).
 
 ## Advertising repair — ADR-090
 

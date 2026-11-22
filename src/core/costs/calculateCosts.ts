@@ -1,30 +1,13 @@
 import type { CanonicalFinancialEvent } from '../data/types'
 import type { ProductCost } from './types'
 import { canonicalDateKey } from '../analytics/dashboardSummary'
-import { calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
+import { findReturnInspection, calculateRecoveryCost, type ReturnInspectionRecord } from '../return-recovery'
 
 export type MissingCostPolicy = 'BLOCK' | 'ASSUME_ZERO'
 
 export interface AppliedProductCost { readonly eventId: string; readonly sku: string; readonly eventDate: string | null; readonly costDate: string | null; readonly unitCost: number; readonly quantity: number; readonly cogs: number; readonly fallback: boolean }
 
 export type ProductCostResolver = (sku: string, date: string | null) => ProductCost | undefined
-
-function findInspection(
-  inspections: ReadonlyMap<string, ReturnInspectionRecord> | Record<string, ReturnInspectionRecord>,
-  orderId: string,
-  sku: string
-): ReturnInspectionRecord | undefined {
-  if (inspections instanceof Map) {
-    for (const record of inspections.values()) {
-      if (record.identity.orderId === orderId && record.identity.sku === sku) return record
-    }
-    return inspections.get(orderId)
-  }
-  for (const record of Object.values(inspections)) {
-    if (record?.identity?.orderId === orderId && record?.identity?.sku === sku) return record
-  }
-  return (inspections as Record<string, ReturnInspectionRecord>)[orderId]
-}
 
 /** One immutable-input lookup index per analysis; no shared mutable analytics state. */
 export function createProductCostResolver(costs: readonly ProductCost[], normalizeSku: (sku: string) => string = value => value): ProductCostResolver {
@@ -79,7 +62,7 @@ export function calculateCosts(
     let cogs: number
     if (event.event === 'REFUND') {
       if (inspections && event.orderId && event.sku) {
-        const inspection = findInspection(inspections, event.orderId, event.sku)
+        const inspection = findReturnInspection(inspections, event.orderId, event.sku)
         if (inspection) {
           const recovery = calculateRecoveryCost({
             identity: inspection.identity,

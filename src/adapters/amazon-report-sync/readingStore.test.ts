@@ -16,5 +16,5 @@ it('saves an acknowledged revision without replacing data, profiling again or ch
   expect(advanced.profile).toBe(original.profile)
   expect(advanced.raw).toBe(original.raw)
   expect(advanced.importedAt).toBe(original.importedAt)
-  expect(saveImport).toHaveBeenCalledExactlyOnceWith(advanced)
+  expect(saveImport).not.toHaveBeenCalled()
 })

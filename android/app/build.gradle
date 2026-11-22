@@ -7,8 +7,8 @@ android {
         applicationId 'in.azulia.seller'
         minSdk 28
         targetSdk 36
-        versionCode 25
-        versionName '0.2.15'
+        versionCode 27
+        versionName '0.2.17'
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     signingConfigs {

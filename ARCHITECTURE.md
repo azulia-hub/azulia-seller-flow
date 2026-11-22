@@ -1,5 +1,33 @@
 # Seller Analytics — Architecture
 
+## Timely delivery and source-backed order navigation (ADR-092)
+
+Desktop financial acknowledgments no longer wait for optional review/inventory
+network work. Optional cycles remain serialized while changed-source calculations
+can run during their awaits. Recent Orders polling retains its independent rate
+limiter and safety cutoff. Android due-review cycles can fetch only recent Orders,
+persist the resulting reading and run reviews before optional sources; historical
+jobs stay durable for later cycles. Each accepted review triggers a cumulative
+notification update without replaying dispatches on notification failure.
+
+Notification orders use the full active account's saved Orders metadata independently
+from financial recognition and date filters. Pending destinations request missing
+order identities and remain unacknowledged until opened. Search evidence follows
+the selected order identity as later events arrive. Source totals retain their
+tax/shipping caveat. Sidebar navigation serves all screen sizes.
+
+## Shared presentation and lookup utilities (2026-11-22)
+
+`components/Pagination.tsx` owns accessible page navigation without owning source
+data or analytics. Advertising list/detail adapters supply existing styles, labels
+and pagination state; `TableToolbar.tsx` shares search/sort interactions while
+keeping table-specific columns and wording. `adapters/formatting/currency.ts` caches
+INR formatters for explicit locale/precision; preferences still select general
+display settings, while advertising retains two decimal places. Application date
+callers reuse `core/sync/planner.ts`'s existing India-date helper. Costs and return
+summaries share `core/return-recovery/findInspection.ts`, preserving exact order/SKU
+matching followed by the legacy order-key fallback on caller-scoped records.
+
 ## Advertising responsiveness (ADR-091)
 
 `calculateWorkspace.ts` orchestrates financial/Ads/recommendation selectors in

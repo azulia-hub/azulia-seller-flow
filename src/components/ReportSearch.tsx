@@ -1,7 +1,7 @@
 import { ChoiceGroup } from './ChoiceGroup'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { searchReport, type ReportSearchDocument, type ReportSearchField } from '../core/search/reportSearch'
-import type { CanonicalFinancialEvent } from '../core/data/types'
+import type { CanonicalFinancialEvent, CanonicalOrder } from '../core/data/types'
 import type { OrderProfitSummary } from '../core/analytics/orderProfit'
 import { InlineOrderDetail } from './InlineOrderDetail'
 import { ProductCostEditor } from './ProductCostEditor'
@@ -33,8 +33,9 @@ export function ReportSearch({ documents, onSelect, productScopeLabel = 'all rep
   </section>
 }
 
-export function ReportSearchDetail({ document, events, orders, formatMoney, onOpenProduct, onClose, focusTransactionId }: {
+export function ReportSearchDetail({ document, events, orders, sourceOrders = [], formatMoney, onOpenProduct, onClose, focusTransactionId }: {
   document: ReportSearchDocument; events: readonly CanonicalFinancialEvent[]; orders: readonly OrderProfitSummary[];
+  sourceOrders?: readonly CanonicalOrder[];
   formatMoney: (value: number) => string; onOpenProduct: (sku: string) => void; onClose: () => void;
   focusTransactionId?: string | null;
 }) {
@@ -43,8 +44,9 @@ export function ReportSearchDetail({ document, events, orders, formatMoney, onOp
   const [selectedOrder, setSelectedOrder] = useState<string | null>(document.orderId ?? null)
   const [limit, setLimit] = useState(50)
   const selected = orders.find(order => order.orderId === selectedOrder)
+  const sourceOrder = sourceOrders.find(order => order.orderId === selectedOrder)
   const ids = useMemo(() => new Set(document.eventIds), [document])
-  const evidence = events.filter(event => ids.has(event.id))
+  const evidence = events.filter(event => ids.has(event.id) || Boolean(document.orderId && event.orderId === document.orderId))
   const isFocusedEvent = (event: CanonicalFinancialEvent) => Boolean(focusTransactionId && (event.sourceTransactionId === focusTransactionId || event.id === focusTransactionId))
   const hasFocusedMatch = Boolean(focusTransactionId && evidence.some(isFocusedEvent))
   const sortedEvidence = useMemo(() => {
@@ -59,6 +61,16 @@ export function ReportSearchDetail({ document, events, orders, formatMoney, onOp
     <div className="search-detail-body">
       {focusTransactionId ? <div className="panel" role="status" style={{ borderLeft: '4px solid var(--accent, #d56346)', background: 'var(--surface-sunken, #f5f2e9)', padding: '10px 14px', marginBottom: '16px' }}><strong>Refund evidence focus</strong><p style={{ margin: '4px 0 0' }}>{hasFocusedMatch ? `Focusing refund transaction ${focusTransactionId} in the source transactions below.` : `Refund transaction ${focusTransactionId} recorded for this order (unreconciled or grouped into posted lines). Showing all preserved transactions.`}</p></div> : null}
       {products.length ? <section><h3>Products in this result</h3><div className="search-product-links">{products.map(sku => <button className="secondary" key={sku} onClick={() => onOpenProduct(sku)}>{sku} →</button>)}</div><small>Products open in a full-report profile. Dashboard filters stay unchanged.</small></section> : null}
+      {sourceOrder ? <section className="notification-order-summary" aria-label="Latest order details">
+        <h3>Order {sourceOrder.orderId}</h3>
+        <p>{sourceOrder.status ?? 'Status unavailable'} · Purchased {sourceOrder.purchaseDate} · {sourceOrder.fulfillmentType ?? 'Fulfilment unavailable'}</p>
+        <p>Amazon order total: {sourceOrder.orderValue === null ? 'Unavailable' : `${sourceOrder.currency ?? 'Currency unavailable'} ${sourceOrder.orderValue}`} <small>(source-reported total; may include tax and shipping)</small></p>
+        {(sourceOrder.items?.length ? sourceOrder.items : [{ sku: sourceOrder.sku, asin: sourceOrder.asin, title: sourceOrder.title, imageUrl: sourceOrder.imageUrl, quantity: null }]).map((item, index) => <div className="notification-order-item" key={`${item.sku ?? item.asin ?? 'item'}:${index}`}>
+          <ProductThumbnail url={item.imageUrl ?? null} /><div><strong>{item.title || item.sku || item.asin || 'Product details pending'}</strong><small>{item.sku ?? item.asin ?? 'Identity unavailable'} · {item.quantity === null || item.quantity === undefined ? 'Quantity unavailable' : `${item.quantity} units`}</small>{item.sku ? <button type="button" className="text-btn" onClick={() => onOpenProduct(item.sku!)}>Open product →</button> : null}</div>
+        </div>)}
+        {!selected ? <p role="status">Financial activity has not arrived for this order yet. Order status and products are shown above; profit and fees will appear after Amazon supplies the financial records.</p> : null}
+      </section> : null}
+      {!selected && !sourceOrder && document.orderId ? <p role="status">Order details are still loading. The order will appear here when its saved data is available.</p> : null}
       {selected ? <section><h3>Order {selected.orderId}</h3>{selected.skus.length === 1 ? selected.skus.map(sku => <ProductCostEditor key={sku} sku={sku} missingCost={selected.missingSkus.includes(sku)} />) : <p>Open a product above to edit its individual unit cost.</p>}<InlineOrderDetail order={selected} formatMoney={formatMoney} onCollapse={() => setSelectedOrder(null)} /></section> : null}
       {affectedOrders.length ? <section><h3>Orders</h3><div className="search-order-links">{affectedOrders.slice(0, limit).map(order => <button className="secondary" key={order.orderId} onClick={() => setSelectedOrder(order.orderId)}>{order.orderId}</button>)}</div></section> : null}
       <section><h3>Source transactions</h3><p>{evidence.length} preserved financial events{evidence.length > limit ? ` · showing the first ${limit}` : ''}</p><div className="table-scroll"><table><thead><tr><th>Date</th><th>Order</th><th>SKU</th><th>Source label</th><th>Amount</th><th>Status</th></tr></thead><tbody>{sortedEvidence.slice(0, limit).map(event => { const focused = isFocusedEvent(event); return <tr key={event.id} style={focused ? { background: 'var(--surface-sunken, #fceded)', fontWeight: 'bold' } : undefined}><td>{event.date ?? 'Undated'}</td><td>{event.orderId ?? '—'}</td><td>{event.sku ?? '—'}</td><td>{event.rawDescription || event.rawType || event.amountType}{focused ? <span style={{ marginLeft: '8px', fontSize: '0.8em', color: '#d56346' }}>● Focused refund</span> : null}</td><td>{formatMoney(event.amount)}</td><td>{event.classified ? 'Classified' : 'Needs review'}</td></tr> })}</tbody></table></div></section>

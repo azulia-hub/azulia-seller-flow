@@ -59,6 +59,6 @@ export function AppShell({ preferences, onPreferencesChange, active, search, syn
       <div className="content"><PwaStatus />{children}</div>
       <footer className="app-disclosure"><strong>Private by design</strong><span>Reports and costs stay in this browser. Profit depends on source classifications and product-cost coverage.</span></footer>
     </main>
-    <nav className="mobile-bottom-nav" aria-label="Mobile navigation">{appNavigation.filter(item => item.bottom).map(item => <button key={item.page} className={active === item.page ? 'active' : ''} aria-current={active === item.page ? 'page' : undefined} onClick={() => onNavigate(item.page)}><span aria-hidden="true">{item.icon}</span><small>{item.mobileLabel ?? item.label}</small></button>)}</nav>
+
   </div>
 }

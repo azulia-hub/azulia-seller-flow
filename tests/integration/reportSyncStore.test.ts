@@ -139,7 +139,7 @@ it('publishes order-only and changed-status revisions without adding financial r
   const directory = await mkdtemp(join(tmpdir(), 'azulia-orders-'))
   cleanup.push(() => rm(directory, { recursive: true, force: true }))
   const store = await openSyncStore(directory, 'account'); cleanup.push(async () => store.close())
-  const summary = { id: '111-1234567-1234567', purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }
+  const summary = { id: '111-1234567-1234567', purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR', shipmentStatus: null, isReplacementOrder: null, replacedOrderId: null, earliestDeliveryDate: null, latestDeliveryDate: null }
   store.saveOrderDate(summary.id, summary.purchased, summary)
   const revision = store.revision()
   expect(store.orders()).toEqual([{ ...summary, purchased: '2026-11-01T00:00:00.000Z' }])

@@ -20,15 +20,20 @@ final class ReviewAlerts {
         manager.createNotificationChannel(new NotificationChannel("review-requests","Review requests sent",NotificationManager.IMPORTANCE_DEFAULT));
         if(manager.getNotificationChannel("review-requests").getImportance()==NotificationManager.IMPORTANCE_NONE)return false;
         String text="Amazon accepted "+count+" review request"+(count==1?".":"s.");
-        String date = id.startsWith("daily:") && id.length() >= 16 ? id.substring(6, 16) :
-            java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate().toString();
+        long startedAt=System.currentTimeMillis();
+        if(id.startsWith("daily:"))try{
+            startedAt=java.time.Instant.parse(id.substring(6,id.lastIndexOf(':'))).toEpochMilli();
+            String start=java.time.Instant.ofEpochMilli(startedAt).atZone(java.time.ZoneId.of("Asia/Kolkata")).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm",java.util.Locale.ROOT));
+            text+=" Daily run started at "+start+" IST. This count updates as Amazon accepts requests.";
+        }catch(Exception ignored){}
+        String date = java.time.Instant.ofEpochMilli(startedAt).atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate().toString();
         PendingIntent tap;
         try {
             tap = NotificationNav.reviewRun(context, account, date);
         } catch (Exception e) {
             tap = PendingIntent.getActivity(context,account.hashCode(),new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         }
-        manager.notify(("reviews:"+account).hashCode(),new Notification.Builder(context,"review-requests").setSmallIcon(R.drawable.ic_notification).setContentTitle("Review requests sent").setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(tap).setOnlyAlertOnce(true).setAutoCancel(true).build());
+        manager.notify(("reviews:"+account).hashCode(),new Notification.Builder(context,"review-requests").setSmallIcon(R.drawable.ic_notification).setContentTitle("Review requests sent").setWhen(startedAt).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(tap).setOnlyAlertOnce(true).setAutoCancel(true).build());
         // Bounded history; daily queues and manual order journals remain the authoritative send guards.
         if(prefs.getAll().size()>100)prefs.edit().clear().commit();
         return prefs.edit().putBoolean(key,true).commit();
