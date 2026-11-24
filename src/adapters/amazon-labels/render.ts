@@ -29,9 +29,12 @@ function checkGlyphs(text: string, font: pdf.Font) {
 }
 export function fittedLines(text: string, font: pdf.Font, width = 273.5, height = 45) {
   checkGlyphs(text, font)
-  for (let size = 7.5; size >= 6.5; size -= .25) {
-    const lines = wrap(text, width, font, size)
-    if (lines.length * size * 1.25 <= height) return { lines, size }
+  for (const spacing of [1.25, 1.15]) {
+    for (let size = 7.5; size >= 6.5; size -= .25) {
+      const lines = wrap(text, width, font, size)
+      const lineHeight = size * spacing
+      if (lines.length * lineHeight <= height) return { lines, size, lineHeight }
+    }
   }
   throw new LabelLayoutError('Full product name does not fit legibly in a four-label sheet; manual review needed.')
 }
@@ -81,7 +84,7 @@ export function renderLabels(labels: ShippingLabel[], fonts: CutterFonts) {
         content += putText(heading, f.bold, 'bold', 10, x + 16, y + 298)
         const description = label.products.length === 1 ? label.products[0].name : label.products.map(p => `[${p.quantity}x] ${p.name}`).join(' ')
         const fitted = fittedLines(description, f.normal)
-        fitted.lines.forEach((line, index) => { content += putText(line, f.normal, 'normal', fitted.size, x + 12, y + 305 + fitted.size + index * fitted.size * 1.25) })
+        fitted.lines.forEach((line, index) => { content += putText(line, f.normal, 'normal', fitted.size, x + 12, y + 305 + fitted.size + index * fitted.lineHeight) })
       }
       const page = doc.addPage([0, 0, 595, 842], 0, { Font: f.resources, XObject: images }, content)
       doc.insertPage(-1, page); page.destroy(); Object.values(images).forEach(image => image.destroy())

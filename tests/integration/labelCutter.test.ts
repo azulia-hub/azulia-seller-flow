@@ -101,6 +101,17 @@ describe('browser shipping label cutter', () => {
     const bytes = new Uint8Array(buffer.asUint8Array()).buffer; buffer.destroy(); doc.destroy()
     await expect(cutShippingLabels([{ name: 'locked.pdf', bytes }], { packingList: false }, fonts)).rejects.toThrow(/Password-protected/)
   })
+  it('fits six lines at the minimum font size using tighter spacing', () => {
+    const font = new pdf.Font('DejaVuSans', fonts.normal)
+    const title = 'W'.repeat(240)
+    try {
+      const fitted = fittedLines(title, font)
+      expect(fitted.lines).toHaveLength(6)
+      expect(fitted.lines.join('')).toBe(title)
+      expect(fitted.size).toBe(6.5)
+      expect(fitted.lines.length * fitted.lineHeight).toBeLessThanOrEqual(45)
+    } finally { font.destroy() }
+  })
   it('stops on unprintable characters and titles that cannot fit', () => {
     const font = new pdf.Font('DejaVuSans', fonts.normal)
     try {
