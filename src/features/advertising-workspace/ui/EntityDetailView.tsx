@@ -3,13 +3,15 @@ import { useVisibleAdsAsins } from './VisibleAsins'
 import { DetailPagination, useDetailPage } from './DetailPagination'
 import { AdsIdentity } from './AdsIdentity'
 import { RecommendationNote } from './RecommendationNote'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { sortPerformanceRows } from '../sortPerformanceRows'
 import { useDialogFocus } from './useDialogFocus'
 import type {
   AdvertisingCrossSale,
   AdvertisingDetailModel,
   AdvertisingEntity,
   AdvertisingEntityRow,
+  AdvertisingSortQuery,
   AdvertisingTargetRow,
 } from '../contract'
 import { SummaryCards } from './SummaryCards'
@@ -186,6 +188,7 @@ export function EntityDetailView({
           {currentSection === 'campaigns' && (
             <DetailEntityTable
               title="Related Campaigns"
+              key="campaign"
               kind="campaign"
               rows={detail.campaigns}
               formatMoney={formatMoney}
@@ -196,6 +199,7 @@ export function EntityDetailView({
           {currentSection === 'products' && (
             <DetailEntityTable
               title="Related Products"
+              key="product"
               kind="product"
               rows={detail.products}
               formatMoney={formatMoney}
@@ -206,6 +210,7 @@ export function EntityDetailView({
           {currentSection === 'searchTerms' && (
             <DetailEntityTable
               title="Customer Search Terms"
+              key="searchTerm"
               kind="searchTerm"
               rows={detail.searchTerms}
               formatMoney={formatMoney}
@@ -239,7 +244,9 @@ function DetailEntityTable({
   readonly formatMoney: (n: number) => string
   readonly onOpenEntity: (entity: AdvertisingEntity) => void
 }) {
-  const pagination = useDetailPage(rows)
+  const [sorting, setSorting] = useState<AdvertisingSortQuery>({ sort: 'SPEND', direction: 'DESC', sortSelected: false })
+  const sortedRows = useMemo(() => sorting.sortSelected ? sortPerformanceRows(rows, sorting) : rows, [rows, sorting])
+  const pagination = useDetailPage(sortedRows)
   useVisibleAdsAsins(pagination.rows.map(item => item.imageAsin))
   if (!rows || rows.length === 0) {
     return <p className="adsw-cell-sub">No {title.toLowerCase()} recorded for this entity.</p>
@@ -247,7 +254,10 @@ function DetailEntityTable({
 
   return (
     <div className="adsw-table-card">
-      <PerformanceTable rows={pagination.rows} kind={kind} label={title} formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
+      <PerformanceTable rows={pagination.rows} kind={kind} label={title} sorting={{
+        query: sorting,
+        onQueryChange: ({ page, ...next }) => { setSorting(next); pagination.setPage(page) },
+      }} formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
       <DetailPagination {...pagination} />
     </div>
   )

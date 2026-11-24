@@ -10,11 +10,14 @@ export function parseOrderDate(row: Record<string, unknown>) {
   if (!/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(purchased) || !Number.isFinite(Date.parse(purchased))) throw new SourceError('Amazon returned an unsupported order purchase date; the posting date was not substituted.', 300, 422)
   if (row.MarketplaceId !== undefined && row.MarketplaceId !== 'A21TJRUUN4KGV') throw new SourceError('Order marketplace differs from the configured India account.')
   const total = object(row.OrderTotal), amount = text(total.Amount)
+  const shipBy = text(row.LatestShipDate)
+  const latestShipDate = /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(shipBy) && Number.isFinite(Date.parse(shipBy)) ? shipBy : null
   const summary: SourceOrderSummary = { id, purchased, status: text(row.OrderStatus) || null, fulfillmentType: text(row.FulfillmentChannel) || null,
     orderValue: amount || null, currency: text(total.CurrencyCode) || null,
+    latestShipDate,
     shipmentStatus:text(row.EasyShipShipmentStatus)||null,
     isReplacementOrder: typeof row.IsReplacementOrder==='boolean'?row.IsReplacementOrder:null,replacedOrderId:text(row.ReplacedOrderId)||null,earliestDeliveryDate:text(row.EarliestDeliveryDate)||null,latestDeliveryDate:text(row.LatestDeliveryDate)||null }
-  return { id, purchased, ...(row.OrderStatus !== undefined || row.OrderTotal !== undefined || row.FulfillmentChannel !== undefined ? { summary } : {}) }
+  return { id, purchased, ...(row.OrderStatus !== undefined || row.OrderTotal !== undefined || row.FulfillmentChannel !== undefined || latestShipDate ? { summary } : {}) }
 }
 export function createOrderDateReader(credentials: PilotCredentials, request: typeof fetch = fetch, sessionToken?: string) {
   let token: string | null = sessionToken ?? null, until = sessionToken ? Infinity : 0

@@ -3,6 +3,7 @@ import { formatMoney as formatInr } from '../adapters/preferences/runtime'
 import { useState, useMemo, useEffect } from 'react'
 import type { PulsePeriodMetrics, PulseOrderSummary, PulseOrderStatusCategory } from '../core/analytics/pulseScoreboard'
 import { ProductThumbnail } from './ProductThumbnail'
+import { getIndiaToday, toIndiaDateString } from '../core/sync/planner'
 
 interface Props {
   readonly period: PulsePeriodMetrics
@@ -38,6 +39,7 @@ function formatDateTimeIST(dateStr: string): string {
 }
 
 export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) {
+  const today = getIndiaToday()
   const [activeFilter, setActiveFilter] = useState<'ALL' | PulseOrderStatusCategory>('ALL')
   const [channelFilter, setChannelFilter] = useState<'ALL' | 'FBA' | 'FBM'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -328,6 +330,8 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
               <tbody>
                 {filteredOrders.map(order => {
                   const isFba = isFbaOrder(order.fulfillmentType)
+                  const shipsToday = (order.statusCategory === 'UNSHIPPED' || order.statusCategory === 'PENDING') &&
+                    toIndiaDateString(order.latestShipDate) === today
                   const displayTitle = order.productTitle
                     || (order.skus.length ? order.skus.join(', ') : 'Product details pending')
 
@@ -364,6 +368,10 @@ export function PulseOrdersModal({ period, onClose, onFilterDashboard }: Props) 
                       {/* Placed Date & Time */}
                       <td className="pulse-order-date-cell">
                         <span>{formatDateTimeIST(order.purchaseDate)}</span>
+                        <span className="pulse-order-ship-by">
+                          Ship by: {order.latestShipDate ? <time dateTime={order.latestShipDate}>{formatDateTimeIST(order.latestShipDate)}</time> : '—'}
+                        </span>
+                        {shipsToday ? <strong className="pulse-ship-today-badge">Ship today</strong> : null}
                       </td>
 
                       {/* Classification & Settlement */}

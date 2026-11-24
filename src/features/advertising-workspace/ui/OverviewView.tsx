@@ -47,7 +47,7 @@ export function OverviewView({
               View all campaigns →
             </button>
           </div>
-          <PerformanceTable rows={topCampaigns} kind="campaign" formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
+          <PerformanceTable rows={topCampaigns} kind="campaign" sorting={{ query: model.query, onQueryChange }} formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
         </section>
       ) : null}
     </div>

@@ -274,6 +274,7 @@ function orderSummary(value: unknown): SourceOrderSummary {
   return {
     isReplacementOrder:typeof summary.isReplacementOrder==='boolean'?summary.isReplacementOrder:typeof row.isReplacementOrder==='boolean'?row.isReplacementOrder:null,
     shipmentStatus:text(summary.shipmentStatus)||text(row.shipmentStatus)||null,replacedOrderId:text(summary.replacedOrderId)||text(row.replacedOrderId)||null,earliestDeliveryDate:text(summary.earliestDeliveryDate)||text(row.earliestDeliveryDate)||null,latestDeliveryDate:text(summary.latestDeliveryDate)||text(row.latestDeliveryDate)||null,reviewMetadataCheckedAt:text(summary.reviewMetadataCheckedAt)||text(row.reviewMetadataCheckedAt)||null,
+    latestShipDate: text(summary.latestShipDate) || text(row.latestShipDate) || (summary.latestShipDate === null || row.latestShipDate === null ? null : undefined),
     id: text(row.id),
     purchased: text(row.purchased),
     status: text(summary.status) || text(row.status) || null,
@@ -331,13 +332,24 @@ export async function syncHosted(days: { from: string; to: string }, options?: {
     if(!detailPriority.size)for(const record of cache.records)for(const item of (Array.isArray(record.items)?record.items:[]).map(object))for(const context of (Array.isArray(item.contexts)?item.contexts:[]).map(object))if(/^[A-Z0-9]{10}$/.test(text(context.asin)))asins.add(text(context.asin))
     await checkedUpdate(current=>{
       const enqueue=(kind:'order'|'orderItems'|'catalog',resource:string,extra:Partial<BrowserJob>)=>{
-        const existing=current.jobs.find(job=>job.kind===kind && (kind==='orderItems'?job.orderId===resource:job.asin===resource))
+        const existing=current.jobs.find(job=>job.kind===kind && (kind==='catalog'?job.asin===resource:job.orderId===resource))
         if(existing){existing.scope=scope;if(Date.now()-existing.createdAt>23*3600000){existing.createdAt=Date.now();existing.nextToken=null};return}
         if(!metadataTracker.canEnqueue(kind,resource))return
         metadataTracker.recordEnqueued(kind,resource);appendJob(current,makeJob(kind,wanted,extra))
       }
-      const knownOrders=new Set(cache.orders.map(order=>order.id))
-      for(const id of [...detailPriority].slice(0,10))if(!knownOrders.has(id)&&Date.now()-(current.dateFailures[id]??0)>60000)enqueue('order',id,{orderId:id})
+      const knownOrders = new Map(cache.orders.map(order => [order.id, order]))
+      let orderLookups = 0
+      for (const id of detailPriority) {
+        if (orderLookups >= 10) break
+        const order = knownOrders.get(id)
+        const missingDeadline = order && order.latestShipDate === undefined &&
+          ['MFN', 'FBM'].includes(order.fulfillmentType ?? '') &&
+          ['Unshipped', 'PartiallyShipped', 'Pending', 'PendingAvailability'].includes(order.status ?? '')
+        if ((!order || missingDeadline) && Date.now() - (current.dateFailures[id] ?? 0) > 60000 && metadataTracker.canEnqueue('order', id)) {
+          enqueue('order', id, { orderId: id })
+          orderLookups++
+        }
+      }
       for(const order of targets.items.slice(0,10))enqueue('orderItems',order.id,{orderId:order.id})
       if(!current.catalogError){
         const known=new Map(cache.catalog.map(item=>[item.asin,item]))

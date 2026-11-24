@@ -201,7 +201,12 @@ final class AdsSession {
     }}
     JSONObject entities(JSONObject input)throws Exception{synchronized(LOCK){
         JSONObject value=required(input);String entity=input.getString("entity"),media;
-        switch(entity){case "campaigns":media="spCampaign";break;case "adGroups":media="spAdGroup";break;case "keywords":media="spKeyword";break;case "targets":media="spTargetingClause";break;case "productAds":media="spProductAd";break;default:throw new IllegalArgumentException("Unsupported Ads entity.");}
+        switch(entity){case "campaigns":media="spCampaign";break;case "adGroups":media="spAdGroup";break;case "keywords":media="spKeyword";break;case "targets":media="spTargetingClause";break;case "productAds":media="spProductAd";break;
+            case "negativeKeywords":media="spNegativeKeyword";break;
+            case "campaignNegativeKeywords":media="spCampaignNegativeKeyword";break;
+            case "negativeTargets":media="spNegativeTargetingClause";break;
+            case "campaignNegativeTargets":media="spCampaignNegativeTargetingClause";break;
+            default:throw new IllegalArgumentException("Unsupported Ads entity.");}
         String cursor=input.optString("nextToken","");if(cursor.length()>8000||cursor.indexOf(10)>=0||cursor.indexOf(13)>=0||cursor.indexOf(0)>=0)throw new IllegalArgumentException("Invalid Ads continuation.");
         JSONObject body=new JSONObject().put("maxResults",100).put("stateFilter",new JSONObject().put("include",new JSONArray().put("ENABLED").put("PAUSED").put("ARCHIVED")));
         if(!cursor.isEmpty())body.put("nextToken",cursor);

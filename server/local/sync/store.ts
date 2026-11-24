@@ -69,6 +69,7 @@ export async function openSyncStore(directory: string, key: string) {
         id,
         purchased: normalized,
         shipmentStatus:summary.shipmentStatus??prevParsed?.shipmentStatus??null,isReplacementOrder:summary.isReplacementOrder??prevParsed?.isReplacementOrder??null,replacedOrderId:summary.replacedOrderId??prevParsed?.replacedOrderId??null,earliestDeliveryDate:summary.earliestDeliveryDate??prevParsed?.earliestDeliveryDate??null,latestDeliveryDate:summary.latestDeliveryDate??prevParsed?.latestDeliveryDate??null,
+        latestShipDate: summary.latestShipDate ?? (prevParsed?.latestShipDate === undefined ? summary.latestShipDate : prevParsed.latestShipDate),
         status: summary.status,
         fulfillmentType: summary.fulfillmentType,
         orderValue: summary.orderValue,
@@ -181,6 +182,16 @@ export async function openSyncStore(directory: string, key: string) {
           AND NOT EXISTS (SELECT 1 FROM records r WHERE r.order_id=o.id)
         ORDER BY o.purchased DESC
         LIMIT 1
+      `).get(Date.now() - 6 * 3600000) as { id: string } | undefined
+    },
+    uncheckedShipDeadline() {
+      return db.prepare(`
+        SELECT o.id FROM order_dates o JOIN order_summaries s ON s.id=o.id
+        WHERE o.purchased IS NOT NULL AND o.checked < ?
+          AND json_type(s.raw, '$.latestShipDate') IS NULL
+          AND json_extract(s.raw, '$.fulfillmentType') IN ('MFN','FBM')
+          AND json_extract(s.raw, '$.status') IN ('Unshipped','PartiallyShipped','Pending','PendingAvailability')
+        ORDER BY o.purchased DESC, o.id LIMIT 1
       `).get(Date.now() - 6 * 3600000) as { id: string } | undefined
     },
     staleOrderSummary() { return db.prepare('SELECT id FROM order_dates WHERE purchased IS NOT NULL AND checked<? ORDER BY checked LIMIT 1').get(Date.now() - 6 * 3600000) as { id: string } | undefined },

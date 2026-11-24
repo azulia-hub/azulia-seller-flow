@@ -30,6 +30,8 @@
 .pulse-modal-search input{height:34px;padding:0 10px;font-size:12px;border:1px solid var(--line);border-radius:7px;background:var(--bg,#08101d);color:var(--text);min-width:230px}
 .pulse-modal-search input:focus{outline:none;border-color:var(--accent,#d4a373)}
 .pulse-orders-list-scroll{overflow-y:auto;overflow-x:auto;flex:1;min-height:220px;max-height:52vh;border:1px solid var(--line);border-radius:9px}
+.pulse-order-ship-by{display:block;margin-top:4px;color:var(--muted);white-space:normal}
+.pulse-ship-today-badge{display:inline-block;margin-top:4px;padding:2px 6px;border-radius:4px;background:#f8cf72;color:#442800;font-size:10px;white-space:nowrap}
 .pulse-orders-table{width:100%;border-collapse:collapse;font-size:12px;text-align:left}
 .pulse-orders-table th{position:sticky;top:0;z-index:2;background:var(--panel2,#121f31);padding:10px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--line)}
 .pulse-orders-table td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}

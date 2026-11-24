@@ -12,6 +12,7 @@ import { missingRanges, type SyncRange } from '../sync/ranges'
 export type PulseOrderStatusCategory = 'CONFIRMED' | 'UNSHIPPED' | 'PENDING' | 'CANCELED'
 
 export interface PulseOrderSummary {
+  readonly latestShipDate?: string | null
   readonly orderId: string
   readonly purchaseDate: string
   readonly rawStatus: string
@@ -61,6 +62,7 @@ export interface PulseScoreboard {
 }
 
 export interface PulseSourceOrder {
+  readonly latestShipDate?: string | null
   readonly orderId: string
   readonly purchaseDate: string
   readonly status?: string | null
@@ -353,6 +355,7 @@ export function computePulseScoreboard(input: PulseScoreboardInput): PulseScoreb
       ordersMap.set(orderId, {
         orderId,
         purchaseDate,
+        ...(sourceOrder?.latestShipDate ? { latestShipDate: sourceOrder.latestShipDate } : {}),
         rawStatus: raw,
         statusCategory,
         orderValue,

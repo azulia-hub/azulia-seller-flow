@@ -20,6 +20,7 @@ for(const width of [1280,390])test(`snapshot earnings and persistent preferences
   const modal = page.locator('.pulse-orders-modal')
   await expect(modal).toBeVisible()
   await expect(modal).toContainText('ORDER-A')
+  await expect(modal.getByText('Ship by: —', { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(modal).not.toBeVisible()
 

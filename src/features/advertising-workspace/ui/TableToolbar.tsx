@@ -18,14 +18,14 @@ export function TableToolbar({ query, onQueryChange, searchPlaceholder, sortId, 
     </div>
     <div className="adsw-sort-controls">
       <label className="adsw-label" htmlFor={sortId}>Sort by:</label>
-      <select id={sortId} className="adsw-select" value={query.sort} onChange={event => onQueryChange({ sort: event.target.value as AdvertisingViewQuery['sort'], page: 1 })}>
+      <select id={sortId} className="adsw-select" value={query.sort} onChange={event => onQueryChange({ sort: event.target.value as AdvertisingViewQuery['sort'], sortSelected: true, page: 1 })}>
         <option value="SPEND">{spendLabel}</option>
         <option value="SALES">Attributed Sales</option>
         <option value="ACOS">ACOS</option>
         <option value="ROAS">ROAS</option>
         <option value="PURCHASES">{purchasesLabel}</option>
       </select>
-      <button type="button" className="adsw-btn" style={{ minHeight: 36, padding: '4px 10px', fontSize: 12 }} onClick={() => onQueryChange({ direction: query.direction === 'DESC' ? 'ASC' : 'DESC', page: 1 })} aria-label={`Sort direction: ${query.direction === 'DESC' ? 'Descending' : 'Ascending'}`}>
+      <button type="button" className="adsw-btn" style={{ minHeight: 36, padding: '4px 10px', fontSize: 12 }} onClick={() => onQueryChange({ direction: query.direction === 'DESC' ? 'ASC' : 'DESC', sortSelected: true, page: 1 })} aria-label={`Sort direction: ${query.direction === 'DESC' ? 'Descending' : 'Ascending'}`}>
         {query.direction === 'DESC' ? '↓ High to low' : '↑ Low to high'}
       </button>
     </div>

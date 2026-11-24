@@ -41,6 +41,22 @@ it('indexes once instead of scanning every source row per visible recommendation
   expect(first.recommendation).toBeDefined()
 })
 
+it('attaches synced exclusions to the actual search-term row without changing performance', () => {
+  const searchTerm = supplemental()
+  const selection = { ...input, query: { ...query, view: 'searchTerms' as const, search: 'term 1' }, supplemental: { searchTerm } }
+  const baseline = buildAdvertisingWorkspaceModel(selection)
+  const result = enrichWorkspaceModel(baseline, source, { searchTerm }, {
+    negativeKeywords: {
+      complete: true, observedAt: input.asOf,
+      rows: [{ campaignId: 'c', adGroupId: 'g', keywordText: 'Term 1', matchType: 'NEGATIVE_EXACT', state: 'ENABLED' }],
+    },
+  }, input.asOf)
+  const term = result.searchTerms.find(row => row.name === 'term 1')
+  expect(term?.negativeMatches).toMatchObject([{ scope: 'Ad group', type: 'Exact keyword' }])
+  expect(term?.metrics).toEqual(baseline.searchTerms.find(row => row.name === 'term 1')?.metrics)
+  expect(result.searchTerms.filter(row => row.negativeMatches?.length)).toEqual([term])
+})
+
 it('accepts structured-cloneable worker input and preserves explicit SKU aliases', () => {
   const sale: CanonicalFinancialEvent = { id: 'sale', source: 'synthetic', sourceDatasetId: 'financial', sourceRow: 1, date: '2026-11-10', orderId: 'order', sku: 'SKU-MFN', event: 'SALE', quantity: 2, amount: 1000, amountClass: 'OPERATING', amountType: 'PRODUCT_REVENUE', state: null, city: null, status: null, rawType: 'Order', rawDescription: 'Item', classified: true, raw: {} }
   const workerInput = structuredClone({ ...input, query: { ...query, view: 'products' as const }, source: resolveWorkspaceProducts(source, new Map([['SKU', 'SKU-MFN']])), financialInput: { events: [sale], costs: [{ sku: 'SKU', unitCost: 20, updatedAt: '2026-11-01' }], policy: 'BLOCK' as const, compatible: true, uploadedFrom: range.from, uploadedTo: range.to }, skuAliases: [['SKU-MFN', 'SKU']] as const })

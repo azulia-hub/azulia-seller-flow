@@ -23,6 +23,7 @@ export interface SourceOrderSummary {
   replacedOrderId?:string|null
   earliestDeliveryDate?:string|null
   latestDeliveryDate?:string|null
+  latestShipDate?: string | null
   reviewMetadataCheckedAt?:string|null
   shipmentStatus?:string|null
 

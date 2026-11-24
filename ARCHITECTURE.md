@@ -14,7 +14,9 @@ Notification orders use the full active account's saved Orders metadata independ
 from financial recognition and date filters. Pending destinations request missing
 order identities and remain unacknowledged until opened. Search evidence follows
 the selected order identity as later events arrive. Source totals retain their
-tax/shipping caveat. Sidebar navigation serves all screen sizes.
+tax/shipping caveat. Pulse order rows show the source shipping deadline in IST
+when Orders metadata supplies it. The deadline is optional in stored readings
+and independent of financial activity. Sidebar navigation serves all screen sizes.
 
 ## Shared presentation and lookup utilities (2026-11-22)
 
@@ -51,6 +53,10 @@ media types, bounded pages and exact profile checks; no campaign writes are expo
 Complete per-kind snapshots use `ads-entities:<profile/category hash>` workspace
 storage, preserving previous complete values on pagination/API failures. The UI
 labels observation times and distinguishes target state from paused parent delivery.
+Campaign and ad-group negative keyword/target lists use the same snapshot flow.
+The Amazon adapter indexes enabled exclusions by source IDs and matches literal
+exact terms, whole-word phrases and direct ASINs. Search term rows display the
+observed scope, match and sync date alongside historical metrics.
 
 Pure recommendation selectors use complete, attribution-mature observations and an
 explicit review ACOS target. Numeric suggestions are capped at a ten-percent test

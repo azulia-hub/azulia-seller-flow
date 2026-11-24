@@ -1,5 +1,9 @@
 export const adsEntitySpecs = {
   campaigns: ['campaigns', 'spCampaign'], adGroups: ['adGroups', 'spAdGroup'], keywords: ['keywords', 'spKeyword'], targets: ['targetingClauses', 'spTargetingClause'], productAds: ['productAds', 'spProductAd'],
+  negativeKeywords: ['negativeKeywords', 'spNegativeKeyword'],
+  campaignNegativeKeywords: ['campaignNegativeKeywords', 'spCampaignNegativeKeyword'],
+  negativeTargets: ['negativeTargetingClauses', 'spNegativeTargetingClause'],
+  campaignNegativeTargets: ['campaignNegativeTargetingClauses', 'spCampaignNegativeTargetingClause'],
 } as const
 export type AdsEntityKind = keyof typeof adsEntitySpecs
 export const adsEntityKinds = Object.keys(adsEntitySpecs) as AdsEntityKind[]
@@ -16,7 +20,7 @@ export function parseEntityPage(kind: AdsEntityKind, value: unknown, profileId: 
   if (!Array.isArray(rows) || rows.length > 1000 || rows.some(row => !row || typeof row !== 'object' || Array.isArray(row))) throw new Error('Invalid advertising configuration response. Previous configuration retained.')
   const identifier = (value: unknown) => typeof value === 'string' && value.length > 0 || typeof value === 'number' && Number.isSafeInteger(value)
   for (const row of rows as Record<string, unknown>[]) {
-    const fields = ['campaignId', ...(kind === 'campaigns' ? [] : ['adGroupId']), ...(kind === 'keywords' ? ['keywordId'] : kind === 'targets' ? ['targetId'] : kind === 'productAds' ? ['adId'] : [])]
+    const fields = ['campaignId', ...(kind === 'campaigns' || kind === 'campaignNegativeKeywords' || kind === 'campaignNegativeTargets' ? [] : ['adGroupId']), ...(kind === 'keywords' ? ['keywordId'] : kind === 'targets' ? ['targetId'] : kind === 'productAds' ? ['adId'] : [])]
     if (fields.some(field => !identifier(row[field]))) throw new Error('Advertising configuration has missing or unsafe identities. Previous complete configuration retained.')
   }
   const nextToken = body?.nextToken

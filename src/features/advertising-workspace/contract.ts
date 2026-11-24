@@ -18,8 +18,10 @@ export interface AdvertisingViewQuery {
   readonly search: string
   readonly sort: 'SPEND' | 'SALES' | 'ACOS' | 'ROAS' | 'PURCHASES'
   readonly direction: 'ASC' | 'DESC'
+  readonly sortSelected?: boolean
   readonly page: number
 }
+export type AdvertisingSortQuery = Pick<AdvertisingViewQuery, 'sort' | 'direction' | 'sortSelected'>
 export interface AdvertisingChange {
   readonly value: number
   readonly unit: 'PERCENT' | 'PERCENTAGE_POINTS' | 'ABSOLUTE'
@@ -34,7 +36,14 @@ export interface AdvertisingSummaryMetric {
   readonly unavailableReason?: string
   readonly change: AdvertisingChange | null
 }
+export interface AdvertisingNegativeMatch {
+  readonly value: string
+  readonly type: 'Exact keyword' | 'Phrase keyword' | 'ASIN'
+  readonly scope: 'Campaign' | 'Ad group'
+  readonly observedAt: string
+}
 export interface AdvertisingEntityRow {
+  readonly negativeMatches?: readonly AdvertisingNegativeMatch[]
   readonly imageUrl?: string | null
   readonly imageAsin?: string | null
   readonly recommendation?: AdvertisingRecommendation

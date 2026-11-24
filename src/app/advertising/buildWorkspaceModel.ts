@@ -1,3 +1,4 @@
+import { sortPerformanceRows } from '../../features/advertising-workspace/sortPerformanceRows'
 import { getIndiaToday } from '../../core/sync/planner'
 import { aggregateAdvertisingFacts, advertisingDimensions, compareAdvertisingMetrics, joinAdvertisingFinancials, type AdvertisingDataset, type AdvertisingFinancialProduct, type AdvertisingMetrics, type AdvertisingQuery } from '../../core/advertising/workspace'
 import { rankAdvertisingEfficiency, rankAdvertisingLosses } from '../../core/insights/focusAnalysis'
@@ -99,14 +100,8 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
   const productComparisons = new Map(advertisingDimensions(dataset, priorQuery, 'productId').map(slice => [slice.id, slice.metrics]))
   const rowChanges = (rows: AdvertisingEntityRow[], prior: ReadonlyMap<string | null, AdvertisingMetrics>) => rows.map(row => ({ ...row, change: prior.has(row.entity.id) ? compareAdvertisingMetrics(row.metrics, prior.get(row.entity.id)!, comparable).spend ?? null : null }))
   const sortRows = (rows: readonly AdvertisingEntityRow[], search = query.search) => {
-    const field = { SPEND: 'spend', SALES: 'attributedSales', ACOS: 'acos', ROAS: 'roas', PURCHASES: 'purchases' }[query.sort] as keyof AdvertisingMetrics
     const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    return rows.filter(row => tokens.every(token => `${row.name} ${row.subtitle ?? ''}`.toLowerCase().includes(token))).sort((a, b) => {
-      const left = a.metrics[field], right = b.metrics[field]
-      if (left === null) return right === null ? a.name.localeCompare(b.name) : 1
-      if (right === null) return -1
-      return (query.direction === 'ASC' ? left - right : right - left) || a.name.localeCompare(b.name)
-    })
+    return sortPerformanceRows(rows.filter(row => tokens.every(token => `${row.name} ${row.subtitle ?? ''}`.toLowerCase().includes(token))), query)
   }
   const campaigns = sortRows(rowChanges(campaignRows, campaignComparisons)), products = sortRows(rowChanges(productRows, productComparisons)), searchTerms = sortRows(supplemental.searchTerms)
   const campaignReview = rankAdvertisingEfficiency(campaignRows.map(row => ({ id: row.entity.id, label: row.name, value: row.metrics.spend ?? 0, adSpend: row.metrics.spend ?? undefined, sales: row.metrics.attributedSales ?? undefined })))

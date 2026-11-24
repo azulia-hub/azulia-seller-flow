@@ -75,8 +75,13 @@ export async function createReportSync(options: { directory: string; connectionK
         if (now - job.createdAt > 23 * 3600000) {if(job.kind==='purchases')store.discardJob(job.id);else store.restartOrderJob(job.id)}
         else { const page = await orderReader.page({...job,updatedOnly:job.kind!=='purchases'}, abort.signal); store.commitOrderPage(job, page.orders, page.nextToken, page.issues) }
       } else {
-        const missingItems = store.missingOrderItems()
-        if (missingItems) {
+        const shipDeadline = store.uncheckedShipDeadline()
+        const missingItems = shipDeadline ? undefined : store.missingOrderItems()
+        if (shipDeadline) {
+          lookupId = shipDeadline.id
+          const order = await orderReader.one(lookupId, abort.signal)
+          store.saveOrderDate(order.id, order.purchased, order.summary)
+        } else if (missingItems) {
           lookupId = missingItems.id
           try {
             let nextToken: string | null = null

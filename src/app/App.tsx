@@ -178,10 +178,19 @@ export function App() {
 
   const applyAutomaticReading = useCallback((reading: AutomaticReading) => {
     userSelectedReport.current = true
-    setPrecomputed({id:reading.id,value:reading.precomputed})
+    // A saved reading can be produced by a worker that predates ship-by metadata.
+    const shipDates = new Map(reading.sourceOrders?.flatMap(order => order.latestShipDate ? [[order.id, order.latestShipDate] as const] : []))
+    let restoredShipDates = false
+    const orders = reading.dataset.orders?.map(order => {
+      const latestShipDate = shipDates.get(order.orderId)
+      if (!latestShipDate || order.latestShipDate === latestShipDate) return order
+      restoredShipDates = true
+      return { ...order, latestShipDate }
+    })
+    setPrecomputed({ id: reading.id, value: restoredShipDates ? undefined : reading.precomputed })
     const changedIdentity = automaticIdentity.current !== reading.connectionKey
     automaticIdentity.current = reading.connectionKey
-    setDataset(reading.dataset); setRawDataset(reading.raw); setFileName(reading.fileName); setCurrentImportId(reading.id); setAutomaticIssues(reading.issues)
+    setDataset(restoredShipDates ? { ...reading.dataset, orders } : reading.dataset); setRawDataset(reading.raw); setFileName(reading.fileName); setCurrentImportId(reading.id); setAutomaticIssues(reading.issues)
     saveActiveReportId(reading.id)
     setImports(previous => [reading, ...previous.filter(item => item.id !== reading.id)])
     if (changedIdentity) {
@@ -366,6 +375,7 @@ export function App() {
         return {
           orderId: order.orderId,
           purchaseDate: order.purchaseDate,
+          latestShipDate: order.latestShipDate,
           status: order.status,
           orderValue: order.orderValue,
           fulfillmentType: order.fulfillmentType,

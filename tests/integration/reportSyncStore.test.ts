@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -189,4 +189,31 @@ it('advances recent-order freshness only after the final committed page without 
  store.commitOrderPage(store.jobs()[0],[],null)
  expect(store.get('recentOrdersThrough')).toBe(range.to)
  expect(JSON.parse(store.get('purchaseCoverage')??'[]')).toEqual([])
+})
+
+it('checks previously saved open seller orders for ship-by metadata and keeps verified ship dates', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'azulia-ship-deadline-'))
+  cleanup.push(() => rm(directory, { recursive: true, force: true }))
+  const store = await openSyncStore(directory, 'account')
+  cleanup.push(async () => store.close())
+  const now = Date.now()
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now - 7 * 3600000)
+  const summary = { id: '111-1234567-1234567', purchased: '2026-11-01T00:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: null, currency: null }
+  try {
+    store.saveOrderDate(summary.id, summary.purchased, summary)
+    clock.mockReturnValue(now)
+    expect(store.uncheckedShipDeadline()).toEqual({ id: summary.id })
+    store.saveOrderDate(summary.id, summary.purchased, { ...summary, latestShipDate: null })
+    store.saveOrderDate(summary.id, summary.purchased, summary)
+    clock.mockReturnValue(now + 7 * 3600000)
+    expect(store.uncheckedShipDeadline()).toBeUndefined()
+    expect(store.orders()[0].latestShipDate).toBeNull()
+
+    const deadline = '2026-11-02T20:00:00Z'
+    store.saveOrderDate(summary.id, summary.purchased, { ...summary, latestShipDate: deadline })
+    store.saveOrderDate(summary.id, summary.purchased, { ...summary, latestShipDate: null })
+    expect(store.orders()[0].latestShipDate).toBe(deadline)
+  } finally {
+    clock.mockRestore()
+  }
 })

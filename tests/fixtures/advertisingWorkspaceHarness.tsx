@@ -648,13 +648,16 @@ function Harness() {
     detail,
   }
 
-  const repairMode = new URLSearchParams(location.search).has('repairs')
+  const params = new URLSearchParams(location.search)
+  const repairMode = params.has('repairs')
+  const detailSortMode = params.has('detail-sort')
+  const detailProduct = sampleDetail.products[0]
   const image = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="80" height="80"%3E%3Crect x="8" y="8" width="64" height="64" fill="%23bd9650"/%3E%3C/svg%3E'
   const longTitle = 'Azulia solid wood bedside table with storage and detailed product information '.repeat(8)
   const fixtureRecommendation = { action: 'LOWER' as const, text: 'Consider a small bid reduction', reason: 'Illustrative mature ACOS is above the explicitly selected review target.', suggestedBid: 9 }
   const displayModel = repairMode ? { ...model,
     products: model.products.map((row, index) => index ? row : { ...row, name: longTitle, imageUrl: image, imageAsin: 'B012345678', recommendation: fixtureRecommendation }),
-    searchTerms: model.searchTerms.map((row, index) => index ? row : { ...row, name: 'B087654321', imageUrl: image, imageAsin: 'B087654321', recommendation: fixtureRecommendation }),
+    searchTerms: model.searchTerms.map((row, index) => index ? row : { ...row, name: 'B087654321', imageUrl: image, imageAsin: 'B087654321', negativeMatches: [{ value: 'B087654321', type: 'ASIN', scope: 'Campaign', observedAt: '2026-11-24T09:00:00Z' }], recommendation: fixtureRecommendation }),
     detail: model.detail ? { ...model.detail, title: longTitle, imageUrl: image, imageAsin: 'B012345678', crossSales: model.detail.crossSales.map(row => ({ ...row, advertisedImageUrl: image, purchasedImageUrl: image })) } : null,
   } : model
 
@@ -697,7 +700,15 @@ function Harness() {
         model={displayModel}
         formatMoney={formatMoney}
         onQueryChange={patch => setQuery(prev => ({ ...prev, ...patch }))}
-        onOpenEntity={() => setDetail(sampleDetail)}
+        onOpenEntity={() => setDetail(detailSortMode ? {
+          ...sampleDetail,
+          products: [detailProduct, ...Array.from({ length: 31 }, (_, index) => ({
+            ...detailProduct,
+            entity: { kind: 'PRODUCT' as const, id: `detail-product-${index + 1}` },
+            name: `Detail product ${index + 1}`,
+            metrics: { ...detailProduct.metrics, spend: index + 1 },
+          }))],
+        } : sampleDetail)}
         onCloseDetail={() => setDetail(null)}
         onRefresh={() => setRefreshCount(c => c + 1)}
         onOpenSettings={() => setSettingsOpened(true)}

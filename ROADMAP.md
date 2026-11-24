@@ -35,6 +35,8 @@
 
 ## Advertising repair — ADR-090
 
+- [x] Show synced campaign and ad-group negative keywords and ASINs on matching Sponsored Products search-term rows.
+
 - [x] Fetch authoritative campaign/ad-group/keyword/target/product-ad configuration with bounded pagination and device/profile-scoped complete snapshots; expose actual states and explicit/inherited bids.
 - [x] Correct cross-sale mapping to purchased-product halo sales/purchases/units; version report specification/cache namespace to refetch while retaining previous raw observations.
 - [x] Add generic advisory efficiency reviews, visible notes and editable target ACOS; exclude recent attribution days and weak samples, gate paused delivery and bound proposed tests to 10%.

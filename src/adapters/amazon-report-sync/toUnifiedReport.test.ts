@@ -2,6 +2,8 @@ import { expect, it } from 'vitest'
 import type { CanonicalFinancialEvent } from '../../core/data/types'
 import { toUnifiedReport } from './toUnifiedReport'
 import { parseSourceJson } from './money'
+import { parseOrderDate } from '../amazon-api/orders'
+import { computePulseScoreboard } from '../../core/analytics/pulseScoreboard'
 const money = (amount: string) => ({ currencyAmount: amount, currencyCode: 'INR' })
 const part = (name: string, amount: string, breakdowns: unknown[] = []) => ({ breakdownType: name, breakdownAmount: money(amount), breakdowns })
 const item = (sku: string, amount: string, breakdowns: unknown[]) => ({ totalAmount: money(amount), contexts: [{ contextType: 'ProductContext', sku, quantityShipped: 1, fulfillmentNetwork: 'MFN' }], breakdowns })
@@ -151,6 +153,16 @@ it('delivers order-only metadata without converting its total to sales', () => {
   const result = toUnifiedReport({ ...snapshot([]), orders: [{ id: '111-1234567-1234567', purchased: '2026-10-31T20:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }] })
   expect(result.dataset.orders).toEqual([{ orderId: '111-1234567-1234567', purchaseDate: '2026-10-31T20:00:00Z', status: 'Unshipped', fulfillmentType: 'MFN', orderValue: '1180.00', currency: 'INR' }])
   expect(result.dataset.events).toEqual([])
+})
+it('carries a verified source ship-by deadline to the Pulse order without creating financial activity', () => {
+  const input = { AmazonOrderId: '111-1234567-1234567', PurchaseDate: '2026-11-01T10:00:00Z', OrderStatus: 'Unshipped', FulfillmentChannel: 'MFN', LatestShipDate: '2026-11-02T20:00:00Z' }
+  const { summary } = parseOrderDate(input)
+  expect(summary?.latestShipDate).toBe(input.LatestShipDate)
+  const { dataset } = toUnifiedReport({ ...snapshot([]), orders: [summary!] })
+  const pulse = computePulseScoreboard({ events: dataset.events, sourceOrders: dataset.orders, costs: [], missingCostPolicy: 'BLOCK', anchorDate: '2026-11-01' })
+  expect(pulse.today.orders[0]).toMatchObject({ latestShipDate: input.LatestShipDate, statusCategory: 'UNSHIPPED' })
+  expect(dataset.events).toEqual([])
+  expect(parseOrderDate({ ...input, LatestShipDate: '2026-11-02' }).summary?.latestShipDate).toBeNull()
 })
 it('uses Orders metadata to date new financial activity in the original purchase period', () => {
   const id = '111-1234567-1234567'

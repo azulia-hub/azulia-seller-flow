@@ -16,9 +16,10 @@ export function SearchTermsView({ model, formatMoney, onOpenEntity, onQueryChang
     <TableToolbar query={query} onQueryChange={onQueryChange} searchPlaceholder="Search buyer query, target or campaign..." sortId="adsw-sort-terms" />
     <details className="adsw-source-explainer"><summary>About search terms &amp; attribution</summary>
       <p><strong>Customer search attribution:</strong> Buyer searches resulting in at least one click are distinct from targeting keywords. For multi-product ad groups, spend remains shared at the ad group level and is not allocated per SKU.</p>
+      <p>Negative badges reflect enabled exclusions in the latest synced settings for the row’s campaign or ad group. Amazon may also match close keyword variations. Performance still reflects the selected report dates.</p>
       <p>An ASIN may represent another product’s page or placement; it does not prove the customer typed that identifier. Images come from available Amazon catalog data.</p>
     </details>
-    <PerformanceTable rows={searchTerms} kind="searchTerm" formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
+    <PerformanceTable rows={searchTerms} kind="searchTerm" sorting={{ query, onQueryChange }} formatMoney={formatMoney} onOpenEntity={onOpenEntity} />
     <TablePagination page={query.page} totalRows={totalRows} pageSize={pageSize} visibleRows={searchTerms.length} noun="search terms" onPageChange={page => onQueryChange({ page })} />
   </div>
 }
