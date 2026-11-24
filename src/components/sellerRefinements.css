@@ -83,3 +83,14 @@
   .pulse-orders-table td:nth-child(5){display:none}
 }
 
+
+.weekly-payout{padding:14px;margin-bottom:18px}
+.weekly-payout h2{font-size:16px;margin:0 0 10px}
+.weekly-payout p,.weekly-payout small{color:var(--muted);font-size:11px}
+.weekly-payout p{margin:8px 0 0}
+.weekly-payout-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0}
+.weekly-payout-grid>div{display:grid;align-content:start;gap:4px;padding:10px;border:1px solid var(--line);border-radius:8px}
+.weekly-payout-grid dt{font-size:12px}
+.weekly-payout-grid dd{display:grid;gap:3px;margin:0}
+.weekly-payout-grid strong{font-size:17px;overflow-wrap:anywhere}
+@media(max-width:550px){.weekly-payout-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.weekly-payout-grid>div:last-child{grid-column:1/-1}}

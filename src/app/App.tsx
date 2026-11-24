@@ -31,6 +31,7 @@ import { ProfitLeakAlerts } from '../components/ProfitLeakAlerts'
 import { findReimbursementClaims } from '../core/reimbursements/reimbursementFinder'
 import { ReimbursementFinderModal } from '../components/ReimbursementFinderModal'
 import { forecastCashSettlements } from '../core/cashflow/payoutForecast'
+import { WeeklyPayoutCard } from '../components/WeeklyPayoutCard'
 import { CashFlowForecastModal } from '../components/CashFlowForecastModal'
 import { FinancialSummary } from '../components/FinancialSummary'
 import { ProductsWorkspace } from '../features/inventory/ProductsWorkspace'
@@ -725,6 +726,10 @@ export function App() {
           {dataset ? <>
 
           {pulseScoreboard ? <PulseScoreboard onRequestDetails={hostedDelivery ? requestOrderDetails : undefined} scoreboard={pulseScoreboard} onSelectPeriod={(from, to) => { setFilterUpdatePending(true); setFromDate(from); setToDate(to); setPeriodChoice('CUSTOM') }} /> : null}
+          {automaticEnabled && automaticDelivery.status?.configured && currentImportId === `api:${automaticDelivery.status.connectionKey}` ? (
+            <WeeklyPayoutCard key={currentImportId} account={automaticDelivery.status.connectionKey}
+              records={(imports.find(item => item.id === currentImportId) as AutomaticReading | undefined)?.sourceRecords} />
+          ) : null}
           {profitLeakAlerts.length ? <ProfitLeakAlerts alerts={profitLeakAlerts} onSelectSku={sku => openSearchProduct(sku)} /> : null}
           <div className="section-label"><span>Business snapshot</span><small>Primary metrics</small></div>
           {!costStatus.complete ? <div className="profit-status" role="status"><span>{missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated profit · missing product costs are assumed ₹0.' : 'Profit is incomplete until product costs are added.'}</span><button className="text-btn" onClick={() => setActive('Costs')}>Add missing costs →</button></div> : null}

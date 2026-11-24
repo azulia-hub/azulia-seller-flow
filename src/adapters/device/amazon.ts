@@ -1,3 +1,4 @@
+import { createPayoutReader } from '../amazon-api/payouts'
 import { createInventoryReader } from '../amazon-inventory/reader'
 import { nativeRequest } from './bridge'
 import { createActivityReader } from '../amazon-api/reader'
@@ -31,6 +32,7 @@ export async function androidAmazon(body: Record<string, unknown>, signal: Abort
       await nativeRequest('session.connect', { account, clientId: body.clientId, clientSecret: body.clientSecret, refreshToken: body.refreshToken })
       return { accessToken: 'native-managed' }
     }
+    case 'payouts': return { ...await createPayoutReader({}, nativeFetch, 'native-managed')(signal) }
     case 'inventory': return createInventoryReader({},nativeFetch,'native-managed')({source:body.source==='listings'?'listings':'fba',sellerId:text(body.sellerId),nextToken:text(body.nextToken)||null},signal)
     case 'order': return orders.one(text(body.orderId), signal)
     case 'orderItems': return orders.items(text(body.orderId), signal, text(body.nextToken) || null)

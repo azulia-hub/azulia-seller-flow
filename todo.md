@@ -1,5 +1,11 @@
 # Seller Analytics TODO
 
+## Easy Ship labels into PDF Cutter — deferred
+
+- [ ] Add **Get labels** for selected, already-scheduled Easy Ship orders. Retrieve Amazon’s shipping-label PDF and pass it directly to the existing PDF Cutter for four-up A4 output. Keep pickup schedules as they are.
+- [ ] Request **Direct to Consumer Shipping (Restricted)** for Azulia’s SP-API app, or verify access through an existing **Tax Invoicing (Restricted)** role. After approval, reauthorize SP-API and replace only its refresh token. Preserve the separate Amazon Ads authorization and cache. Token rotation changes Azulia’s Orders and Finance cache key, so check how to retain that history before replacing the token.
+- [ ] Retest with the approved role. The live check returned **200 OK** with an empty Easy Ship label feed list and **403 Unauthorized** for label reports. Verify the Restricted Data Token download and run a real PDF through the cutter before enabling the feature. [Amazon Easy Ship report requirements](https://developer-docs.amazon/sp-api/lang-US/docs/report-type-values-easy-ship)
+
 ## Android launch crash, chrome and logo — fixed in v0.1.3 (2026-11-13)
 
 Crash log confirms Java OutOfMemoryError while parsing saved workspace readings. Transfer readings as bounded raw chunks; compress new readings in the renderer, never materialize them as Java JSONObject graphs, and commit uploads atomically with version checks. Preserve legacy readings through chunked reads, source data and credentials. Remove native toolbar, use existing Azulia logo for launcher/startup, and show bundled UI promptly. Build/install same-key update and open/check the app on the connected Pixel, explicitly authorized by owner. Signed v0.1.3 built and installed over existing data. Opened on Pixel, confirmed dashboard loads and remains alive with no fresh crash; fresh-launch screenshot shows the Azulia logo, the second launch restored the dashboard with saved orders, the native toolbar is absent, and no fresh crash was logged for either checked process. No broad test suite or push.

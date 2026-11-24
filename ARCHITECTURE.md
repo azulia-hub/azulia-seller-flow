@@ -1,5 +1,15 @@
 # Seller Analytics — Architecture
 
+## Weekly Amazon payout
+
+The Dashboard requests recent settlement groups through the account-scoped Amazon
+connection. The adapter matches financial event group IDs to source account labels
+and exposes only amounts, dates and status needed for the card. The pure weekly
+selector uses the current India calendar week and the account’s seven-day cadence
+for open groups. Confirmed amounts use the source transfer date and status.
+Unmatched groups or missing channels leave the total unavailable. Open balances
+remain estimates. The card does not contribute to operating profit.
+
 ## Timely delivery and source-backed order navigation (ADR-092)
 
 Desktop financial acknowledgments no longer wait for optional review/inventory

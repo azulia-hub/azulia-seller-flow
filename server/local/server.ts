@@ -13,6 +13,7 @@ import type { ImageStore } from './images.ts'
 import type { AdsService } from './ads/service.ts'
 import { adsReportKind, type AdsReportKind } from '../../src/adapters/amazon-ads/supplemental.ts'
 import { entityKind } from '../../src/adapters/amazon-ads/entities.ts'
+import { createPayoutReader } from '../../src/adapters/amazon-api/payouts.ts'
 import { createCatalogReader } from '../../src/adapters/amazon-api/catalog.ts'
 import { gzip, gunzip } from 'node:zlib'
 import { promisify } from 'node:util'
@@ -34,6 +35,8 @@ export function createLocalServer(options: { port: number; dist: string; credent
   const adsCatalogReader = createCatalogReader(options.credentials, options.fetch ?? fetch)
   const adsCatalogCache = new Map<string, { at: number; value: unknown }>()
   let inFlight = false
+  const readPayouts = createPayoutReader(options.credentials, options.fetch ?? fetch)
+  let payoutRequest: { expires: number; result: ReturnType<typeof readPayouts> } | undefined
   const connectionKey = createHash('sha256').update(JSON.stringify(options.credentials)).digest('hex')
   function send(response: ServerResponse, status: number, body: string | Buffer, type = 'application/json; charset=utf-8',extra:Record<string,string>={}) {
     response.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff',...extra })
@@ -209,6 +212,18 @@ export function createLocalServer(options: { port: number; dist: string; credent
         return
       }
       if (request.method !== 'GET' && request.method !== 'HEAD') { json(response, 405, { error: 'method_not_allowed' }); return }
+      if (path === '/api/report-sync/payouts' && request.method === 'GET') {
+        if (!options.sync || new URL(request.url!, origin).searchParams.get('account') !== connectionKey) {
+          json(response, 409, { error: 'Connect the active Amazon account to load payouts.' }); return
+        }
+        try {
+          if (!payoutRequest || Date.now() >= payoutRequest.expires) {
+            payoutRequest = { expires: Date.now() + 4 * 60000, result: readPayouts(AbortSignal.timeout(25000)) }
+          }
+          json(response, 200, await payoutRequest.result)
+        } catch { json(response, 502, { error: 'Amazon payout data is unavailable.' }) }
+        return
+      }
       if (path === '/api/report-sync/status') { json(response, 200, options.sync?.status() ?? { connectionKey, configured: false, state: 'idle', revision: 0, records: 0, coverage: [], error: null, lastSync: null, nextAttempt: null }); return }
       if (path === '/api/report-sync/data') {
         if (!options.sync) { json(response, 503, { error: 'Configure the local Amazon connection first.' }); return }

@@ -640,6 +640,17 @@ export async function clearAndResyncHosted(range?:{from:string;to:string}) {
 
 export async function hostedFetch(input: string, init?: RequestInit): Promise<Response> {
   await initializeHosted()
+  if (input.startsWith('/api/report-sync/payouts?')) {
+    const account = new URL(input, location.origin).searchParams.get('account')
+    if (!account || account !== view.account || !session) return Response.json({ error: 'Connect the active Amazon account to load payouts.' }, { status: 409 })
+    try {
+      const result = await authorized('payouts', {}, init?.signal ?? AbortSignal.timeout(25000))
+      if (account !== view.account || !session) return Response.json({ error: 'The Amazon account changed.' }, { status: 409 })
+      return Response.json(result)
+    } catch (cause) {
+      return Response.json({ error: cause instanceof Error ? cause.message : 'Amazon payout data is unavailable.' }, { status: 502 })
+    }
+  }
   if (input.startsWith('/api/report-sync/range')) {
     if (init?.body && typeof init.body === 'string' && session && view.account && !run) {
       try {

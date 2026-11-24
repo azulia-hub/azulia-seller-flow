@@ -1,5 +1,10 @@
 # Seller Analytics — Roadmap
 
+## Weekly Dashboard payout
+
+- [x] Show separate COD and Electronic balances and the weekly deposit total from Amazon Finance. Label open balances and confirmed transfers.
+- [ ] Verify the payout card in the installed Android app after a build that supports the Finance payout request.
+
 ## Order delivery, notification details and review priority — ADR-092
 
 - [x] Reduce desktop recent-order polling interval to one minute without bypassing source cutoffs/rate limits; release completed-reading delivery from optional network work and reduce changed-source coalescing delay.

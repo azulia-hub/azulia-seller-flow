@@ -89,7 +89,8 @@ final class AmazonSession {
         String path=url.getPath();
         boolean reviewGet=method.equals("GET")&&path.matches("/solicitations/v1/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}");
         boolean reviewPost=method.equals("POST")&&path.matches("/solicitations/v1/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}/solicitations/productReviewAndSellerFeedback");
-        if (!reviewGet && !reviewPost && !path.equals("/fba/inventory/v1/summaries") && !path.matches("/listings/2021-08-01/items/[A-Z0-9]{8,32}") && !path.equals("/finances/2024-06-19/transactions") && !path.equals("/orders/v0/orders") && !path.matches("/orders/v0/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}(/orderItems)?") && !path.matches("/catalog/2022-04-01/items/[A-Z0-9]{10}")) throw new IllegalArgumentException("Unsupported Amazon operation.");
+        boolean payoutGet=method.equals("GET")&&path.equals("/finances/v0/financialEventGroups");
+        if (!payoutGet && !reviewGet && !reviewPost && !path.equals("/fba/inventory/v1/summaries") && !path.matches("/listings/2021-08-01/items/[A-Z0-9]{8,32}") && !path.equals("/finances/2024-06-19/transactions") && !path.equals("/orders/v0/orders") && !path.matches("/orders/v0/orders/[A-Z0-9]{3}-[0-9]{7}-[0-9]{7}(/orderItems)?") && !path.matches("/catalog/2022-04-01/items/[A-Z0-9]{10}")) throw new IllegalArgumentException("Unsupported Amazon operation.");
         if (value.length()>24000) throw new IllegalArgumentException("Amazon request exceeds limit.");
         for (int attempt=0;attempt<(method.equals("POST")?1:2);attempt++) {
             HttpsURLConnection connection=open(value);connection.setRequestMethod(method);
