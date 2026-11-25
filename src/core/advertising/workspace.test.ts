@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { advertisingGroup, aggregateAdvertisingFacts, type AdvertisingDataset, type AdvertisingFact } from './workspace'
+import { advertisingGroup, aggregateAdvertisingFacts, summarizeAdvertisingPerformance, type AdvertisingDataset, type AdvertisingFact } from './workspace'
 
 const fact = (id: string, productId: string | null, spend: number, attributedSales: number): AdvertisingFact => ({ id, datasetId: 'products', date: '2026-11-19', productId, campaignId: 'campaign', adGroupId: 'group', spend, attributedSales, promotedSales: attributedSales, otherProductSales: 0, impressions: 100, clicks: 10, purchases: 1, units: 1, raw: { unknown: 'preserved' } })
 const data = (facts: readonly AdvertisingFact[]): AdvertisingDataset => ({ id: 'products', grain: 'PRODUCT', currency: 'INR', moneyDecimals: 2, timezone: 'Asia/Kolkata', taxBasis: 'EXCLUDING_TAX', attributionDays: 7, facts })
@@ -36,4 +36,17 @@ describe('advertising workspace aggregation', () => {
     expect(() => advertisingGroup({ id: 'g', name: 'Family', version: 1, origin: 'CATALOG', productIds: ['a'] })).toThrow('verified parent')
     expect(() => advertisingGroup({ id: 'g', name: 'Family', version: 1, origin: 'MANUAL', productIds: [] })).toThrow('at least one')
   })
+})
+
+it('totals disjoint search rows using currency precision and weighted ACOS', () => {
+  const rows = [
+    { spend: 10.11, attributedSales: 100, purchases: 2 },
+    { spend: 2.12, attributedSales: 1, purchases: 1 },
+  ]
+  expect(summarizeAdvertisingPerformance(rows, 2)).toEqual({
+    spend: 12.23, attributedSales: 101, purchases: 3, acos: 12.23 / 101 * 100,
+  })
+  expect(summarizeAdvertisingPerformance([{ spend: null, attributedSales: 100, purchases: null }], 2))
+    .toEqual({ spend: null, attributedSales: 100, purchases: null, acos: null })
+  expect(summarizeAdvertisingPerformance([], 2)).toEqual({ spend: 0, attributedSales: 0, purchases: 0, acos: null })
 })

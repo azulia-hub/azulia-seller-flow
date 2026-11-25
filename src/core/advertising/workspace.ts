@@ -69,6 +69,32 @@ export interface AdvertisingQuery {
 }
 const divide = (a: number | null, b: number | null, scale = 1) => a !== null && b !== null && b > 0 ? a / b * scale : null
 
+type AdditiveMetric = 'spend' | 'attributedSales' | 'promotedSales' | 'otherProductSales' | 'impressions' | 'clicks' | 'purchases' | 'units'
+
+function sumAdvertisingMetric<K extends AdditiveMetric>(rows: readonly Readonly<Record<K, number | null>>[], field: K, scale: number): number | null {
+  let total = 0
+  for (const row of rows) {
+    const value = row[field]
+    if (value === null) return null
+    if (!Number.isFinite(value) || value < 0) throw new Error(`Invalid advertising ${field}; no source observations were discarded.`)
+    const amount = scale ? Math.round(value * scale) : value
+    if (scale && !Number.isSafeInteger(amount)) throw new Error('Advertising amount exceeds safe currency precision.')
+    total += amount
+    if (scale && !Number.isSafeInteger(total)) throw new Error('Advertising total exceeds safe currency precision.')
+  }
+  return scale ? total / scale : total
+}
+
+export type AdvertisingPerformanceTotals = Pick<AdvertisingMetrics, 'spend' | 'attributedSales' | 'purchases' | 'acos'>
+
+/** Combine disjoint, already-filtered performance rows. */
+export function summarizeAdvertisingPerformance(rows: readonly Omit<AdvertisingPerformanceTotals, 'acos'>[], moneyDecimals: number): AdvertisingPerformanceTotals {
+  const scale = 10 ** moneyDecimals
+  const spend = sumAdvertisingMetric(rows, 'spend', scale)
+  const attributedSales = sumAdvertisingMetric(rows, 'attributedSales', scale)
+  return { spend, attributedSales, purchases: sumAdvertisingMetric(rows, 'purchases', 0), acos: divide(spend, attributedSales, 100) }
+}
+
 /** Ratios are recomputed from summed bases; overlapping sources/observations fail. */
 export function aggregateAdvertisingFacts(dataset: AdvertisingDataset, query: AdvertisingQuery): {
   metrics: AdvertisingMetrics; includedFactIds: readonly string[]; unassignedProductFacts: number
@@ -90,20 +116,7 @@ export function aggregateAdvertisingFacts(dataset: AdvertisingDataset, query: Ad
     if (members && !members.has(fact.productId!)) continue
     selected.push(fact)
   }
-  const sum = (field: 'spend' | 'attributedSales' | 'promotedSales' | 'otherProductSales' | 'impressions' | 'clicks' | 'purchases' | 'units', monetary = false): number | null => {
-    const scale = monetary ? 10 ** dataset.moneyDecimals : 1
-    let total = 0
-    for (const fact of selected) {
-      const value = fact[field]
-      if (value === null) return null
-      if (!Number.isFinite(value) || value < 0) throw new Error(`Invalid advertising ${field}; no source observations were discarded.`)
-      const amount = monetary ? Math.round(value * scale) : value
-      if (monetary && !Number.isSafeInteger(amount)) throw new Error('Advertising amount exceeds safe currency precision.')
-      total += amount
-      if (monetary && !Number.isSafeInteger(total)) throw new Error('Advertising total exceeds safe currency precision.')
-    }
-    return total / scale
-  }
+  const sum = (field: AdditiveMetric, monetary = false) => sumAdvertisingMetric(selected, field, monetary ? 10 ** dataset.moneyDecimals : 0)
   const spend = sum('spend', true), attributedSales = sum('attributedSales', true), impressions = sum('impressions'), clicks = sum('clicks'), purchases = sum('purchases')
   return { metrics: { spend, attributedSales, promotedSales: sum('promotedSales', true), otherProductSales: sum('otherProductSales', true), impressions, clicks, purchases, units: sum('units'),
     acos: divide(spend, attributedSales, 100), roas: divide(attributedSales, spend), cpc: divide(spend, clicks), ctr: divide(clicks, impressions, 100), conversionRate: divide(purchases, clicks, 100),

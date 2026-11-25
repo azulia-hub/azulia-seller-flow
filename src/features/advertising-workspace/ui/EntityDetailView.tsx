@@ -1,3 +1,6 @@
+import { summarizeAdvertisingPerformance } from '../../../core/advertising/workspace'
+import { selectSearchTermRows } from '../searchTermRows'
+import { SearchTermsControls } from './SearchTermsView'
 import { PerformanceTable } from './PerformanceTable'
 import { useVisibleAdsAsins } from './VisibleAsins'
 import { DetailPagination, useDetailPage } from './DetailPagination'
@@ -13,6 +16,7 @@ import type {
   AdvertisingEntityRow,
   AdvertisingSortQuery,
   AdvertisingTargetRow,
+  SearchTermQuery,
 } from '../contract'
 import { SummaryCards } from './SummaryCards'
 import { TrendChart } from './TrendChart'
@@ -208,11 +212,9 @@ export function EntityDetailView({
           )}
 
           {currentSection === 'searchTerms' && (
-            <DetailEntityTable
-              title="Customer Search Terms"
-              key="searchTerm"
-              kind="searchTerm"
+            <DetailSearchTerms
               rows={detail.searchTerms}
+              moneyDecimals={detail.searchTermMoneyDecimals ?? 2}
               formatMoney={formatMoney}
               onOpenEntity={onOpenEntity}
             />
@@ -239,7 +241,7 @@ function DetailEntityTable({
   onOpenEntity,
 }: {
   readonly title: string
-  readonly kind: 'campaign' | 'product' | 'searchTerm'
+  readonly kind: 'campaign' | 'product'
   readonly rows: readonly AdvertisingEntityRow[]
   readonly formatMoney: (n: number) => string
   readonly onOpenEntity: (entity: AdvertisingEntity) => void
@@ -261,6 +263,35 @@ function DetailEntityTable({
       <DetailPagination {...pagination} />
     </div>
   )
+}
+
+function DetailSearchTerms({ rows, moneyDecimals, formatMoney, onOpenEntity }: {
+  readonly rows: readonly AdvertisingEntityRow[]
+  readonly moneyDecimals: number
+  readonly formatMoney: (amount: number) => string
+  readonly onOpenEntity: (entity: AdvertisingEntity) => void
+}) {
+  const [query, setQuery] = useState<SearchTermQuery>({ search: '', sort: 'SPEND', direction: 'DESC', sortSelected: false })
+  const filtered = Boolean(query.search.trim())
+  const selected = useMemo(() => {
+    const matching = filtered || query.sortSelected ? selectSearchTermRows(rows, query) : rows
+    return { rows: matching, metrics: summarizeAdvertisingPerformance(matching.map(row => row.metrics), moneyDecimals) }
+  }, [rows, query, filtered, moneyDecimals])
+  const pagination = useDetailPage(selected.rows)
+  useVisibleAdsAsins(pagination.rows.map(row => row.imageAsin))
+
+  function onQueryChange({ page, ...patch }: Partial<SearchTermQuery> & { page: number }) {
+    setQuery(current => ({ ...current, ...patch }))
+    pagination.setPage(page)
+  }
+
+  return <div className="adsw-table-card">
+    <SearchTermsControls query={query} onQueryChange={onQueryChange} />
+    <PerformanceTable rows={pagination.rows} kind="searchTerm" label="Customer Search Terms"
+      sorting={{ query, onQueryChange }} formatMoney={formatMoney} onOpenEntity={onOpenEntity}
+      totals={{ metrics: selected.metrics, label: filtered ? 'Matching terms total' : 'All search terms total' }} />
+    <DetailPagination {...pagination} />
+  </div>
 }
 
 function DetailTargetsTable({

@@ -1,3 +1,4 @@
+import type { AdvertisingPerformanceTotals } from '../../../core/advertising/workspace'
 import { Fragment, useId, useState } from 'react'
 import type { AdvertisingEntity, AdvertisingEntityRow, AdvertisingSortQuery } from '../contract'
 import { AdsIdentity } from './AdsIdentity'
@@ -8,6 +9,7 @@ interface PerformanceTableProps {
   readonly rows: readonly AdvertisingEntityRow[]
   readonly kind: 'campaign' | 'searchTerm' | 'product'
   readonly label?: string
+  readonly totals?: { readonly label: string; readonly metrics: AdvertisingPerformanceTotals }
   readonly sorting?: {
     readonly query: AdvertisingSortQuery
     readonly onQueryChange: (patch: AdvertisingSortQuery & { page: number }) => void
@@ -48,11 +50,20 @@ function MetricHeader({ metric, label, sorting }: {
 }
 
 /** The same compact evidence table serves campaign previews, campaigns and terms. */
-export function PerformanceTable({ rows, kind, label, formatMoney, onOpenEntity, sorting }: PerformanceTableProps) {
+export function PerformanceTable({ rows, kind, label, formatMoney, onOpenEntity, sorting, totals }: PerformanceTableProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   return <div className="adsw-table-wrapper">
     <table className={`adsw-table adsw-performance-table${sorting ? " adsw-sortable-table" : ""}`} aria-label={label ?? (kind === 'campaign' ? 'Campaign performance' : kind === 'product' ? 'Product performance' : 'Search term performance')}>
-      <thead><tr><th>{kind === 'campaign' ? 'Campaign' : kind === 'product' ? 'Product / SKU' : 'Customer Search Term'}</th>{sortableMetrics.map(([metric, name]) => <MetricHeader key={metric} metric={metric} label={name} sorting={sorting} />)}<th>Review</th><th><span className="adsw-visually-hidden">More metrics</span></th></tr></thead>
+      <thead><tr><th>{kind === 'campaign' ? 'Campaign' : kind === 'product' ? 'Product / SKU' : 'Customer Search Term'}</th>{sortableMetrics.map(([metric, name]) => <MetricHeader key={metric} metric={metric} label={name} sorting={sorting} />)}<th>Review</th><th><span className="adsw-visually-hidden">More metrics</span></th></tr>
+      {totals ? <tr className="adsw-performance-totals">
+        <th scope="row">{totals.label}</th>
+        <td className="is-numeric">{totals.metrics.spend === null ? '—' : formatMoney(totals.metrics.spend)}</td>
+        <td className="is-numeric">{totals.metrics.attributedSales === null ? '—' : formatMoney(totals.metrics.attributedSales)}</td>
+        <td className="is-numeric">{formatPercent(totals.metrics.acos)}</td>
+        <td className="is-numeric">{formatInteger(totals.metrics.purchases)}</td>
+        <td colSpan={2} className="adsw-total-spacer" />
+      </tr> : null}
+      </thead>
       <tbody>{rows.length ? rows.map(row => <PerformanceRow key={row.entity.id} row={row} kind={kind} formatMoney={formatMoney} onOpenEntity={onOpenEntity} expanded={expandedId === row.entity.id} onToggle={() => setExpandedId(expandedId === row.entity.id ? null : row.entity.id)} />) : <tr className="adsw-performance-empty"><td colSpan={7}>No {kind === 'campaign' ? 'campaigns' : kind === 'product' ? 'products' : 'search terms'} found matching current filters.</td></tr>}</tbody>
     </table>
   </div>

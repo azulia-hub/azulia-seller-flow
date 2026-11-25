@@ -1210,3 +1210,26 @@ html[data-theme='dark'] .adsw-badge-status.is-paused {
   }
   .adsw-column-sort { justify-content: center; padding-inline: 2px; }
 }
+
+.adsw-search-fields { margin: 0 16px 10px; }
+.adsw-root .adsw-performance-table .adsw-performance-totals > * {
+  background: var(--panel2, #f1eee6);
+  color: var(--text, #292720);
+  font-weight: 700;
+}
+.adsw-root .adsw-performance-totals > th { text-transform: none; }
+@media (max-width: 700px) {
+  .adsw-search-fields { margin-inline: 12px; }
+  .adsw-root .adsw-sortable-table thead .adsw-performance-totals > th {
+    display: block;
+    grid-column: 1 / -1;
+    width: auto;
+    padding: 6px 8px;
+  }
+  .adsw-root .adsw-performance-table .adsw-performance-totals > td {
+    padding: 6px 2px;
+    font-size: 11px;
+    text-align: center;
+  }
+  .adsw-root .adsw-performance-table .adsw-performance-totals > .adsw-total-spacer { display: none; }
+}

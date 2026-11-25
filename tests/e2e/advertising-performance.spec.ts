@@ -18,7 +18,7 @@ for (const width of [375, 1280]) test(`large Ads reports stay responsive and pag
   })
   const common = { date: '2026-11-10', campaignId: 'c', campaignName: 'Campaign', adGroupId: 'g', adGroupName: 'Group', impressions: 10, clicks: 2, cost: 1, sales7d: 5, attributedSalesSameSku7d: 4, salesOtherSku7d: 1, purchases7d: 1, unitsSoldClicks7d: 1 }
   const rows = {
-    searchTerm: Array.from({ length: 10000 }, (_, i) => ({ ...common, keywordId: `k${i % 1000}`, keyword: `Keyword ${i % 1000}`, searchTerm: `term ${i % 6000}` })),
+    searchTerm: Array.from({ length: 10000 }, (_, i) => ({ ...common, keywordId: `k${i % 1000}`, keyword: i === 5999 ? 'Metal shelf' : `Keyword ${i % 1000}`, searchTerm: `term ${i % 6000}` })),
     targeting: Array.from({ length: 4000 }, (_, i) => ({ ...common, keywordId: `k${i % 1000}`, keyword: `Keyword ${i % 1000}` })),
     purchasedProduct: [],
   }
@@ -48,6 +48,7 @@ for (const width of [375, 1280]) test(`large Ads reports stay responsive and pag
   await expect(termPages).toContainText('Page 1 of')
   await expect(page.getByRole('button', { name: 'Sort direction: Ascending', exact: true })).toBeVisible()
   const termTable = page.getByRole('table', { name: 'Search term performance' })
+  await expect(termTable.getByRole('row', { name: /All search terms total/ })).toContainText('₹10000.00')
   const firstSpend = termTable.locator('tbody tr').first().getByRole('cell').nth(1)
   await expect(firstSpend).toContainText('1.00')
   await termTable.getByRole('button', { name: 'Spend, sort descending' }).click()
@@ -60,7 +61,19 @@ for (const width of [375, 1280]) test(`large Ads reports stay responsive and pag
   await expect(page.locator('.adsw-view-content tbody tr')).toHaveCount(1)
   await expect(page.locator('.adsw-view-content tbody')).toContainText('term 5999')
   await expect(termPages.getByRole('button', { name: 'Next →', exact: true })).toBeDisabled()
+  const matchedTotal = termTable.getByRole('row', { name: /Matching terms total/ })
+  await expect(matchedTotal).toContainText('₹1.00')
+  await expect(matchedTotal).toContainText('₹5.00')
+  await expect(matchedTotal).toContainText('20.0%')
+  await page.getByRole('radio', { name: 'Target keyword / ASIN' }).check()
+  await termSearch.fill('metla shelf')
+  await expect(termTable.locator('tbody')).toContainText('term 5999')
+  await expect(matchedTotal).toContainText('₹1.00')
+  await page.getByRole('radio', { name: 'Customer search term' }).check()
+  await expect(termTable.locator('tbody')).toContainText('No search terms found')
+  await expect(matchedTotal).toContainText('₹0.00')
   await termSearch.fill('')
+  await expect(termTable.getByRole('row', { name: /All search terms total/ })).toContainText('₹10000.00')
   await page.getByRole('tab', { name: 'Campaigns', exact: true }).click()
   await page.getByRole('button', { name: 'Campaign', exact: true }).click()
   const drawer = page.getByTestId('entity-detail-drawer')

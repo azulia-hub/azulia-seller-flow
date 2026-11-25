@@ -3,6 +3,7 @@ import { aggregateAdvertisingFacts, indexAdvertisingFacts } from '../../core/adv
 import { resolveWorkspaceProducts, sponsoredWorkspaceSource } from '../../adapters/amazon-ads/workspaceSource'
 import type { CanonicalFinancialEvent } from '../../core/data/types'
 import { replaceSupplementalWindow, supplementalWorkspaceSource } from '../../adapters/amazon-ads/supplemental'
+import { selectSearchTermRows } from '../../features/advertising-workspace/searchTermRows'
 import { buildAdvertisingWorkspaceModel } from './buildWorkspaceModel'
 import { enrichWorkspaceModel } from './enrichWorkspaceModel'
 import { calculateAdvertisingWorkspace } from './calculateWorkspace'
@@ -24,6 +25,21 @@ it('does not build off-screen search rows and keeps all headline observations', 
   const terms = buildAdvertisingWorkspaceModel({ ...input, query: { ...query, view: 'searchTerms' }, supplemental: { searchTerm } })
   expect(terms.totalRows).toBe(6000)
   expect(terms.searchTerms).toHaveLength(30)
+  expect(terms.searchTermTotals).toEqual({ spend: 10000, attributedSales: 40000, purchases: 10000, acos: 25, filtered: false })
+  const matching = buildAdvertisingWorkspaceModel({ ...input, query: { ...query, view: 'searchTerms', search: 'keywrod 1', searchTermField: 'TARGET' }, supplemental: { searchTerm } })
+  expect(matching.searchTermTotals).toEqual({ spend: 50, attributedSales: 200, purchases: 50, acos: 25, filtered: true })
+  expect(matching.totalRows).toBe(30)
+})
+
+it('ranks literal keyword hits before typo matches and looks up ASINs literally', () => {
+  const metrics = aggregateAdvertisingFacts({ ...source.dataset, facts: [] }, query).metrics
+  const rows = ['shoo rack', 'shoe rack', 'B087654321', 'B087654322'].map((name, index) => ({
+    entity: { kind: 'SEARCH_TERM' as const, id: String(index) }, name,
+    metrics: { ...metrics, spend: index }, change: null, status: null,
+  }))
+  expect(selectSearchTermRows(rows, { ...query, search: 'shoo rack' }).map(row => row.name)).toEqual(['shoo rack', 'shoe rack'])
+  expect(selectSearchTermRows(rows, { ...query, search: 'B087654321' }).map(row => row.name)).toEqual(['B087654321'])
+  expect(selectSearchTermRows(rows, { ...query, search: 'B087654323' })).toEqual([])
 })
 
 it('indexes once instead of scanning every source row per visible recommendation', () => {

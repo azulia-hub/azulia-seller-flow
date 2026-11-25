@@ -42,6 +42,12 @@ matching followed by the legacy order-key fallback on caller-scoped records.
 
 ## Advertising responsiveness (ADR-091)
 
+Search terms match buyer text, reported targets and campaign/ad-group labels in
+the worker. The search scope can limit matches to buyer text or targets. Keyword
+typos can match by one edit, with literal hits first under the default sort.
+The selector sums the complete filtered result before pagination and recalculates
+ACOS from total spend and attributed sales.
+
 `calculateWorkspace.ts` orchestrates financial/Ads/recommendation selectors in
 `workspace.worker.ts`. The React adapter keeps one request in flight, coalesces
 new specifications and rejects stale responses, retaining the last completed model.

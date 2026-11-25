@@ -1,6 +1,7 @@
+import { selectSearchTermRows } from '../../features/advertising-workspace/searchTermRows'
 import { sortPerformanceRows } from '../../features/advertising-workspace/sortPerformanceRows'
 import { getIndiaToday } from '../../core/sync/planner'
-import { aggregateAdvertisingFacts, advertisingDimensions, compareAdvertisingMetrics, joinAdvertisingFinancials, type AdvertisingDataset, type AdvertisingFinancialProduct, type AdvertisingMetrics, type AdvertisingQuery } from '../../core/advertising/workspace'
+import { aggregateAdvertisingFacts, advertisingDimensions, compareAdvertisingMetrics, summarizeAdvertisingPerformance, joinAdvertisingFinancials, type AdvertisingDataset, type AdvertisingFinancialProduct, type AdvertisingMetrics, type AdvertisingQuery } from '../../core/advertising/workspace'
 import { rankAdvertisingEfficiency, rankAdvertisingLosses } from '../../core/insights/focusAnalysis'
 import type { AdsWorkspaceSource } from '../../adapters/amazon-ads/workspaceSource'
 import type { AdvertisingDetailModel, AdvertisingEntity, AdvertisingEntityRow, AdvertisingFinding, AdvertisingGroup, AdvertisingSummaryMetric, AdvertisingTrendPoint, AdvertisingViewQuery, AdvertisingWorkspaceModel } from '../../features/advertising-workspace/contract'
@@ -103,7 +104,11 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
     const tokens = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return sortPerformanceRows(rows.filter(row => tokens.every(token => `${row.name} ${row.subtitle ?? ''}`.toLowerCase().includes(token))), query)
   }
-  const campaigns = sortRows(rowChanges(campaignRows, campaignComparisons)), products = sortRows(rowChanges(productRows, productComparisons)), searchTerms = sortRows(supplemental.searchTerms)
+  const campaigns = sortRows(rowChanges(campaignRows, campaignComparisons)), products = sortRows(rowChanges(productRows, productComparisons))
+  const searchTerms = query.view === 'searchTerms' ? selectSearchTermRows(supplemental.searchTerms, query) : []
+  const searchTermTotals = query.view === 'searchTerms' && input.supplemental?.searchTerm
+    ? { ...summarizeAdvertisingPerformance(searchTerms.map(row => row.metrics), input.supplemental.searchTerm.dataset.moneyDecimals), filtered: Boolean(query.search.trim()) }
+    : undefined
   const campaignReview = rankAdvertisingEfficiency(campaignRows.map(row => ({ id: row.entity.id, label: row.name, value: row.metrics.spend ?? 0, adSpend: row.metrics.spend ?? undefined, sales: row.metrics.attributedSales ?? undefined })))
   const productReview = rankAdvertisingLosses(productRows.map(row => ({ id: row.entity.id, label: row.name, value: 0, adSpend: row.metrics.spend ?? undefined, sales: row.metrics.attributedSales ?? undefined, totalSales: row.metrics.totalProductSales ?? undefined, profitAfterAds: row.metrics.profitAfterAds })))
   const findings: AdvertisingFinding[] = fullCoverage ? [
@@ -121,7 +126,7 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
     const detailSupplemental = supplementalModel(source, input.supplemental ?? {}, detailQuery)
     const detailCampaignRows: AdvertisingEntityRow[] = advertisingDimensions(dataset, detailQuery, 'campaignId').map(item => ({ entity: { kind: 'CAMPAIGN', id: item.id ?? 'unidentified-campaign' }, name: item.id ? source?.campaigns.get(item.id)?.name || item.id : 'Unidentified campaign', metrics: item.metrics, change: null, status: null, note: 'Performance is restricted to the selected product/group context.' }))
     const detailProductRows: AdvertisingEntityRow[] = advertisingDimensions(dataset, detailQuery, 'productId').map(item => ({ entity: { kind: 'PRODUCT', id: item.id ?? 'unidentified-product' }, name: item.id ? productName(item.id) : 'Unidentified product', metrics: detailQuery.campaignId || item.id === null ? item.metrics : finance(item.metrics, [item.id]), change: null, status: null }))
-    detail = { entity, title: group?.name || (entity.kind === 'CAMPAIGN' ? source?.campaigns.get(entity.id)?.name : productName(entity.id)) || entity.id,
+    detail = { entity, searchTermMoneyDecimals: input.supplemental?.searchTerm?.dataset.moneyDecimals, title: group?.name || (entity.kind === 'CAMPAIGN' ? source?.campaigns.get(entity.id)?.name : productName(entity.id)) || entity.id,
       subtitle: group ? `${group.productIds.length} products · group version ${group.version}` : entity.kind === 'CAMPAIGN' ? 'Observed campaign performance; current state is not supplied by this report.' : 'Advertised-product performance and compatible financial context.',
       summary: summary(detailMetrics, {}, entity.kind === 'CAMPAIGN' ? 'Campaign-level total product sales are unavailable.' : financialReason), metrics: detailMetrics,
       campaigns: sortRows(detailCampaignRows, ''), products: sortRows(detailProductRows, ''), searchTerms: detailSupplemental.searchTerms, targets: detailSupplemental.targets, crossSales: detailSupplemental.crossSales,
@@ -146,5 +151,5 @@ export function buildAdvertisingWorkspaceModel(input: BuildAdvertisingWorkspaceI
     basisLabel: 'SP spend before GST · Product revenue before separately reported GST · 7-day click attribution', comparisonLabel: comparable ? `${previous.from} – ${previous.to}` : null,
     notices, summary: summary(hasCoveredDates ? metrics : { ...metrics, spend: null, attributedSales: null, acos: null, roas: null, tacos: null }, changes, financialReason), findings, trend,
     campaigns: query.view === 'campaigns' ? campaigns.slice(start, start + pageSize) : query.view === 'overview' ? campaigns.slice(0, 5) : [], products: query.view === 'products' ? products.slice(start, start + pageSize) : [],
-    searchTerms: query.view === 'searchTerms' ? searchTerms.slice(start, start + pageSize) : [], groups: input.groups, productChoices: [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), totalRows, pageSize, detail }
+    searchTerms: searchTerms.slice(start, start + pageSize), searchTermTotals, groups: input.groups, productChoices: [...choices].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)), totalRows, pageSize, detail }
 }

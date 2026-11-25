@@ -1,7 +1,7 @@
 import type { AdvertisingViewQuery } from '../contract'
 
 interface TableToolbarProps {
-  readonly query: AdvertisingViewQuery
+  readonly query: Pick<AdvertisingViewQuery, 'search' | 'sort' | 'direction'>
   readonly onQueryChange: (patch: Partial<AdvertisingViewQuery>) => void
   readonly searchPlaceholder: string
   readonly sortId: string

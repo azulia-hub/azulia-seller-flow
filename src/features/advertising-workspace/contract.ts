@@ -1,5 +1,5 @@
 /** Codex owns this integration contract. UI-only work imports these types. */
-import type { AdvertisingGroup, AdvertisingMetrics, AdvertisingScope } from '../../core/advertising/workspace'
+import type { AdvertisingGroup, AdvertisingMetrics, AdvertisingPerformanceTotals, AdvertisingScope } from '../../core/advertising/workspace'
 import type { AdvertisingRecommendation } from '../../core/advertising/recommendations'
 export type { AdvertisingGroup, AdvertisingMetrics, AdvertisingScope }
 export type AdvertisingViewId = 'overview' | 'campaigns' | 'products' | 'searchTerms'
@@ -8,7 +8,9 @@ export type AdvertisingEntity =
   | { readonly kind: 'PRODUCT'; readonly id: string }
   | { readonly kind: 'GROUP'; readonly id: string }
   | { readonly kind: 'SEARCH_TERM'; readonly id: string }
+export type SearchTermField = 'ALL' | 'CUSTOMER' | 'TARGET'
 export interface AdvertisingViewQuery {
+  readonly searchTermField?: SearchTermField
   readonly targetAcos?: number
   readonly view: AdvertisingViewId
   readonly from: string
@@ -22,6 +24,7 @@ export interface AdvertisingViewQuery {
   readonly page: number
 }
 export type AdvertisingSortQuery = Pick<AdvertisingViewQuery, 'sort' | 'direction' | 'sortSelected'>
+export type SearchTermQuery = Pick<AdvertisingViewQuery, 'search' | 'searchTermField' | 'sort' | 'direction' | 'sortSelected'>
 export interface AdvertisingChange {
   readonly value: number
   readonly unit: 'PERCENT' | 'PERCENTAGE_POINTS' | 'ABSOLUTE'
@@ -96,6 +99,7 @@ export interface AdvertisingCrossSale {
   readonly evidence: string
 }
 export interface AdvertisingDetailModel {
+  readonly searchTermMoneyDecimals?: number
   readonly imageUrl?: string | null
   readonly imageAsin?: string | null
   readonly entity: AdvertisingEntity
@@ -137,6 +141,7 @@ export interface AdvertisingWorkspaceModel {
   readonly campaigns: readonly AdvertisingEntityRow[]
   readonly products: readonly AdvertisingEntityRow[]
   readonly searchTerms: readonly AdvertisingEntityRow[]
+  readonly searchTermTotals?: AdvertisingPerformanceTotals & { readonly filtered: boolean }
   readonly groups: readonly AdvertisingGroup[]
   readonly productChoices: readonly { id: string; name: string }[]
   readonly totalRows: number
