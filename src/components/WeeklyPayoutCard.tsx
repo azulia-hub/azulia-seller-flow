@@ -1,9 +1,10 @@
+import { payoutReconciliation } from '../core/cashflow/payoutReconciliation'
 import type { CanonicalFinancialEvent } from '../core/data/types'
-import { PayoutDetails } from './PayoutDetails'
+import { loadPayoutCredit, PayoutDetails } from './PayoutDetails'
 import { useEffect, useMemo, useState } from 'react'
 import { hostedDelivery, hostedFetch } from '../adapters/amazon-hosted/client'
 import { amazonPayoutChannels, amazonSettlementActivity, payoutChannels } from '../adapters/amazon-api/payouts'
-import { shiftPayoutWeek, weeklyPayout, type PayoutSnapshot } from '../core/cashflow/weeklyPayout'
+import { shiftPayoutWeek, weeklyPayout, type PayoutGroup, type PayoutSnapshot } from '../core/cashflow/weeklyPayout'
 import { formatInr } from '../adapters/formatting/currency'
 import { getIndiaToday } from '../core/sync/planner'
 
@@ -20,6 +21,7 @@ export function WeeklyPayoutCard({ account, records, events }: {
   const [error, setError] = useState('')
   const [week, setWeek] = useState(0)
   const [selectedId, setSelectedId] = useState('')
+  const [, refreshCredits] = useState(0)
   const channels = useMemo(() => amazonPayoutChannels(records ?? []), [records])
 
   const activity = useMemo(() => selectedId ? amazonSettlementActivity(records ?? [], selectedId, events) : [], [records, selectedId, events])
@@ -59,6 +61,11 @@ export function WeeklyPayoutCard({ account, records, events }: {
     setWeek(week + offset)
     setSelectedId('')
   }
+  function bankLabel(group: PayoutGroup) {
+    const status = payoutReconciliation(group, [], loadPayoutCredit(account, group.id)).bankStatus
+    if (status === 'UNAVAILABLE') return null
+    return <small>{status === 'MATCHED' ? 'Bank credit matched' : status === 'AWAITING' ? 'Awaiting bank match' : 'Bank credit needs review'}</small>
+  }
   function detailButton(id: string) {
     return <button type="button" className="text-btn" aria-expanded={id === selectedId}
       onClick={() => setSelectedId(id === selectedId ? '' : id)}>{id === selectedId ? 'Hide payout details' : 'View payout details'}</button>
@@ -79,6 +86,7 @@ export function WeeklyPayoutCard({ account, records, events }: {
           {entries.length ? entries.map(entry => <dd key={entry.id}>
             <strong>{entry.displayMinor === null ? 'Unavailable' : formatInr(entry.displayMinor / 100)}</strong>
             <small>{dateLabel(entry.date)} · {entry.open ? 'Open balance' : entry.transferSucceeded ? 'Transfer sent' : entry.expectedMinor === 0 ? 'No payout' : 'Transfer unconfirmed'}</small>
+            {bankLabel(entry)}
             {detailButton(entry.id)}
           </dd>) : <dd><strong>—</strong><small>Payout unavailable</small></dd>}
         </div>)}
@@ -92,9 +100,9 @@ export function WeeklyPayoutCard({ account, records, events }: {
       {result.unclassifiedCount ? <div>
         <p>Some payout records are awaiting an Electronic or COD match.</p>
         {result.unclassified.map(entry => <div key={entry.id}><strong>{dateLabel(entry.date)} · {entry.open ? 'Open balance' : entry.transferSucceeded ? 'Transfer sent' : 'Transfer unconfirmed'}</strong>
-          {detailButton(entry.id)}</div>)}
+          {bankLabel(entry)}{detailButton(entry.id)}</div>)}
       </div> : null}
-      {selected ? <PayoutDetails key={selected.id} group={selected} account={account} activity={activity} /> : null}
+      {selected ? <PayoutDetails key={selected.id} group={selected} account={account} activity={activity} onCreditChange={() => refreshCredits(version => version + 1)} /> : null}
       {week < 0 ? <small>History is limited to settlement cycles returned in the current Amazon reading.</small> : null}
       <p>Synced {new Date(snapshot.observedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
     </> : null}

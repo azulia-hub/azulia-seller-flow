@@ -24,8 +24,8 @@ for(const width of [1280,390])test(`snapshot earnings and persistent preferences
   await page.keyboard.press('Escape')
   await expect(modal).not.toBeVisible()
 
-  // Business snapshot has "Net sale (Net Amazon Payout)" for the selected date range
-  const netSaleCard = page.locator('.kpi-card', { hasText: 'Net sale (Net Amazon Payout)' })
+  // Business snapshot has "Net marketplace proceeds" for the selected date range
+  const netSaleCard = page.locator('.kpi-card', { hasText: 'Net marketplace proceeds' })
   await expect(netSaleCard).toBeVisible()
   // Gross (100) - refunds (0) - fees (10) = 90
   await expect(netSaleCard).toContainText('₹90')

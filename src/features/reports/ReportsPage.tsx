@@ -32,7 +32,12 @@ export function ReportsPage(props: Props) {
   const orderCoverage = props.cohort ? summarizeCohortOrders(props.cohort) : null
   return <>
     <PageHeader eyebrow="Reports" title="Manage your marketplace reports" description="Upload a new report, check that every rupee is accounted for, or compare saved reports over the same dates." action={<UploadZone onFile={props.onFile} loading={props.importing} />} />
-    <section className="report-coverage-guide" aria-label="Recommended report coverage">
+    <nav className="workspace-section-links" aria-label="Report sections">
+      <a href="#report-sources">Report sources</a>
+      {props.dataset ? <a href="#report-quality">Data quality</a> : null}
+      <a href="#report-comparison">Report history</a>
+    </nav>
+    <section id="report-sources" className="report-coverage-guide workspace-section-anchor" aria-label="Recommended report coverage">
       <span className="coverage-guide-icon">↔</span>
       <div><strong>Include extra transaction history</strong><p>For reliable order profit, export at least 20 days before and 20 days after the period you want to analyze. This connects sales with later refunds, fee reversals and reimbursements.</p><details><summary>See an example</summary><div className="coverage-example"><b>Analyze</b><span>1–31 August</span><b>Upload</b><span>12 July–20 September</span><small>An August order refunded in September stays with August. An August refund whose original July sale is missing is excluded from the sales-period view, but remains in posted activity.</small></div></details></div>
     </section>
@@ -47,9 +52,11 @@ export function ReportsPage(props: Props) {
     </section>
     {props.dataset && props.cohort ? <section className="lifecycle-coverage-card"><header><div><small>Sales-period evidence</small><strong>{props.reportMinDate} → {props.reportMaxDate}</strong></div><span>{props.cohort.orders.length} orders selected</span></header><p>Orders are selected by verified purchase date. All recorded activity is included immediately, regardless of release status; later changes update that original period.</p><div className="lifecycle-coverage-grid"><div><b>{orderCoverage?.awaitingFinancialCount ?? 0}</b><small>orders awaiting financial details</small></div><div><b>{props.cohort.limitedFollowUpOrderCount}</b><small>orders with limited follow-up, still included</small></div><div><b>{props.cohort.missingSale.length}</b><small>purchase date not verified</small></div></div></section> : null}
 
+    <div id="report-quality" className="workspace-section-anchor">
     {props.qualityCenter ? <DataQualityCenter result={props.qualityCenter} formatMoney={props.formatMoney} onAction={props.onQualityAction} /> : null}
     {props.dataset ? <div id="classification-review"><TransactionReviewManager dataset={props.dataset} rules={props.classificationRules} formatMoney={props.formatMoney} onSaveRule={props.onSaveClassificationRule} onDeleteRule={props.onDeleteClassificationRule} /></div> : null}
+    </div>
     <div className="section-heading"><div><small>Saved in this browser</small><h2>Previous reports</h2></div><p>Reopen an earlier report or compare two reports without mixing their date ranges.</p></div>
-    <div id="report-comparison"><ImportHistory imports={props.imports} currentImportId={props.currentImportId} leftId={props.leftId} rightId={props.rightId} comparison={props.comparison} formatMoney={props.formatMoney} onLeftChange={props.onLeftChange} onRightChange={props.onRightChange} onOpen={props.onOpen} embedded /></div>
+    <div id="report-comparison" className="workspace-section-anchor"><ImportHistory imports={props.imports} currentImportId={props.currentImportId} leftId={props.leftId} rightId={props.rightId} comparison={props.comparison} formatMoney={props.formatMoney} onLeftChange={props.onLeftChange} onRightChange={props.onRightChange} onOpen={props.onOpen} embedded /></div>
   </>
 }

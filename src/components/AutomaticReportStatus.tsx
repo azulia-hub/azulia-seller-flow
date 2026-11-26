@@ -15,7 +15,7 @@ export function AutomaticReportStatus({ delivery, enabled, issues, onAutomatic, 
   const needsAttention = Boolean(failure || status?.orderDateIssues || status?.catalogError)
   const indicatorLabel = !enabled ? 'Manual report mode' : busy ? title === 'Results ready' ? 'Syncing with Amazon' : title : needsAttention ? 'Sync needs attention' : title
   return <details className="sync-indicator">
-    <summary aria-label={indicatorLabel} title={indicatorLabel}><span className={busy ? 'automatic-report-spinner' : needsAttention ? 'automatic-report-warning' : 'automatic-report-dot'} aria-hidden="true" /><span className="sync-indicator-label">{!enabled ? 'Manual' : busy ? 'Updating' : needsAttention ? 'Review' : 'Synced'}</span></summary>
+    <summary aria-label={indicatorLabel} title={indicatorLabel}><span className={busy ? 'automatic-report-spinner' : needsAttention ? 'automatic-report-warning' : 'automatic-report-dot'} aria-hidden="true" /><span className="sync-indicator-label">{!enabled ? 'Manual' : busy ? 'Updating' : needsAttention ? 'Review' : status?.configured === false ? 'Connect' : ready ? 'Synced' : 'Waiting'}</span></summary>
     <section className="automatic-report-status sync-indicator-popover" aria-label="Calculation and sync status">
     <div role="status" aria-live="polite"><span className={calculating ? 'automatic-report-spinner' : failure && !ready ? 'automatic-report-warning' : 'automatic-report-dot'} aria-hidden="true" /><strong>{title}</strong>
       <small>{ready ? 'Using last completed reading' : 'No completed reading yet'}{lastReading ? ` · Calculated ${new Date(lastReading).toLocaleString('en-IN')}` : ''}</small>

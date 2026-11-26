@@ -315,7 +315,10 @@ export function AdvertisingWorkspaceView({
               role="tab"
               aria-selected={isActive}
               className={`adsw-nav-tab ${isActive ? 'is-active' : ''}`}
-              onClick={() => onQueryChange({ view: view.id, page: 1 })}
+              onClick={event => {
+                event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+                onQueryChange({ view: view.id, page: 1 })
+              }}
             >
               {view.label}
             </button>

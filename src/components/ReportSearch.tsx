@@ -24,13 +24,31 @@ export function ReportSearch({ documents, onSelect, productScopeLabel = 'all rep
   const [field, setField] = useState<ReportSearchField>('ALL')
   const [expanded, setExpanded] = useState(true)
   const id = useId()
+  const input = useRef<HTMLInputElement>(null)
+  const results = useRef<HTMLUListElement>(null)
   const mode = searchModes.find(option => option.value === field)!
   const matches = useMemo(() => searchReport(documents, query, 30, field), [documents, query, field])
   return <section className="report-search" aria-label="Search active report">
     <label htmlFor={id}>Search your report</label>
-    <ChoiceGroup className="search-mode-choices" label="Search by" value={field} onChange={value => { setField(value); setExpanded(true) }} options={searchModes} /><div className="report-search-field"><span aria-hidden="true">⌕</span><input id={id} type="search" placeholder={mode.placeholder} value={query} onChange={event => { setQuery(event.target.value); setExpanded(true) }} onFocus={() => setExpanded(true)} onKeyDown={event => { if (event.key === 'Escape') setExpanded(false) }} aria-controls={`${id}-results`} aria-expanded={Boolean(query.trim() && expanded)} autoComplete="off" />{query ? <button className="text-btn" onClick={() => setQuery('')}>Clear search</button> : null}</div>
+    <ChoiceGroup className="search-mode-choices" label="Search by" value={field} onChange={value => { setField(value); setExpanded(true) }} options={searchModes} /><div className="report-search-field"><span aria-hidden="true">⌕</span><input ref={input} id={id} type="search" placeholder={mode.placeholder} value={query} onChange={event => { setQuery(event.target.value); setExpanded(true) }} onFocus={() => setExpanded(true)} onKeyDown={event => {
+      if (event.key === 'Escape') setExpanded(false)
+      if (!matches.results.length || !expanded) return
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const buttons = results.current?.querySelectorAll('button')
+        buttons?.[event.key === 'ArrowDown' ? 0 : buttons.length - 1]?.focus()
+      }
+      if (event.key === 'Enter') { event.preventDefault(); setExpanded(false); onSelect(matches.results[0]) }
+    }} aria-controls={`${id}-results`} aria-expanded={Boolean(query.trim() && expanded)} autoComplete="off" />{query ? <button className="text-btn" onClick={() => setQuery('')}>Clear search</button> : null}</div>
     <small>Searches all dates in the active financial report, including orders outside dashboard filters. Product titles use title/name columns or sale descriptions. ASIN search uses matched identities from your ads report.</small>
-    {query.trim() && expanded ? <div className="report-search-results" id={`${id}-results`}><p className="search-scope">All dates in the active report · dashboard filters stay unchanged</p><p role="status">{matches.total ? `${matches.total} matches${matches.total > matches.results.length ? ` · showing the first ${matches.results.length}; refine your search for more` : ''}` : mode.empty}</p><ul>{matches.results.map(result => <li key={`${result.kind}:${result.id}`}><button onClick={() => { setExpanded(false); onSelect(result) }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{result.kind === 'PRODUCT' ? <ProductThumbnail url={result.imageUrl ?? null} /> : null}<div><span className="search-result-kind">{kinds[result.kind]}</span><strong>{result.label}</strong><small>{result.detail}</small><small>{result.kind === 'PRODUCT' ? `Open product · ${productScopeLabel}; dashboard filters unchanged` : 'View source evidence · all report dates'}</small></div></div></button></li>)}</ul></div> : null}
+    {query.trim() && expanded ? <div className="report-search-results" id={`${id}-results`}><p className="search-scope">All dates in the active report · dashboard filters stay unchanged</p><p role="status">{matches.total ? `${matches.total} matches${matches.total > matches.results.length ? ` · showing the first ${matches.results.length}; refine your search for more` : ''}` : mode.empty}</p><ul ref={results} onKeyDown={event => {
+      if (event.key === 'Escape') { input.current?.focus(); setExpanded(false); return }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+      event.preventDefault()
+      const buttons = Array.from(event.currentTarget.querySelectorAll('button'))
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+      buttons[index + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+    }}>{matches.results.map(result => <li key={`${result.kind}:${result.id}`}><button onClick={() => { setExpanded(false); onSelect(result) }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>{result.kind === 'PRODUCT' ? <ProductThumbnail url={result.imageUrl ?? null} /> : null}<div><span className="search-result-kind">{kinds[result.kind]}</span><strong>{result.label}</strong><small>{result.detail}</small><small>{result.kind === 'PRODUCT' ? `Open product · ${productScopeLabel}; dashboard filters unchanged` : 'View source evidence · all report dates'}</small></div></div></button></li>)}</ul></div> : null}
   </section>
 }
 

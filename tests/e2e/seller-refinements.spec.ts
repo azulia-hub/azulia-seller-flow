@@ -15,13 +15,15 @@ for (const width of [1280, 390]) test(`seller refinements: purchase-date filters
   const nav = page.getByRole('button', { name: 'Open navigation', exact: true })
   if (await nav.isVisible()) await nav.click()
   await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Dashboard', exact: true }).click()
-  await page.locator('.global-filter-card').evaluate((element: HTMLDetailsElement) => { element.open = true })
+  const initialFilters = page.locator('.global-filter-card')
+  await initialFilters.locator(width <= 700 ? '.phone-filter-trigger' : 'summary').click()
   await expect(page.getByLabel('Calculate by')).toHaveCount(0)
   await expect(page.locator('.global-filter-card')).toContainText('Orders by purchase date')
   if (width > 800) {
     const controls = await page.locator('.global-filter-fields > label select').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top))
     expect(Math.max(...controls) - Math.min(...controls)).toBeLessThan(2)
   }
+  if (width <= 700) await initialFilters.getByRole('button', { name: 'Cancel', exact: true }).click()
   if (await nav.isVisible()) await nav.click()
   await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Settings', exact: true }).click()
   await page.getByRole('button', { name: /financial records excluded/ }).click()
@@ -41,6 +43,25 @@ for (const width of [1280, 390]) test(`seller refinements: purchase-date filters
   await expect(page.locator('.seller-products .product-thumbnail img').first()).toBeVisible()
   await page.screenshot({ path: `test-results/seller-filters-${width}.png`, animations: 'disabled' })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  const metricRows = await page.locator('.primary-kpis .kpi-card').evaluateAll(elements =>
+    elements.map(element => Math.round(element.getBoundingClientRect().top)))
+  if (width > 1170) expect(new Set(metricRows).size).toBe(1)
+  if (width <= 700) {
+    await nav.click()
+    const handled = await page.evaluate(() => !window.dispatchEvent(new Event('azulia:android-back', { cancelable: true })))
+    expect(handled).toBe(true)
+    await expect(nav).toHaveAttribute('aria-expanded', 'false')
+    await nav.click()
+  }
+  await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Product costs', exact: true }).click()
+  const records = page.locator('.responsive-records').first()
+  if (width <= 700) {
+    await expect(records.getByRole('button', { name: 'Remove' }).first()).toBeHidden()
+    await records.getByRole('button', { name: 'More details' }).first().click()
+    await expect(records.getByRole('button', { name: 'Remove' }).first()).toBeVisible()
+  } else {
+    await expect(records.locator('thead th').first()).toHaveCSS('position', 'sticky')
+  }
 })
 
 for (const width of [390, 1280]) test(`cost queue, saved filters and profit simulation at ${width}px`, async ({ page }) => {
@@ -65,7 +86,7 @@ for (const width of [390, 1280]) test(`cost queue, saved filters and profit simu
   await expect(queue).toContainText('SKU-B')
   await navigate('Dashboard')
   const filters = page.locator('.global-filter-card')
-  await filters.locator('summary').click()
+  await filters.locator(width <= 700 ? '.phone-filter-trigger' : 'summary').click()
   await filters.getByLabel('Time period').selectOption('LAST_3_DAYS')
   await filters.getByLabel('Save current filters as').fill('Recent sales')
   await filters.getByRole('button', { name: 'Save filter', exact: true }).click()
@@ -73,6 +94,7 @@ for (const width of [390, 1280]) test(`cost queue, saved filters and profit simu
   await filters.getByLabel('Time period').selectOption('ALL')
   await filters.getByRole('button', { name: 'Apply', exact: true }).click()
   await expect(filters.getByLabel('Time period')).toHaveValue('LAST_3_DAYS')
+  if (width <= 700) await filters.getByRole('button', { name: 'Apply filters', exact: true }).click()
   await page.locator('.seller-products').getByText('Oak shelf', { exact: true }).click()
   const product = page.getByRole('region', { name: 'Product profile' })
   await expect(product.getByRole('button', { name: 'Copy SKU' })).toBeVisible()

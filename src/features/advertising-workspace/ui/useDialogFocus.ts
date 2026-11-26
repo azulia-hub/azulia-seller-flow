@@ -17,8 +17,19 @@ export function useDialogFocus(open: boolean, close: () => void) {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
+    function handleOutsideEscape(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || element.contains(event.target as Node)) return
+      const activeDialog = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"]'))
+        .filter(dialog => dialog.getClientRects().length > 0).at(-1)
+      if (activeDialog === element) keydown(event)
+    }
     element.addEventListener('keydown', keydown)
-    return () => { element.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus() }
+    document.addEventListener('keydown', handleOutsideEscape)
+    return () => {
+      element.removeEventListener('keydown', keydown)
+      document.removeEventListener('keydown', handleOutsideEscape)
+      if (previous?.isConnected) previous.focus()
+    }
   }, [open])
   return root
 }

@@ -49,6 +49,13 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
       </div>
       <ProductCostEditor sku={product.sku} missingCost={product.missingCost || Boolean(advertisingProduct?.missingCost)} />
     </header>
+    <button className="secondary product-simulator-shortcut" onClick={() => {
+      const simulator = document.querySelector<HTMLDetailsElement>('#product-simulator details')
+      if (!simulator) return
+      simulator.open = true
+      simulator.scrollIntoView({ block: 'start' })
+      simulator.querySelector('summary')?.focus({ preventScroll: true })
+    }}>Open profit simulator</button>
     <nav className="product-section-nav" aria-label="Product sections">{[['product-advertising','Advertising'],['product-costs','Costs & returns'],['product-orders','Orders'],['product-locations','Locations']].map(([id,label]) => <button className="text-btn" key={id} onClick={() => document.getElementById(id)?.scrollIntoView({ behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block:'start' })}>{label}</button>)}{onViewInventory?<button className="text-btn" onClick={onViewInventory}>Inventory & restock</button>:null}</nav>
     {comparisonRange ? <p className="product-comparison-basis">Period comparison · {comparisonAsOf?`Current data through ${new Date(comparisonAsOf).toLocaleString('en-IN')}. `:''}Compared with {comparisonRange.from} – {comparisonRange.to} · {comparisonCoverage === 'DOWNLOADED' ? 'Date windows downloaded; later order activity can update either period.' : 'Previous-period history incomplete or unverified; changes are hidden.'}</p> : null}
     <section className="product-page-metrics" aria-label="Product performance summary">
@@ -59,7 +66,7 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
       <article><span>Net product cost</span><strong>{product.missingCost ? '—' : formatMoney(product.netCogs)}</strong><small>Current calculation reverses cost on refund; sellable recovery is not verified</small></article>
     </section>
     {onViewAdvertising ? <button className="text-btn" onClick={onViewAdvertising}>Investigate ads · campaigns, search terms & cross-sales →</button> : null}
-    <ProfitSimulator product={product} adSpend={sponsored.status === 'AVAILABLE' && advertisingProduct === product && ads ? ads.spend : product.advertising || null} basis={basis} money={formatMoney} />
+    <div id="product-simulator"><ProfitSimulator product={product} adSpend={sponsored.status === 'AVAILABLE' && advertisingProduct === product && ads ? ads.spend : product.advertising || null} basis={basis} money={formatMoney} /></div>
     <section className="product-page-trend"><SkuTrendChart data={product.trend} formatMoney={formatMoney} /></section>
     <SkuWorkspace previousProduct={comparisonRange ? previousProduct : undefined} product={product} advertisingProduct={advertisingProduct} sponsored={sponsored} financialBasis={basis} showSnapshot={false} formatMoney={formatMoney} />
   </section>

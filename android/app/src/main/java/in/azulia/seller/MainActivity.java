@@ -54,7 +54,7 @@ public final class MainActivity extends Activity {
         });
         else layout.setFitsSystemWindows(true);
         setContentView(layout); layout.requestApplyInsets();
-        if (Build.VERSION.SDK_INT>=33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,() -> { if (web.canGoBack()) web.goBack(); else finish(); });
+        if (Build.VERSION.SDK_INT>=33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,this::handleBack);
         WebSettings settings=web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW); settings.setCacheMode(WebSettings.LOAD_NO_CACHE); settings.setJavaScriptCanOpenWindowsAutomatically(false); settings.setSupportMultipleWindows(false); settings.setMediaPlaybackRequiresUserGesture(true);
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         ProductImages images=new ProductImages(this); bridge=new DeviceBridge(this,images);
@@ -179,7 +179,20 @@ public final class MainActivity extends Activity {
         });
     }
     private void openBundled() { bundled=true; if (web!=null) web.loadUrl(BUNDLED); }
-    private void unavailable(String message) { TextView text=new TextView(this); text.setText(message); text.setPadding(32,64,32,32); setContentView(text); }
+    private void unavailable(String message) {
+        android.widget.LinearLayout recovery=new android.widget.LinearLayout(this);
+        recovery.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int padding=Math.round(24 * getResources().getDisplayMetrics().density);
+        recovery.setPadding(padding,padding,padding,padding);
+        TextView text=new TextView(this);
+        text.setText(message);
+        recovery.addView(text);
+        android.widget.Button retry=new android.widget.Button(this);
+        retry.setText("Try again");
+        retry.setOnClickListener(view -> recreate());
+        recovery.addView(retry);
+        setContentView(recovery);
+    }
     void importAds() {
         if(adsImportOpen||isFinishing())return;
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
@@ -200,7 +213,15 @@ public final class MainActivity extends Activity {
         if(toolDownloads!=null&&toolDownloads.result(requestCode,resultCode,data))return;
         if (requestCode==40 && files!=null) { ValueCallback<Uri[]> callback=files; files=null; callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode,data)); }
     }
-    @Override public void onBackPressed() { if (web!=null && web.canGoBack()) web.goBack(); else super.onBackPressed(); }
+    private void handleBack() {
+        if (web == null) { finish(); return; }
+        web.evaluateJavascript("window.dispatchEvent(new Event('azulia:android-back',{cancelable:true}))", result -> {
+            if ("false".equals(result) || isFinishing() || isDestroyed()) return;
+            if (web != null && web.canGoBack()) web.goBack();
+            else finish();
+        });
+    }
+    @Override public void onBackPressed() { handleBack(); }
     @Override protected void onStart() { super.onStart(); BackgroundSync.foreground=true; LiveSync.resume(this); }
     @Override protected void onStop() { BackgroundSync.foreground=false; if(bridge!=null)bridge.backgrounded(); LiveSync.kick(); super.onStop(); }
     @Override protected void onDestroy() { if(toolDownloads!=null)toolDownloads.close(); if (files!=null) files.onReceiveValue(null); if (bridge!=null) bridge.close(); startup.shutdownNow(); if (web!=null) { web.stopLoading(); web.destroy(); } super.onDestroy(); }

@@ -7,7 +7,12 @@ import { CopyValue } from './CopyValue'
 
 const money = (minor: number | null | undefined) => minor == null ? 'Unavailable' : formatInr(minor / 100)
 
-function loadCredit(key: string): BankCredit | undefined {
+function creditKey(account: string, groupId: string) {
+  return 'azulia:bank-credit:v1:' + JSON.stringify([account, groupId])
+}
+
+export function loadPayoutCredit(account: string, groupId: string): BankCredit | undefined {
+  const key = creditKey(account, groupId)
   try {
     const credit = JSON.parse(localStorage.getItem(key) ?? 'null')
     if (credit && Number.isSafeInteger(credit.amountMinor) && credit.amountMinor > 0 &&
@@ -26,11 +31,11 @@ function ActivityCategory({ category, rows, total }: ReturnType<typeof settlemen
   </details>
 }
 
-export function PayoutDetails({ account, group, activity = [] }: {
-  account: string; group: PayoutGroup; activity?: readonly SettlementActivity[]
+export function PayoutDetails({ account, group, activity = [], onCreditChange }: {
+  account: string; group: PayoutGroup; activity?: readonly SettlementActivity[]; onCreditChange?: () => void
 }) {
-  const key = 'azulia:bank-credit:v1:' + JSON.stringify([account, group.id])
-  const [credit, setCredit] = useState(() => loadCredit(key))
+  const key = creditKey(account, group.id)
+  const [credit, setCredit] = useState(() => loadPayoutCredit(account, group.id))
   const [amount, setAmount] = useState(credit ? (credit.amountMinor / 100).toFixed(2) : '')
   const [date, setDate] = useState(credit?.date ?? '')
   const [reference, setReference] = useState(credit?.reference ?? '')
@@ -50,6 +55,7 @@ export function PayoutDetails({ account, group, activity = [] }: {
       if (next) localStorage.setItem(key, JSON.stringify(next))
       else localStorage.removeItem(key)
       setCredit(next)
+      onCreditChange?.()
       setMessage(next ? 'Bank credit saved on this device.' : 'Bank credit cleared.')
       if (!next) { setAmount(''); setDate(''); setReference('') }
     } catch {

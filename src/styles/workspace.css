@@ -48,7 +48,7 @@ html[data-theme] .seller-workspace .global-filter-card > summary b { font-size:1
 html[data-theme] .seller-workspace .global-filter-card > summary small { font-size:11px; margin:0; }
 html[data-theme] .seller-workspace .section-label { margin:18px 0 10px; }
 html[data-theme] .seller-workspace .section-label span { font-size:13px; }
-html[data-theme] .seller-workspace .primary-kpis { grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
+html[data-theme] .seller-workspace .primary-kpis { grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px; margin-bottom:16px; }
 html[data-theme] .seller-workspace .primary-kpis .kpi-card,
 html[data-theme] .seller-workspace .primary-kpis .kpi-card:first-child { display:block; grid-column:auto; grid-row:auto; padding:18px; min-height:122px; border-radius:12px; }
 html[data-theme] .seller-workspace .primary-kpis .kpi-card:first-child { border-top:3px solid var(--accent); padding-top:16px; }
@@ -95,7 +95,7 @@ html[data-theme] .seller-workspace .seller-disclosure { border-radius:10px; padd
 html[data-theme] .seller-workspace .app-disclosure { font-size:10px; padding:24px; margin:0; }
 .settings-preferences { margin-bottom:20px; }.settings-preferences h3 { margin-top:0; }
 html[data-theme] .seller-workspace .welcome-empty { max-width:760px; margin:50px auto; padding:40px; border-radius:16px; }
-@media(max-width:1150px) and (min-width:901px) { html[data-theme] .seller-workspace .workspace-topbar { grid-template-columns:90px minmax(200px,1fr) auto; gap:12px; padding:0 20px; }.workspace-topbar .current-report > span:nth-child(2),.workspace-topbar .current-report b { display:none; }html[data-theme] .seller-workspace .current-report { min-width:40px; width:40px; }.workspace-overview-grid { grid-template-columns:minmax(0,1.2fr) minmax(260px,1fr); } }
+@media(max-width:1150px) and (min-width:901px) { html[data-theme] .seller-workspace .workspace-topbar { grid-template-columns:90px minmax(200px,1fr) auto; gap:12px; padding:0 20px; }.workspace-topbar .current-report > .report-source-label,.workspace-topbar .current-report b { display:none; }html[data-theme] .seller-workspace .current-report { min-width:40px; width:40px; }.workspace-overview-grid { grid-template-columns:minmax(0,1.2fr) minmax(260px,1fr); } }
 @media(max-width:900px) {
  html[data-theme] .seller-workspace { display:block; }
  .workspace-sidebar { transform:translateX(-100%); visibility:hidden; width:240px; transition:transform .15s ease; }
@@ -105,7 +105,7 @@ html[data-theme] .seller-workspace .welcome-empty { max-width:760px; margin:50px
  html[data-theme] .seller-workspace .workspace-topbar { height:auto; min-height:112px; grid-template-columns:1fr auto; gap:12px; padding:12px 16px; }
  .workspace-search-slot { grid-column:1 / -1; grid-row:2; width:100%; max-width:none; }
  html[data-theme] .seller-workspace .current-report { min-width:38px; max-width:150px; }
- .workspace-topbar .current-report > span:nth-child(2),.workspace-topbar .current-report b { display:none; }
+ .workspace-topbar .current-report > .report-source-label,.workspace-topbar .current-report b { display:none; }
  html[data-theme] .workspace-search-slot .report-search-field { flex-wrap:nowrap; }
  html[data-theme] .workspace-search-slot .report-search-field select { flex-basis:auto; width:95px; border-bottom:0; border-right:1px solid var(--line); }
  html[data-theme] .seller-workspace .content { padding:18px 16px 24px; }
@@ -477,3 +477,66 @@ html[data-theme='dark'] .arabic-line-husayn {
 .notification-order-item > div { min-width:0; }
 .notification-order-item strong,.notification-order-item small { display:block; margin-bottom:5px; }
 .notification-order-item .product-thumbnail { flex:0 0 44px; }
+
+
+.mobile-report-label { display:none; }
+@media (min-width:901px) and (max-width:1170px) {
+  html[data-theme] .seller-workspace .primary-kpis { grid-template-columns:repeat(6,minmax(0,1fr)); }
+  html[data-theme] .seller-workspace .primary-kpis .kpi-card { grid-column:span 2; }
+  html[data-theme] .seller-workspace .primary-kpis .kpi-card:nth-child(n+4) { grid-column:span 3; }
+}
+@media (max-width:900px) {
+  html[data-theme] .seller-workspace .workspace-topbar { min-height:0; gap:8px; }
+  html[data-theme] .seller-workspace .workspace-topbar .theme-toggle { display:none; }
+  html[data-theme] .seller-workspace .workspace-menu { min-width:44px; min-height:44px; }
+  .workspace-topbar .mobile-report-label { display:inline; }
+  .workspace-topbar .sync-indicator .sync-indicator-label { display:inline; }
+  .workspace-topbar .topbar-actions { gap:6px; }
+  html[data-theme] .workspace-search-slot .report-search:not(:focus-within) .search-mode-choices { display:none; }
+  html[data-theme] .seller-workspace .primary-kpis .kpi-card:last-child { grid-column:1 / -1; }
+  .global-filter-card > .seller-feature-fields { padding-inline:12px; }
+  .global-filter-card > .filter-basis-help { padding-inline:12px; }
+  .report-guide > div span { display:block; text-align:center; }
+  .report-guide > div { flex-direction:column; }
+}
+
+.responsive-row-toggle { display:none; }
+@media (min-width:701px) {
+  .responsive-records { max-height:65dvh; }
+  html[data-theme] .responsive-records thead th { position:sticky; top:0; z-index:2; background:var(--panel2); }
+  html[data-theme] .responsive-records :is(td,th):first-child { position:sticky; left:0; background:var(--panel); z-index:1; }
+  html[data-theme] .responsive-records thead th:first-child { z-index:3; background:var(--panel2); }
+}
+@media (max-width:700px) {
+  html[data-theme] .seller-workspace .responsive-records table { display:block; width:100%; min-width:0; }
+  .responsive-records thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .responsive-records tbody { display:grid; gap:8px; }
+  .responsive-records tbody tr { display:grid; padding:8px; border:1px solid var(--line); border-radius:8px; }
+  html[data-theme] .seller-workspace .responsive-records tbody td { display:block; white-space:normal; overflow-wrap:anywhere; border:0; padding:6px; min-width:0; }
+  html[data-theme] .seller-workspace .responsive-records tr:not(.is-expanded) td[data-label]:not([data-primary]) { display:none; }
+  .responsive-records td[data-label]::before { display:block; margin-bottom:3px; font-size:.8rem; color:var(--muted); content:attr(data-label); }
+  .responsive-records .responsive-row-toggle { display:inline-flex; min-height:44px; align-items:center; }
+}
+
+.product-simulator-shortcut { margin-block:8px; }
+#product-simulator { scroll-margin-top:100px; }
+html[data-theme] button:disabled { opacity:.6; cursor:not-allowed; }
+
+html[data-theme] .seller-workspace .phone-filter-card { display:none; }
+@media (max-width:700px) {
+  html[data-theme] .seller-workspace .desktop-filter-card { display:none; }
+  html[data-theme] .seller-workspace .phone-filter-card { display:block; }
+  .phone-filter-trigger { display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:48px; padding:8px 12px; border:0; background:none; text-align:left; color:var(--text); }
+  .phone-filter-trigger b,.phone-filter-trigger small { display:block; font-size:.8rem; }
+  .phone-filter-trigger small { color:var(--muted); }
+  .phone-filter-sheet { position:fixed; inset:auto 0 0; margin:0; width:100%; max-width:none; max-height:85dvh; padding:16px; border:1px solid var(--line); border-radius:16px 16px 0 0; background:var(--panel); color:var(--text); }
+  .phone-filter-sheet::backdrop { background:#10162480; }
+  .phone-filter-sheet header { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .phone-filter-sheet footer { position:sticky; bottom:0; padding:10px 0 max(10px,env(safe-area-inset-bottom)); background:var(--panel); }
+  .phone-filter-sheet footer button { width:100%; min-height:44px; }
+}
+
+.workspace-section-links { display:flex; flex-wrap:wrap; gap:8px 16px; margin-block:0 20px; }
+.workspace-section-links a { display:inline-flex; align-items:center; min-height:40px; color:var(--accent); }
+.workspace-section-anchor { scroll-margin-top:130px; }
+.workspace-section-anchor > h2 { font-size:1.15rem; margin:0 0 12px; }

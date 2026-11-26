@@ -159,6 +159,33 @@ export function App() {
   const [inventoryRequest, setInventoryRequest] = useState<InventoryTargetIdentity | null>(null)
   const [cashFlowModalOpen, setCashFlowModalOpen] = useState(false)
   const [cohortSnapshotOpen, setCohortSnapshotOpen] = useState(false)
+  useEffect(() => {
+    function onAndroidBack(event: Event) {
+      const roleDialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'))
+        .filter(element => element.getClientRects().length > 0).at(-1)
+      if (roleDialog && !roleDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))) {
+        event.preventDefault()
+        return
+      }
+      const dialog = document.querySelector<HTMLDialogElement>('dialog[open]')
+      const filters = document.querySelector<HTMLDetailsElement>('.global-filter-card[open]')
+      if (dialog) {
+        if (dialog.dispatchEvent(new Event('cancel', { cancelable: true }))) dialog.close()
+      } else if (mobileNav) setMobileNav(false)
+      else if (searchDetail) setSearchDetail(null)
+      else if (feeAuditOpen) setFeeAuditOpen(false)
+      else if (cashFlowModalOpen) setCashFlowModalOpen(false)
+      else if (reimbursementModalOpen) setReimbursementModalOpen(false)
+      else if (cohortSnapshotOpen) setCohortSnapshotOpen(false)
+      else if (homeMetric) setHomeMetric(null)
+      else if (productSelection) closeProductPage()
+      else if (filters) filters.open = false
+      else return
+      event.preventDefault()
+    }
+    window.addEventListener('azulia:android-back', onAndroidBack)
+    return () => window.removeEventListener('azulia:android-back', onAndroidBack)
+  }, [mobileNav, searchDetail, feeAuditOpen, cashFlowModalOpen, reimbursementModalOpen, cohortSnapshotOpen, homeMetric, productSelection, closeProductPage])
   const [advertisingDateUndo, setAdvertisingDateUndo] = useState<{
     fromDate: string; toDate: string; periodChoice: PeriodChoice | ''; fulfillmentFilter: string;
     reportId: string; financialId: string | null; appliedFrom: string; appliedTo: string;
@@ -730,24 +757,24 @@ export function App() {
           {!dataset ? <section className="welcome-empty"><img className="welcome-logo" src={`${import.meta.env.BASE_URL}brand/azulia-logo.webp`} alt="Azulia" width="112" height="112" /><h2>Get your first trustworthy profit view</h2><ol className="welcome-steps"><li><b>Upload</b><span>Choose your marketplace CSV or TSV report.</span></li><li><b>Review</b><span>Confirm reconciliation and unfamiliar transactions.</span></li><li><b>Add costs</b><span>Complete or explicitly estimate product costs.</span></li><li><b>Analyze</b><span>Trace Dashboard → SKU → order evidence.</span></li></ol><button className="primary" onClick={() => setActive('Reports')}>Upload your first report</button><small>Your data stays in this browser. Profit remains an estimate until cost coverage is complete.</small></section> : null}
           {dataset ? <>
 
-          {pulseScoreboard ? <PulseScoreboard onRequestDetails={hostedDelivery ? requestOrderDetails : undefined} scoreboard={pulseScoreboard} onSelectPeriod={(from, to) => { setFilterUpdatePending(true); setFromDate(from); setToDate(to); setPeriodChoice('CUSTOM') }} /> : null}
-          {automaticEnabled && automaticDelivery.status?.configured && currentImportId === `api:${automaticDelivery.status.connectionKey}` ? (
-            <WeeklyPayoutCard key={currentImportId} account={automaticDelivery.status.connectionKey} events={allEvents}
-              records={(imports.find(item => item.id === currentImportId) as AutomaticReading | undefined)?.sourceRecords} />
-          ) : null}
-          {profitLeakAlerts.length ? <ProfitLeakAlerts alerts={profitLeakAlerts} onSelectSku={sku => openSearchProduct(sku)} /> : null}
           <div className="section-label"><span>Business snapshot</span><small>Primary metrics</small></div>
           {!costStatus.complete ? <div className="profit-status" role="status"><span>{missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated profit · missing product costs are assumed ₹0.' : 'Profit is incomplete until product costs are added.'}</span><button className="text-btn" onClick={() => setActive('Costs')}>Add missing costs →</button></div> : null}
           <section className="kpi-grid primary-kpis">
             <KpiCard label="Profit so far" value={dataset && costStatus.profitReady ? money(profitAfterAds) : '—'} tone={profitAfterAds >= 0 ? 'positive' : 'negative'} note="Recorded activity, including deferred amounts; excludes settlements." hint={costStatus.complete ? 'Includes booked advertising expense' : missingCostPolicy === 'ASSUME_ZERO' ? 'Estimated · missing costs assumed ₹0' : 'Add missing product costs'} onClick={() => setHomeMetric('PROFIT')} />
             <KpiCard label="Gross sales" value={dataset ? money(summary.grossSales) : '—'} tone="positive" hint="Positive product-sale events" onClick={() => setHomeMetric('GROSS_SALES')} />
-            <KpiCard label="Net sale (Net Amazon Payout)" value={dataset ? money(business.netMarketplaceProceeds) : '—'} tone={business.netMarketplaceProceeds >= 0 ? 'positive' : 'negative'} hint="Sales − refunds − marketplace and shipping fees + reimbursements" note="Released and deferred activity; before product costs and advertising. Not a bank deposit." />
+            <KpiCard label="Net marketplace proceeds" value={dataset ? money(business.netMarketplaceProceeds) : '—'} tone={business.netMarketplaceProceeds >= 0 ? 'positive' : 'negative'} hint="Sales − refunds − marketplace and shipping fees + reimbursements" note="Released and deferred activity; before product costs and advertising. Not a bank deposit." />
             <KpiCard label="Profit margin" value={dataset && costStatus.profitReady ? `${profitMargin.toFixed(2)}%` : '—'} tone={profitMargin >= 0 ? 'positive' : 'negative'} hint="Business profit ÷ gross sales" onClick={() => setHomeMetric('PROFIT_MARGIN')} />
 
             <KpiCard label="Return rate" value={dataset ? `${summary.returnRate.toFixed(2)}%` : '—'} tone={summary.returnRate > 15 ? 'negative' : 'neutral'} hint={`${summary.returnQuantity.toLocaleString('en-IN')} returned units`} onClick={() => setHomeMetric('RETURN_RATE')} />
 
           </section>
 
+          {pulseScoreboard ? <PulseScoreboard onRequestDetails={hostedDelivery ? requestOrderDetails : undefined} scoreboard={pulseScoreboard} onSelectPeriod={(from, to) => { setFilterUpdatePending(true); setFromDate(from); setToDate(to); setPeriodChoice('CUSTOM') }} /> : null}
+          {automaticEnabled && automaticDelivery.status?.configured && currentImportId === `api:${automaticDelivery.status.connectionKey}` ? (
+            <WeeklyPayoutCard key={currentImportId} account={automaticDelivery.status.connectionKey} events={allEvents}
+              records={(imports.find(item => item.id === currentImportId) as AutomaticReading | undefined)?.sourceRecords} />
+          ) : null}
+          {profitLeakAlerts.length ? <ProfitLeakAlerts alerts={profitLeakAlerts} onSelectSku={sku => openSearchProduct(sku)} /> : null}
           {focusAnalysis ? <FocusPriorities area={focusArea} onAreaChange={setFocusArea} analysis={focusAnalysis} dateLabel={advertisingDateRange(fromDate, toDate)} financialBasis="Orders by purchase date" sponsored={sponsoredAttribution} formatMoney={advertisingMoney} products={sellerProducts} onOpenProduct={(sku) => { openProductPage({ sku, scope: 'CURRENT' }, { page:active, metric:null }); setHomeMetric(null) }} /> : null}
 
           <section className="dashboard-checks" aria-label="Report checks">

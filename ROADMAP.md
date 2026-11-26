@@ -1,5 +1,15 @@
 # Seller Analytics — Roadmap
 
+## Desktop and Android layout improvements
+
+- [x] Bring dashboard KPIs ahead of operational snapshots, rebalance desktop KPI rows, and distinguish net marketplace proceeds from bank payouts.
+- [x] Compact the mobile header and add keyboard result navigation to global search.
+- [x] Keep Returns and Cost History headers and identifiers visible on desktop. Use expandable records at phone widths.
+- [x] Add a shortcut to the SKU simulator and route Android Back through open workspace views before WebView history.
+- [x] Add a mobile filter sheet with draft controls, Cancel, and Apply.
+- [x] Add section links to Settings and Reports, visible Ads tab selection, and bank status in payout history.
+- [ ] Refine Ads scope controls, payout details, mobile order evidence, and contrast and touch targets across remaining screens. Verify Back, insets and renderer recovery on a native Android device.
+
 ## Payout reconciliation and product scenarios
 
 - [x] Add a missing-cost queue ranked by recent sales, named date/fulfillment filters, and copy actions in SKU, order and payout details.
