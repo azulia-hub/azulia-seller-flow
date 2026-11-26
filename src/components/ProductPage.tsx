@@ -1,3 +1,5 @@
+import { ProfitSimulator } from './ProfitSimulator'
+import { CopyValue } from './CopyValue'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { SkuProfitSummary } from '../core/analytics/orderProfit'
 import { buildSkuAdvertisingEconomics, type SponsoredProductsAttribution } from '../core/advertising/sponsoredProducts'
@@ -23,7 +25,12 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
   const ads = sponsored.skus.find(item => item.sku === product.sku)
   const economics = useMemo(() => ads && advertisingProduct ? buildSkuAdvertisingEconomics(advertisingProduct, ads) : null, [ads, advertisingProduct])
   const result = ads ? economics?.contributionAfterReportedAds ?? null : product.missingCost ? null : product.profitBeforeAds
-  const imageUrl = useMemo(() => productImage(product.orders.flatMap(order => order.events).filter(event => event.sku === product.sku)), [product])
+  const identity = useMemo(() => {
+    const events = product.orders.flatMap(order => order.events).filter(event => event.sku === product.sku)
+    return { image: productImage(events), asins: events.flatMap(event => typeof event.raw?.asin === 'string' ? [event.raw.asin] : []) }
+  }, [product])
+  const asins = [...new Set([...identity.asins, ...(ads?.asin.split(', ') ?? [])].filter(Boolean))]
+
 
   const figures = useMemo(() => productPerformanceFigures(product), [product])
   const comparison = useMemo(() => compareProductPerformance(product, previousProduct, comparisonCoverage), [product, previousProduct, comparisonCoverage])
@@ -32,11 +39,12 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
     <button className="product-page-back text-btn" onClick={onBack}>← Back to {backLabel}</button>
     <header className="product-page-header">
       <div className="product-page-identity" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <ProductThumbnail url={imageUrl} />
+        <ProductThumbnail url={identity.image} />
         <div>
           <span className="eyebrow">Product overview</span>
           <h1 ref={heading} tabIndex={-1}>{title || product.sku}</h1>
-          <p>{product.sku} · {basis}</p>
+          <p>{product.sku} · {basis} <CopyValue label="SKU" value={product.sku} /></p>
+          {asins.map(asin => <p key={asin}>{asin} <CopyValue label="ASIN" value={asin} /></p>)}
         </div>
       </div>
       <ProductCostEditor sku={product.sku} missingCost={product.missingCost || Boolean(advertisingProduct?.missingCost)} />
@@ -51,6 +59,7 @@ export function ProductPage({ product, advertisingProduct, sponsored, title, bas
       <article><span>Net product cost</span><strong>{product.missingCost ? '—' : formatMoney(product.netCogs)}</strong><small>Current calculation reverses cost on refund; sellable recovery is not verified</small></article>
     </section>
     {onViewAdvertising ? <button className="text-btn" onClick={onViewAdvertising}>Investigate ads · campaigns, search terms & cross-sales →</button> : null}
+    <ProfitSimulator product={product} adSpend={sponsored.status === 'AVAILABLE' && advertisingProduct === product && ads ? ads.spend : product.advertising || null} basis={basis} money={formatMoney} />
     <section className="product-page-trend"><SkuTrendChart data={product.trend} formatMoney={formatMoney} /></section>
     <SkuWorkspace previousProduct={comparisonRange ? previousProduct : undefined} product={product} advertisingProduct={advertisingProduct} sponsored={sponsored} financialBasis={basis} showSnapshot={false} formatMoney={formatMoney} />
   </section>

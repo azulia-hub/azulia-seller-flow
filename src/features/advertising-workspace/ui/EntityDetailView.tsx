@@ -1,3 +1,4 @@
+import { CopyValue } from '../../../components/CopyValue'
 import { summarizeAdvertisingPerformance } from '../../../core/advertising/workspace'
 import { selectSearchTermRows } from '../searchTermRows'
 import { SearchTermsControls } from './SearchTermsView'
@@ -71,6 +72,7 @@ export function EntityDetailView({
           <div className="adsw-detail-title-group">
             <span className="adsw-detail-kind">{detail.entity.kind}</span>
             <h2 className="adsw-detail-title"><AdsIdentity name={detail.title} imageUrl={detail.imageUrl} asin={detail.imageAsin} /></h2><details className="adsw-full-title"><summary>Full name</summary>{detail.title}</details>
+            {detail.imageAsin ? <CopyValue label="ASIN" value={detail.imageAsin} /> : null}
             {detail.subtitle ? (
               <p className="adsw-detail-subtitle">{detail.subtitle}</p>
             ) : null}

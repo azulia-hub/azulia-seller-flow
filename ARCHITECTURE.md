@@ -4,11 +4,23 @@
 
 The Dashboard requests recent settlement groups through the account-scoped Amazon
 connection. The adapter matches financial event group IDs to source account labels
-and exposes only amounts, dates and status needed for the card. The pure weekly
+and exposes settlement/transfer amounts, dates, status and an optional trace reference. The pure weekly
 selector uses the current India calendar week and the account’s seven-day cadence
 for open groups. Confirmed amounts use the source transfer date and status.
 Unmatched groups or missing channels leave the total unavailable. Open balances
-remain estimates. The card does not contribute to operating profit.
+remain estimates. Payout history uses the same selector with a different week.
+The settlement detail compares the source beginning balance and cached released
+transactions linked by exact group ID with the source settlement amount. A
+component breakdown is shown when normalized components sum to the source
+transaction total. Cached coverage is provisional. Manual bank credit amounts
+and references are stored on the device by connection and settlement ID.
+Payouts remain outside operating profit.
+
+The SKU simulator consumes the selected product summary and its applied costs.
+It keeps the historical non-refund and non-cost adjustments fixed per unit,
+models refunds and recoveries using observed averages, and applies advertising as
+a fixed scenario total. Output is advisory and blocked for missing-cost scopes.
+Named filter views store preset IDs or explicit dates alongside fulfillment.
 
 ## Timely delivery and source-backed order navigation (ADR-092)
 

@@ -1,7 +1,9 @@
+import type { CanonicalFinancialEvent } from '../core/data/types'
+import { PayoutDetails } from './PayoutDetails'
 import { useEffect, useMemo, useState } from 'react'
 import { hostedDelivery, hostedFetch } from '../adapters/amazon-hosted/client'
-import { amazonPayoutChannels, payoutChannels } from '../adapters/amazon-api/payouts'
-import { weeklyPayout, type PayoutSnapshot } from '../core/cashflow/weeklyPayout'
+import { amazonPayoutChannels, amazonSettlementActivity, payoutChannels } from '../adapters/amazon-api/payouts'
+import { shiftPayoutWeek, weeklyPayout, type PayoutSnapshot } from '../core/cashflow/weeklyPayout'
 import { formatInr } from '../adapters/formatting/currency'
 import { getIndiaToday } from '../core/sync/planner'
 
@@ -9,13 +11,18 @@ const dateLabel = (value: string) => new Intl.DateTimeFormat('en-IN', {
   weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata',
 }).format(new Date(value))
 
-export function WeeklyPayoutCard({ account, records }: {
+export function WeeklyPayoutCard({ account, records, events }: {
   readonly account: string
+  readonly events?: readonly CanonicalFinancialEvent[]
   readonly records?: readonly Record<string, unknown>[]
 }) {
   const [snapshot, setSnapshot] = useState<PayoutSnapshot | null>(null)
   const [error, setError] = useState('')
+  const [week, setWeek] = useState(0)
+  const [selectedId, setSelectedId] = useState('')
   const channels = useMemo(() => amazonPayoutChannels(records ?? []), [records])
+
+  const activity = useMemo(() => selectedId ? amazonSettlementActivity(records ?? [], selectedId, events) : [], [records, selectedId, events])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -46,9 +53,23 @@ export function WeeklyPayoutCard({ account, records }: {
     }
   }, [account])
 
-  const result = snapshot && weeklyPayout(snapshot.groups, channels, payoutChannels, getIndiaToday(), 7)
+  const result = snapshot && weeklyPayout(snapshot.groups, channels, payoutChannels, shiftPayoutWeek(getIndiaToday(), week), 7)
+  const selected = result && [...result.rows.flatMap(row => row.entries), ...result.unclassified].find(entry => entry.id === selectedId)
+  function selectWeek(offset: number) {
+    setWeek(week + offset)
+    setSelectedId('')
+  }
+  function detailButton(id: string) {
+    return <button type="button" className="text-btn" aria-expanded={id === selectedId}
+      onClick={() => setSelectedId(id === selectedId ? '' : id)}>{id === selectedId ? 'Hide payout details' : 'View payout details'}</button>
+  }
   return <section className="panel weekly-payout" aria-labelledby="weekly-payout-title">
-    <h2 id="weekly-payout-title">This week’s payout</h2>
+    <h2 id="weekly-payout-title">{week === 0 ? 'This week’s payout' : 'Payout history'}</h2>
+    {result ? <div className="seller-feature-fields">
+      <button type="button" className="secondary" disabled={week <= -4} onClick={() => selectWeek(-1)}>Previous week</button>
+      <span>{result.from} – {result.to}</span>
+      <button type="button" className="secondary" disabled={week >= 0} onClick={() => selectWeek(1)}>Next week</button>
+    </div> : null}
     {error ? <p role="status">{error}{snapshot ? ' Showing the last available reading.' : ''}</p> : null}
     {!result && !error ? <p role="status">Loading Amazon payouts…</p> : null}
     {result ? <>
@@ -56,8 +77,9 @@ export function WeeklyPayoutCard({ account, records }: {
         {result.rows.map(({ channel, entries }) => <div key={channel}>
           <dt>{channel}</dt>
           {entries.length ? entries.map(entry => <dd key={entry.id}>
-            <strong>{entry.amountMinor === null ? 'Unavailable' : formatInr(entry.amountMinor / 100)}</strong>
+            <strong>{entry.displayMinor === null ? 'Unavailable' : formatInr(entry.displayMinor / 100)}</strong>
             <small>{dateLabel(entry.date)} · {entry.open ? 'Open balance' : entry.transferSucceeded ? 'Transfer sent' : entry.expectedMinor === 0 ? 'No payout' : 'Transfer unconfirmed'}</small>
+            {detailButton(entry.id)}
           </dd>) : <dd><strong>—</strong><small>Payout unavailable</small></dd>}
         </div>)}
         <div>
@@ -67,7 +89,13 @@ export function WeeklyPayoutCard({ account, records }: {
           </dd>
         </div>
       </dl>
-      {result.unclassifiedCount ? <p>Some payout records are awaiting an Electronic or COD match.</p> : null}
+      {result.unclassifiedCount ? <div>
+        <p>Some payout records are awaiting an Electronic or COD match.</p>
+        {result.unclassified.map(entry => <div key={entry.id}><strong>{dateLabel(entry.date)} · {entry.open ? 'Open balance' : entry.transferSucceeded ? 'Transfer sent' : 'Transfer unconfirmed'}</strong>
+          {detailButton(entry.id)}</div>)}
+      </div> : null}
+      {selected ? <PayoutDetails key={selected.id} group={selected} account={account} activity={activity} /> : null}
+      {week < 0 ? <small>History is limited to settlement cycles returned in the current Amazon reading.</small> : null}
       <p>Synced {new Date(snapshot.observedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
     </> : null}
   </section>

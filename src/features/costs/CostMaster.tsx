@@ -1,3 +1,5 @@
+import { setProductCost } from '../../core/costs/setProductCost'
+import { missingCostQueue } from '../../core/costs/missingCostQueue'
 import { useEffect, useMemo, useState } from 'react'
 import type { CanonicalFinancialEvent } from '../../core/data/types'
 import type { ProductCost } from '../../core/costs/types'
@@ -9,7 +11,7 @@ import { previewBulkCostEdit, type BulkCostMode } from '../../core/costs/applyBu
 import { ProductThumbnail } from '../../components/ProductThumbnail'
 import { productImage, productTitles } from '../../core/search/productTitles'
 
-interface Props { readonly events: readonly CanonicalFinancialEvent[]; readonly costs: readonly ProductCost[]; readonly onSave: (costs: ProductCost[]) => void; readonly missingCostPolicy: MissingCostPolicy; readonly onMissingCostPolicyChange: (policy: MissingCostPolicy) => void; readonly normalizeSku?: (sku: string) => string }
+interface Props { readonly events: readonly CanonicalFinancialEvent[]; readonly costs: readonly ProductCost[]; readonly onSave: (costs: ProductCost[]) => Promise<boolean>; readonly missingCostPolicy: MissingCostPolicy; readonly onMissingCostPolicyChange: (policy: MissingCostPolicy) => void; readonly normalizeSku?: (sku: string) => string }
 type Draft = { sku: string; unitCost: string; effectiveFrom: string }
 const recordKey = (sku: string, effectiveFrom?: string | null) => `${sku}\u001f${effectiveFrom ?? ''}`
 
@@ -35,6 +37,14 @@ export function CostMaster({ events, costs, onSave, missingCostPolicy, onMissing
     }
     return map
   }, [events])
+  const queue = useMemo(() => missingCostQueue(events, status.missingSkus), [events, status])
+  const [queueCost, setQueueCost] = useState('')
+  const [queueSaving, setQueueSaving] = useState(false)
+  const [skippedCosts, setSkippedCosts] = useState<string[]>([])
+  const nextCost = queue.find(item => !skippedCosts.includes(item.sku))
+  const queueValue = Number(queueCost)
+  const canSaveQueueCost = !queueSaving && queueCost.trim() !== '' && Number.isFinite(queueValue) && queueValue >= 0
+
   const initialDrafts = () => {
     const map: Record<string, Draft> = {}
     costs.forEach(cost => { map[recordKey(cost.sku, cost.effectiveFrom)] = { sku: cost.sku, unitCost: String(cost.unitCost), effectiveFrom: cost.effectiveFrom ?? '' } })
@@ -66,8 +76,30 @@ export function CostMaster({ events, costs, onSave, missingCostPolicy, onMissing
   const bulkSpec = useMemo(() => ({ skus: bulkSelection, mode: bulkMode, value: bulkValue.trim() ? Number(bulkValue) : Number.NaN, effectiveFrom: bulkDate || null, overwriteConflicts: bulkOverwrite }), [bulkSelection, bulkMode, bulkValue, bulkDate, bulkOverwrite])
   const bulkPreview = useMemo(() => previewBulkCostEdit(bulkOpen ? events : [], draftCosts, bulkSpec, normalizeSku), [events, draftCosts, bulkSpec, normalizeSku, bulkOpen])
 
-  function persist(next: readonly ProductCost[]) { const now = new Date().toISOString(); const savedCosts = next.map(cost => ({ ...cost, updatedAt: cost.updatedAt || now })).sort((a, b) => a.sku.localeCompare(b.sku) || (a.effectiveFrom ?? '').localeCompare(b.effectiveFrom ?? '')); onSave(savedCosts); setSaved(true) }
+  async function persist(next: readonly ProductCost[]) {
+    const now = new Date().toISOString()
+    const savedCosts = next.map(cost => ({ ...cost, updatedAt: cost.updatedAt || now }))
+      .sort((a, b) => a.sku.localeCompare(b.sku) || (a.effectiveFrom ?? '').localeCompare(b.effectiveFrom ?? ''))
+    const success = await onSave(savedCosts)
+    setSaved(success)
+    return success
+  }
   function save() { persist(draftCosts) }
+  async function saveQueuedCost(sku: string) {
+    if (!canSaveQueueCost) return
+    const key = recordKey(sku)
+    const next = setProductCost(costs, {
+      sku, unitCost: queueValue, effectiveFrom: null, updatedAt: new Date().toISOString(),
+    }, normalizeSku)
+    setQueueSaving(true)
+    try {
+      if (!await persist(next)) return
+      setDrafts(current => ({ ...current, [key]: { sku, unitCost: queueCost, effectiveFrom: '' } }))
+      setQueueCost('')
+    } finally {
+      setQueueSaving(false)
+    }
+  }
   function addPeriod() {
     const sku = newSku.trim(), value = Number(newCost)
     if (!sku || !newCost.trim() || !Number.isFinite(value) || value < 0) return
@@ -119,6 +151,17 @@ export function CostMaster({ events, costs, onSave, missingCostPolicy, onMissing
     <div className="coverage-track"><i style={{ width: `${status.coveragePercent}%` }} /></div>
     <label className="cost-policy"><input type="checkbox" checked={missingCostPolicy === 'ASSUME_ZERO'} onChange={event => onMissingCostPolicyChange(event.target.checked ? 'ASSUME_ZERO' : 'BLOCK')} /><span><strong>Assume ₹0 for missing cost periods</strong><small>Profit stays marked as estimated when a SKU has no cost active on the transaction date.</small></span></label>
     <section className={`cost-preview ${preview.missingEventCount ? 'warning' : 'good'}`}><div><small>Profit impact preview</small><strong>Net COGS: {preview.netCogs.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</strong><span>{preview.netCogs === status.netCogs ? 'No unsaved COGS change' : `${(preview.netCogs - status.netCogs).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} versus saved costs`}</span></div><div><small>Date coverage</small><strong>{preview.missingEventCount ? `${preview.missingEventCount} transactions lack an active cost` : 'Every transaction has an active cost'}</strong><span>{preview.missingSkus.length ? preview.missingSkus.join(', ') : 'Historical profit is ready'}</span></div></section>
+    <section className="seller-feature-panel" aria-label="Missing-cost queue">
+      <h4>Missing-cost queue</h4>
+      {nextCost ? <form className="seller-feature-fields" onSubmit={event => { event.preventDefault(); void saveQueuedCost(nextCost.sku) }}>
+        <div><strong>{nextCost.sku}</strong><p>{nextCost.units} units sold in the latest 30 report days · {queue.length} SKUs missing costs</p></div>
+        <label>Default cost per unit<input type="number" min="0" step="any" disabled={queueSaving} value={queueCost} onChange={event => setQueueCost(event.target.value)} /></label>
+        <button className="primary" disabled={!canSaveQueueCost}>Save and next</button>
+        <button className="secondary" type="button" disabled={queueSaving} onClick={() => { setSkippedCosts([...skippedCosts, nextCost.sku]); setQueueCost('') }}>Skip</button>
+        <small>The default applies to dates without an active dated cost.</small>
+      </form> : <p>{queue.length ? 'The remaining SKUs were skipped.' : 'No SKUs are missing costs.'}</p>}
+      {skippedCosts.length ? <button className="text-btn" onClick={() => { setSkippedCosts([]); setQueueCost('') }}>Show skipped SKUs</button> : null}
+    </section>
     <details className="bulk-costs" open><summary>Bulk import cost history</summary><p>Upload or paste <strong>SKU</strong>, <strong>Unit Cost</strong>, and optional <strong>Effective From</strong> in YYYY-MM-DD format. Leave the date blank to create a default fallback.</p><div className="bulk-actions"><label className="secondary file-action">Choose CSV/TSV<input hidden type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values" onChange={async event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) importText(await file.text()) }} /></label></div><textarea value={bulkText} onChange={event => setBulkText(event.target.value)} placeholder={'SKU\tUnit Cost\tEffective From\nSKU-001\t125.50\t2026-01-01'} /><button className="secondary" disabled={!bulkText.trim()} onClick={() => importText(bulkText)}>Import pasted costs</button>{importMessage ? <p className="import-message" role="status">{importMessage}</p> : null}</details>
     <details className="bulk-editor" onToggle={event => setBulkOpen(event.currentTarget.open)}><summary><span><strong>Bulk edit selected SKUs</strong><small>Set one cost or adjust existing costs together</small></span><b>{bulkSelection.length} selected</b></summary>{bulkOpen ? <div className="bulk-editor-body"><div className="bulk-sku-picker"><header><input aria-label="Search SKUs for bulk editing" placeholder="Search SKU" value={bulkSearch} onChange={event => { setBulkSearch(event.target.value); setBulkLimit(50) }} /><span><button className="text-btn" onClick={() => setBulkSelection([...new Set([...bulkSelection, ...visibleBulkSkus])])}>Select visible</button><button className="text-btn" onClick={() => setBulkSelection([])}>Clear</button></span></header><div>{visibleBulkSkus.map(sku => <label key={sku}><input type="checkbox" checked={bulkSelection.includes(sku)} onChange={event => setBulkSelection(current => event.target.checked ? [...current, sku] : current.filter(item => item !== sku))} /><span>{sku}</span></label>)}</div>{matchingBulkSkus.length > bulkLimit ? <button className="secondary" onClick={() => setBulkLimit(value => value + 50)}>Show more matching SKUs ({matchingBulkSkus.length - bulkLimit} remaining)</button> : null}</div><div className="bulk-edit-spec"><label>Change type<select value={bulkMode} onChange={event => { setBulkMode(event.target.value as BulkCostMode); setBulkConfirmed(false) }}><option value="SET">Set unit cost</option><option value="INCREASE_PERCENT">Increase by %</option><option value="DECREASE_PERCENT">Decrease by %</option></select></label><label>{bulkMode === 'SET' ? 'Unit cost' : 'Percentage'}<input inputMode="decimal" value={bulkValue} onChange={event => { setBulkValue(event.target.value); setBulkConfirmed(false) }} placeholder="0.00" /></label><label>Effective from <small>Blank updates fallback</small><input type="date" value={bulkDate} onChange={event => { setBulkDate(event.target.value); setBulkConfirmed(false) }} /></label><section className={bulkPreview.valid ? 'bulk-impact good' : 'bulk-impact warning'}><small>Impact preview</small><strong>{bulkPreview.changes.length} SKU{bulkPreview.changes.length === 1 ? '' : 's'} · COGS {bulkPreview.netCogsChange >= 0 ? '+' : ''}{bulkPreview.netCogsChange.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</strong>{bulkPreview.conflicts.length ? <span>{bulkPreview.conflicts.length} existing period{bulkPreview.conflicts.length === 1 ? '' : 's'} would be replaced</span> : null}{bulkPreview.missingBaseSkus.length ? <span>No base cost: {bulkPreview.missingBaseSkus.join(', ')}</span> : null}{bulkPreview.changes.length ? <div className="bulk-change-list">{bulkPreview.changes.slice(0, 12).map(change => <div key={change.sku}><b>{change.sku}</b><span>{change.previousCost === null ? 'No cost' : change.previousCost.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} → {change.nextCost.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span><i>{change.effectiveFrom ?? 'Default'}</i></div>)}{bulkPreview.changes.length > 12 ? <small>+{bulkPreview.changes.length - 12} more selected SKUs</small> : null}</div> : null}</section>{bulkPreview.conflicts.length ? <label className="bulk-confirm"><input type="checkbox" checked={bulkOverwrite} onChange={event => { setBulkOverwrite(event.target.checked); setBulkConfirmed(false) }} />Replace existing costs for this date</label> : null}<label className="bulk-confirm"><input type="checkbox" checked={bulkConfirmed} onChange={event => setBulkConfirmed(event.target.checked)} />I reviewed the selected SKUs and COGS impact</label><div className="bulk-edit-actions"><button className="primary" disabled={!bulkPreview.valid || !bulkConfirmed} onClick={applyBulk}>Apply and save</button>{undoCosts ? <button className="secondary" onClick={undoBulk}>Undo latest bulk update</button> : null}</div></div></div> : null}</details>
     <div className="cost-period-add"><label>SKU<input placeholder="SKU-001" value={newSku} onChange={event => setNewSku(event.target.value)} /></label><label>Unit cost<input inputMode="decimal" placeholder="0.00" value={newCost} onChange={event => setNewCost(event.target.value)} /></label><label>Effective from <small>Optional fallback</small><input type="date" value={newDate} onChange={event => setNewDate(event.target.value)} /></label><button className="secondary" disabled={!newSku.trim() || !newCost.trim()} onClick={addPeriod}>Add cost period</button></div>

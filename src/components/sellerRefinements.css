@@ -94,3 +94,41 @@
 .weekly-payout-grid dd{display:grid;gap:3px;margin:0}
 .weekly-payout-grid strong{font-size:17px;overflow-wrap:anywhere}
 @media(max-width:550px){.weekly-payout-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.weekly-payout-grid>div:last-child{grid-column:1/-1}}
+
+.seller-feature-panel {
+  padding: 1rem;
+  margin-block: .75rem;
+  overflow-wrap: anywhere;
+}
+.seller-feature-panel > summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.seller-feature-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .75rem;
+  margin-block: .75rem;
+}
+.seller-feature-fields > label {
+  display: grid;
+  gap: .25rem;
+  flex: 1 1 10rem;
+  max-width: 100%;
+}
+.seller-feature-fields input,
+.seller-feature-fields select {
+  width: 100%;
+  min-width: 0;
+}
+.seller-feature-fields dd {
+  margin-inline-start: 0;
+  font-weight: 650;
+}
+.copy-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: .25rem;
+  align-items: center;
+}

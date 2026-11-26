@@ -35,7 +35,7 @@ export function useDeviceSettings(initial: DeviceSettings, apply: (settings: Dev
     })().catch(cause => { if (!disposed) setError(cause instanceof Error ? cause.message : 'Device settings could not be opened.') })
     return () => { disposed = true }
   }, [])
-  function save(patch: Omit<Partial<DeviceSettings>,'preferences'> & {preferences?:Partial<AppPreferences>}): Promise<void> {
+  function save(patch: Omit<Partial<DeviceSettings>,'preferences'> & {preferences?:Partial<AppPreferences>}): Promise<boolean> {
     const task = queue.current.then(async () => {
       if (!initialized.current) throw new Error('Device settings are still opening. Reopen the page if this message persists.')
       const next = { ...latest.current, ...patch, preferences:preferences({...preferences(latest.current.preferences),...patch.preferences}) }
@@ -44,8 +44,12 @@ export function useDeviceSettings(initial: DeviceSettings, apply: (settings: Dev
       try { saveProductCosts(next.costs); saveClassificationRules(next.rules);localStorage.setItem('azulia.missing-cost-policy',next.missingCostPolicy) } catch (cause) { if (!persistentDevice) throw cause }
       latest.current = next; applyPreferences(next.preferences); callback.current(next); setError(null)
     })
-    queue.current = task.catch(cause => { setError(cause instanceof Error ? cause.message : 'Device save failed. Previous data is retained.') })
-    return queue.current
+    const result = task.then(() => true, cause => {
+      setError(cause instanceof Error ? cause.message : 'Device save failed. Previous data is retained.')
+      return false
+    })
+    queue.current = result.then(() => undefined)
+    return result
   }
   return { save, error }
 }

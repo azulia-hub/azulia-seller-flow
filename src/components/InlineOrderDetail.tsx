@@ -1,3 +1,4 @@
+import { CopyValue } from './CopyValue'
 import { ReviewOrderControl } from '../features/review-requests/ReviewOrderControl'
 import { OrderActivityContext } from './OrderActivityContext'
 import { returnTypeLabel } from './presentationLabels'
@@ -120,7 +121,7 @@ export function InlineOrderDetail({ order, formatMoney, onCollapse }: Props) {
   }, [orderItems])
 
   return <div className="inline-order-detail" ref={detailRef} onClick={event => event.stopPropagation()}>
-    <header><div><span>Order explanation</span><strong>{order.orderId}</strong><small>{timing ? `${timing.date} · ${timing.time} · ${timing.weekday} · ${timing.week}` : order.date ?? 'Date unavailable'}</small></div><button onClick={onCollapse}>Collapse ↑</button></header>
+    <header><div><span>Order explanation</span><strong>{order.orderId}</strong><CopyValue label="order ID" value={order.orderId} /><small>{timing ? `${timing.date} · ${timing.time} · ${timing.weekday} · ${timing.week}` : order.date ?? 'Date unavailable'}</small></div><button onClick={onCollapse}>Collapse ↑</button></header>
     <ReviewOrderControl orderId={order.orderId}/>
     {activity ? <section className="inline-activity-status"><strong>Recorded order activity · updates as new entries arrive</strong><p>Purchased: {activity.saleDate} · latest recorded activity: {activity.lastEventDate ?? 'Awaiting financial details'}</p><p>Includes recorded sales, charges, refunds and reimbursements regardless of release status.</p>{!activity.recorded.costComplete ? <p className="pending-note">Costs are incomplete; profit follows the configured missing-cost policy.</p> : null}</section> : null}
     <div className="inline-order-summary">
@@ -171,6 +172,7 @@ export function InlineOrderDetail({ order, formatMoney, onCollapse }: Props) {
                 {item.sku && item.title && item.sku !== item.title ? (
                   <small style={{ display: 'block', fontSize: 10, color: 'var(--muted)' }}>SKU: {item.sku}</small>
                 ) : null}
+                {item.sku ? <CopyValue label="SKU" value={item.sku} /> : null}
               </div>
             </div>
             <b>{item.quantity !== null ? `${item.quantity} unit${item.quantity === 1 ? '' : 's'}` : 'Quantity unknown'}</b>

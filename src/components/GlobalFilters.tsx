@@ -1,3 +1,4 @@
+import { SavedFilters, type FilterView } from './SavedFilters'
 import { advertisingDateRange } from './AdvertisingRecovery'
 import type { TimePeriodPreset } from '../core/analytics/timePeriods'
 type PeriodChoice = TimePeriodPreset | 'ALL' | 'CUSTOM'
@@ -16,6 +17,7 @@ type Props = {
   readonly onFromDateChange: (value: string) => void
   readonly onToDateChange: (value: string) => void
   readonly onPeriodChange: (value: PeriodChoice) => void
+  readonly onApplySaved: (view: FilterView) => void
   readonly onClear: () => void
 }
 
@@ -29,6 +31,13 @@ export function GlobalFilters(props: Props) {
       {activeCount ? <button className="secondary" onClick={props.onClear}>Clear all</button> : null}
       {props.period === 'CUSTOM' ? <div className="filter-custom-dates"><label>From date<input type="date" min={props.minDate} max={props.toDate || props.maxDate} value={props.fromDate} onChange={(event) => props.onFromDateChange(event.target.value)} /></label><label>To date<input type="date" min={props.fromDate || props.minDate} max={props.maxDate} value={props.toDate} onChange={(event) => props.onToDateChange(event.target.value)} /></label></div> : null}
     </div>
+    {props.period ? <SavedFilters
+      view={{ period: props.period, fulfillment: props.fulfillmentType, from: props.fromDate, to: props.toDate }}
+      available={view => (!view.fulfillment || props.fulfillmentTypes.includes(view.fulfillment)) &&
+        (view.period === 'ALL' || view.period === 'CUSTOM' || props.periods.some(period => period.id === view.period)) &&
+        (view.period !== 'CUSTOM' || Boolean(view.from && view.to && view.from <= view.to &&
+          (!props.minDate || view.from >= props.minDate) && (!props.maxDate || view.to <= props.maxDate)))}
+      onApply={props.onApplySaved} /> : null}
     <p className="filter-basis-help">Includes recorded sales, charges, refunds and reimbursements for orders purchased in these dates, without waiting for release. Later updates stay in the original purchase period. Account charges use posting dates.</p>
   </details>
 }

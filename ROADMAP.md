@@ -1,5 +1,12 @@
 # Seller Analytics — Roadmap
 
+## Payout reconciliation and product scenarios
+
+- [x] Add a missing-cost queue ranked by recent sales, named date/fulfillment filters, and copy actions in SKU, order and payout details.
+- [x] Add payout week navigation, released activity evidence and manual bank credit checks. The settlement comparison uses locally available group-linked records.
+- [x] Add SKU pricing, unit-cost, return-rate, ad-spend and volume scenarios with baseline reset, break-even price and required volume.
+- [ ] Check settlement coverage with representative live Amazon payout records and verify on the installed Android app.
+
 ## Weekly Dashboard payout
 
 - [x] Show separate COD and Electronic balances and the weekly deposit total from Amazon Finance. Label open balances and confirmed transfers.
@@ -232,7 +239,7 @@ Goal: upload an Amazon report and get a trustworthy real dashboard.
 - [ ] Generic data table
 - [ ] Cross-filtering from charts
 - [x] Order-level profit drill-down
-- [ ] Saved views
+- [x] Named global date and fulfillment filter views
 
 ### Metric Builder
 
@@ -311,13 +318,13 @@ Later:
 
 ## Phase 7 — Scenario / What-if
 
-- [ ] Selling price simulation
-- [ ] Cost price simulation
-- [ ] Ad spend simulation
-- [ ] Return-rate simulation
+- [x] Selling price simulation
+- [x] Cost price simulation
+- [x] Ad spend simulation
+- [x] Return-rate simulation
 - [ ] Shipping-cost simulation
-- [ ] Current vs scenario comparison
-- [ ] break-even price
+- [x] Current vs scenario comparison
+- [x] break-even price
 - [ ] break-even TACOS
 
 ## Phase 8 — Dashboard Builder
@@ -500,7 +507,7 @@ The earlier referenced-GST allocation item is superseded by ADR-049.
 
 - [x] Independent profit, marketplace, shipping and fulfillment fee focus rankings; fee rankings require loss after ads.
 
-- Product What if simulator removed at the user’s request; implementation is deferred until explicitly requested again.
+- The previous Product What if simulator was removed at the user’s request. The new cost-aware simulator was later explicitly requested and is tracked above.
 
 ### Local seller tools (ADR-064)
 
